@@ -1,0 +1,5 @@
+{
+  "name": "Remix: ClimaViz - Future",
+  "description": "Weather data visualization tool with interactive sun path and 12x24 hourly plots. Updated to include future weather data.",
+  "requestFramePermissions": []
+}

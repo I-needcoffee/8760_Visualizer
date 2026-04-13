@@ -1,0 +1,613 @@
+import { useState, useRef, ChangeEvent, useEffect, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { Search, Upload, ExternalLink, Database, CloudLightning, X, Plus, Info } from 'lucide-react';
+import L from 'leaflet';
+import { parseEPW, ParsedEPW } from '../lib/epwParser';
+import JSZip from 'jszip';
+import { get, set } from 'idb-keyval';
+
+// Fix Leaflet icon issue in React
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+const smallIcon = new L.Icon({
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [12, 20],
+  iconAnchor: [6, 20],
+  popupAnchor: [1, -16],
+  shadowSize: [20, 20]
+});
+
+const futureIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
+  iconRetinaUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [12, 20],
+  iconAnchor: [6, 20],
+  popupAnchor: [1, -16],
+  shadowSize: [20, 20]
+});
+
+interface EPWLocation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  url?: string;
+  epwData?: string; // For future weather files loaded from ZIP
+  isFuture?: boolean;
+  filename?: string;
+}
+
+interface MapSelectorProps {
+  onSelect: (data: ParsedEPW, compareData?: ParsedEPW) => void;
+  isSelectingCompare?: boolean;
+  initialCenter?: [number, number];
+  initialZoom?: number;
+}
+
+// Component to handle bounding box filtering
+function MapBoundsListener({ 
+  locations, 
+  setVisibleLocations 
+}: { 
+  locations: EPWLocation[], 
+  setVisibleLocations: (locs: EPWLocation[]) => void 
+}) {
+  const map = useMapEvents({
+    moveend: () => {
+      updateVisible();
+    },
+    zoomend: () => {
+      updateVisible();
+    }
+  });
+
+  const updateVisible = () => {
+    try {
+      const bounds = map.getBounds();
+      if (!bounds || !bounds.isValid()) return;
+      
+      // Add a small buffer to the bounds
+      const paddedBounds = bounds.pad(0.1);
+      
+      const visible = locations.filter(loc => {
+        if (typeof loc.lat !== 'number' || isNaN(loc.lat) || !isFinite(loc.lat) ||
+            typeof loc.lng !== 'number' || isNaN(loc.lng) || !isFinite(loc.lng)) {
+          return false;
+        }
+        return paddedBounds.contains([loc.lat, loc.lng]);
+      });
+      
+      // Limit to 500 markers to prevent browser freeze
+      setVisibleLocations(visible.slice(0, 500));
+    } catch (e) {
+      console.warn("Error updating visible locations:", e);
+    }
+  };
+
+  // Initial update
+  useEffect(() => {
+    updateVisible();
+  }, [locations]);
+
+  return null;
+}
+
+// Component to handle flying to user location
+function LocationFlyer({ center, zoom }: { center: [number, number], zoom: number }) {
+  const map = useMapEvents({});
+  useEffect(() => {
+    if (center && center.length === 2 && 
+        typeof center[0] === 'number' && !isNaN(center[0]) && isFinite(center[0]) &&
+        typeof center[1] === 'number' && !isNaN(center[1]) && isFinite(center[1])) {
+      
+      const size = map.getSize();
+      if (size.x > 0 && size.y > 0) {
+        map.flyTo(center, zoom, { duration: 1.5 });
+      } else {
+        map.setView(center, zoom);
+      }
+    }
+  }, [center, zoom, map]);
+  return null;
+}
+
+const generateSampleEPW = (name: string, year: number, baseTemp: number, amplitude: number) => {
+  const header = `LOCATION,${name},CA,USA,Custom,999999,37.7749,-122.4194,-8.0,2.0
+DESIGN CONDITIONS,1,Climate Design Data 2009 ASHRAE Handbook,,Heating,1,-5.4,-3.4,-14.7,0.9,-3.9,-12.3,1.2,-2.1,13.3,10.6,12.1,10.1,2.5,350,Cooling,7,8.8,28.2,16.8,25.9,16.1,23.9,15.5,18.0,25.1,16.9,23.3,16.3,4.1,300,Extreme,10.1,8.5,7.3,31.5,-9.6,33.5,-11.2,35.2,-12.7,37.1,-14.5,39.2
+TYPICAL/ACTUAL,TYPICAL,1980-2059,CMIP6-SSP585
+GROUND TEMPERATURES,3,0.5,,,12.5,12.2,12.4,13.5,15.2,17.1,18.5,19.1,18.8,17.7,16.0,14.1,2.0,,,13.1,12.8,12.9,13.6,14.8,16.3,17.5,18.1,18.0,17.2,16.0,14.5,4.0,,,13.8,13.5,13.5,13.9,14.7,15.8,16.7,17.3,17.4,16.9,16.0,14.9
+HOLIDAYS/DAYLIGHT SAVINGS,No,0,0,0
+COMMENTS 1,Typical Meteorological Year - Sample Data
+COMMENTS 2,Generated for demonstration purposes.
+DATA PERIODS,1,1,Data,Sunday, 1/ 1,12/31
+`;
+  let data = '';
+  for (let m = 1; m <= 12; m++) {
+    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+    for (let d = 1; d <= daysInMonth; d++) {
+      for (let h = 1; h <= 24; h++) {
+        const seasonal = Math.sin((m - 1) / 12 * Math.PI * 2 - Math.PI / 2) * 10;
+        const daily = Math.sin((h - 1) / 24 * Math.PI * 2 - Math.PI / 2) * amplitude;
+        const temp = baseTemp + seasonal + daily + (Math.random() - 0.5) * 2;
+        data += `${year},${m},${d},${h},0,?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9,${temp.toFixed(1)},${(temp - 2).toFixed(1)},80,101325,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n`;
+      }
+    }
+  }
+  return header + data;
+};
+
+const SAMPLE_FUTURE_EPW = generateSampleEPW('SAN_FRANCISCO_FUTURE', 2050, 18, 6);
+const SAMPLE_HISTORICAL_EPW = generateSampleEPW('SAN_FRANCISCO_HISTORICAL', 2005, 14, 4);
+
+export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initialZoom }: MapSelectorProps) {
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [locations, setLocations] = useState<EPWLocation[]>([]);
+  const [futureLocations, setFutureLocations] = useState<EPWLocation[]>([]);
+  const [showFuture, setShowFuture] = useState(false);
+  const [visibleLocations, setVisibleLocations] = useState<EPWLocation[]>([]);
+  const [loadingDb, setLoadingDb] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+  
+  // Default to Seattle region or initialCenter
+  const [mapCenter, setMapCenter] = useState<[number, number]>(
+    initialCenter && !isNaN(initialCenter[0]) ? initialCenter : [47.6062, -122.3321]
+  );
+  const [mapZoom, setMapZoom] = useState(initialZoom || 7);
+
+  // Sync with initialCenter if it changes
+  useEffect(() => {
+    if (initialCenter && !isNaN(initialCenter[0]) && !isNaN(initialCenter[1])) {
+      setMapCenter(initialCenter);
+      if (initialZoom) setMapZoom(initialZoom);
+    }
+  }, [initialCenter, initialZoom]);
+
+  // If we are selecting a comparison, we should probably default to showing future weather if it's available
+  useEffect(() => {
+    if (isSelectingCompare && futureLocations.length > 0) {
+      setShowFuture(true);
+    }
+  }, [isSelectingCompare, futureLocations.length]);
+
+  // Load cached ZIP on mount
+  useEffect(() => {
+    const checkCache = async () => {
+      try {
+        const cachedZip = await get('future_weather_zip');
+        if (cachedZip) {
+          console.log("Loading cached Future Weather ZIP...");
+          processZip(cachedZip);
+        }
+      } catch (e) {
+        console.warn("Failed to load IndexedDB cache:", e);
+      }
+    };
+    checkCache();
+  }, []);
+
+  useEffect(() => {
+    // Try to get user's actual location
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = Number(position.coords.latitude);
+          const lng = Number(position.coords.longitude);
+          if (typeof lat === 'number' && !isNaN(lat) && isFinite(lat) &&
+              typeof lng === 'number' && !isNaN(lng) && isFinite(lng)) {
+            setMapCenter([lat, lng]);
+            setMapZoom(8);
+          }
+        },
+        (error) => {
+          console.log("Geolocation error or denied, using default location.", error);
+        },
+        { timeout: 5000 }
+      );
+    }
+
+    const fetchLocations = async () => {
+      try {
+        const response = await fetch('https://raw.githubusercontent.com/NREL/EnergyPlus/develop/weather/master.geojson');
+        if (!response.ok) throw new Error('Failed to fetch EPW database');
+        
+        const geojson = await response.json();
+        
+        const parsedLocations: EPWLocation[] = geojson.features.map((feature: any, index: number) => {
+          // Extract URL from HTML string: <a href=https://...>Download...</a>
+          const epwHtml = feature.properties.epw || '';
+          const urlMatch = epwHtml.match(/href=([^>]+)>/);
+          const url = urlMatch ? urlMatch[1] : '';
+          
+          const coords = feature.geometry?.coordinates;
+          const lat = coords && coords.length >= 2 ? Number(coords[1]) : NaN;
+          const lng = coords && coords.length >= 2 ? Number(coords[0]) : NaN;
+          
+          return {
+            id: `epw-${index}`,
+            name: feature.properties.title || 'Unknown Location',
+            lat,
+            lng,
+            url: url
+          };
+        }).filter((loc: EPWLocation) => {
+          return loc.url && 
+                 typeof loc.lat === 'number' && !isNaN(loc.lat) && isFinite(loc.lat) &&
+                 typeof loc.lng === 'number' && !isNaN(loc.lng) && isFinite(loc.lng);
+        });
+        
+        setLocations(parsedLocations);
+      } catch (error) {
+        console.error("Error loading EPW database:", error);
+        setErrorMsg("Failed to load global weather database.");
+      } finally {
+        setLoadingDb(false);
+      }
+    };
+
+    fetchLocations();
+  }, []);
+
+  const processZip = async (data: ArrayBuffer | Blob) => {
+    setLoading(true);
+    setLoadingProgress(0);
+    try {
+      const zip = new JSZip();
+      const loadedZip = await zip.loadAsync(data);
+      
+      const newFutureLocations: EPWLocation[] = [];
+      const entries = Object.entries(loadedZip.files).filter(([name, entry]) => !entry.dir && name.endsWith('.epw'));
+      const total = entries.length;
+      let count = 0;
+      
+      for (const [filename, zipEntry] of entries) {
+        const text = await zipEntry.async("string");
+        const lines = text.split('\n');
+        if (lines.length > 0 && lines[0].startsWith('LOCATION')) {
+          const parts = lines[0].split(',');
+          if (parts.length >= 8) {
+            const city = parts[1];
+            const state = parts[2];
+            const lat = parseFloat(parts[6]);
+            const lng = parseFloat(parts[7]);
+            
+            if (!isNaN(lat) && !isNaN(lng)) {
+              newFutureLocations.push({
+                id: `future-${count}`,
+                name: `${city}, ${state} (${filename})`,
+                lat,
+                lng,
+                epwData: text,
+                isFuture: true,
+                filename
+              });
+            }
+          }
+        }
+        count++;
+        if (count % 50 === 0) setLoadingProgress(Math.round((count / total) * 100));
+      }
+      
+      if (newFutureLocations.length > 0) {
+        setFutureLocations(newFutureLocations);
+        // Don't auto-switch to future if we just loaded from cache on mount
+        // Only switch if it's a fresh upload
+      }
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("Failed to process ZIP file.");
+    } finally {
+      setLoading(false);
+      setLoadingProgress(0);
+    }
+  };
+
+  const handleZipUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      // Save to IndexedDB for next time
+      await set('future_weather_zip', arrayBuffer);
+      await processZip(arrayBuffer);
+      setShowFuture(true);
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("Failed to upload ZIP file.");
+    } finally {
+      if (zipInputRef.current) zipInputRef.current.value = '';
+    }
+  };
+
+  const loadSampleFuture = () => {
+    const sampleFuture: EPWLocation = {
+      id: 'future-sample',
+      name: 'San Francisco (Sample Future 2050)',
+      lat: 37.7749,
+      lng: -122.4194,
+      epwData: SAMPLE_FUTURE_EPW,
+      isFuture: true,
+      filename: 'SF_2050.epw'
+    };
+    const sampleHistorical: EPWLocation = {
+      id: 'historical-sample',
+      name: 'San Francisco (Sample Historical 2005)',
+      lat: 37.7749,
+      lng: -122.4194,
+      epwData: SAMPLE_HISTORICAL_EPW,
+      isFuture: true, // We mark it as future so it shows up in the same list for the sample
+      filename: 'SF_2005.epw'
+    };
+    setFutureLocations([sampleHistorical, sampleFuture]);
+    setShowFuture(true);
+    setMapCenter([37.7749, -122.4194]);
+    setMapZoom(10);
+  };
+
+  const activeLocations = useMemo(() => {
+    return showFuture ? futureLocations : locations;
+  }, [showFuture, futureLocations, locations]);
+
+  const filteredLocations = useMemo(() => {
+    if (!search.trim()) return visibleLocations;
+    
+    const searchLower = search.toLowerCase();
+    // When searching, search across ALL active locations, not just visible ones
+    // Limit to 100 results to prevent lag
+    return activeLocations
+      .filter(loc => loc.name.toLowerCase().includes(searchLower))
+      .slice(0, 100);
+  }, [search, activeLocations, visibleLocations]);
+
+  const handleSampleSelect = async (loc: EPWLocation) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      if (loc.epwData) {
+        const parsed = parseEPW(loc.epwData);
+        
+        // If this is a future location and we are NOT selecting a comparison yet,
+        // try to find a baseline (e.g. 2020 or historical) in the same dataset to default the comparison
+        if (!isSelectingCompare && loc.filename) {
+          // Extract base name (e.g. city/state part)
+          const baseName = loc.name.split('(')[0].trim();
+          const otherYears = futureLocations.filter(f => 
+            f.id !== loc.id && 
+            f.name.startsWith(baseName)
+          );
+          
+          if (otherYears.length > 0) {
+            // Prefer 2020 or historical if available
+            const baseline = otherYears.find(f => f.filename?.includes('2020') || f.filename?.includes('2005')) || otherYears[0];
+            if (baseline.epwData) {
+              const parsedBaseline = parseEPW(baseline.epwData);
+              onSelect(parsed, parsedBaseline);
+              return;
+            }
+          }
+        }
+        
+        onSelect(parsed);
+      } else if (loc.url) {
+        const response = await fetch(`/api/proxy-epw?url=${encodeURIComponent(loc.url)}`);
+        if (!response.ok) throw new Error("Failed to fetch EPW file");
+        const text = await response.text();
+        const parsed = parseEPW(text);
+        onSelect(parsed);
+      }
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("Failed to load weather file. The file might be unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setErrorMsg(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = parseEPW(text);
+        onSelect(parsed);
+      } catch (error) {
+        console.error(error);
+        setErrorMsg("Failed to parse EPW file. Ensure it is a valid format.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="h-full w-full relative bg-gray-50">
+      {loading && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-[2000] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-4 border-orange-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-700 font-medium">
+              Processing ZIP Archive... {loadingProgress > 0 ? `${loadingProgress}%` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {errorMsg && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[2000] bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl shadow-md flex items-center gap-3">
+          <span className="block sm:inline">{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="text-red-700 hover:text-red-900 font-bold">
+            &times;
+          </button>
+        </div>
+      )}
+
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-3xl px-4 flex flex-col sm:flex-row gap-2 items-center pointer-events-none">
+        <div className="relative flex-1 w-full flex items-center gap-2 pointer-events-auto bg-white p-2 rounded-full shadow-hard-md border border-gray-200">
+          <div className="bg-blue-50 p-2 rounded-full text-blue-600 flex-shrink-0" title="Live Database Connected">
+            <Database className="w-5 h-5" />
+          </div>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder={`Search ${activeLocations.length > 0 ? activeLocations.length : '...'} ${showFuture ? 'future' : 'global'} locations...`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-transparent border-none focus:ring-0 outline-none transition-all text-sm text-gray-700"
+            />
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={() => setShowFuture(!showFuture)}
+            className={`flex items-center justify-center px-4 h-12 rounded-full shadow-hard-md transition-colors border border-gray-200 font-medium text-sm gap-2 ${
+              showFuture ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+            title="Toggle Future Weather Data"
+          >
+            <CloudLightning className="w-4 h-4" />
+            <span className="hidden sm:inline">{showFuture ? 'Future Weather' : 'Historical'}</span>
+          </button>
+
+          <input 
+            type="file" 
+            accept=".epw" 
+            className="hidden" 
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center w-12 h-12 bg-white text-blue-600 rounded-full shadow-hard-md hover:bg-gray-50 transition-colors border border-gray-200"
+            title="Upload .epw"
+          >
+            <Upload className="w-5 h-5" />
+          </button>
+          
+          <a
+            href="https://climate.onebuilding.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center w-12 h-12 bg-white text-gray-600 rounded-full shadow-hard-md hover:bg-gray-50 transition-colors border border-gray-200"
+            title="OneBuilding EPW"
+          >
+            <ExternalLink className="w-5 h-5" />
+          </a>
+        </div>
+      </div>
+
+      {showFuture && futureLocations.length === 0 && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[1000] bg-white p-6 rounded-2xl shadow-hard-lg border border-gray-200 max-w-md w-full pointer-events-auto">
+          <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+            <CloudLightning className="w-5 h-5 text-orange-600" />
+            Future Weather Data
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Zenodo projections are not pre-loaded due to size (115MB). You can upload the dataset once, and it will be cached in your browser.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={loadSampleFuture}
+              className="flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-medium transition-colors text-sm border border-blue-200"
+            >
+              <Info className="w-4 h-4" />
+              Try with Sample Data
+            </button>
+            
+            <div className="h-px bg-gray-100 my-1" />
+
+            <a 
+              href="https://zenodo.org/records/6939750" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-xl font-medium transition-colors text-sm"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Download from Zenodo
+            </a>
+            
+            <input 
+              type="file" 
+              accept=".zip" 
+              className="hidden" 
+              ref={zipInputRef}
+              onChange={handleZipUpload}
+            />
+            <button 
+              onClick={() => zipInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl font-medium transition-colors text-sm shadow-hard-sm"
+            >
+              <Upload className="w-4 h-4" />
+              Upload & Cache Dataset
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <div className="h-full w-full z-0">
+        {typeof mapCenter[0] === 'number' && !isNaN(mapCenter[0]) && isFinite(mapCenter[0]) &&
+         typeof mapCenter[1] === 'number' && !isNaN(mapCenter[1]) && isFinite(mapCenter[1]) ? (
+          <MapContainer center={mapCenter} zoom={mapZoom} className="h-full w-full" minZoom={2} zoomControl={false}>
+            <LocationFlyer center={mapCenter} zoom={mapZoom} />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            />
+            <MapBoundsListener locations={activeLocations} setVisibleLocations={setVisibleLocations} />
+            
+            {filteredLocations.map((loc) => {
+              if (typeof loc.lat !== 'number' || isNaN(loc.lat) || !isFinite(loc.lat) ||
+                  typeof loc.lng !== 'number' || isNaN(loc.lng) || !isFinite(loc.lng)) {
+                return null;
+              }
+              return (
+                <Marker key={loc.id} position={[loc.lat, loc.lng]} icon={loc.isFuture ? futureIcon : smallIcon}>
+                  <Popup className="rounded-2xl">
+                    <div className="p-2 text-center max-w-[200px]">
+                      <h3 className="font-semibold text-gray-900 break-words">{loc.name}</h3>
+                      <p className="text-xs text-gray-500 mb-3 mt-1">
+                        {loc.isFuture ? 'Future Weather Projection' : 'EnergyPlus Weather Database'}
+                      </p>
+                      <button
+                        onClick={() => handleSampleSelect(loc)}
+                        className={`${loc.isFuture ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} text-white px-4 py-2 rounded-full text-sm font-medium transition-colors w-full shadow-hard-sm`}
+                      >
+                        Load Data
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MapContainer>
+        ) : (
+          <div className="h-full w-full flex items-center justify-center bg-gray-100">
+            <p className="text-gray-500">Initializing map...</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

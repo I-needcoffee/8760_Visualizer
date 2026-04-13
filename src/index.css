@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    overflow-y: scroll;
+  }
+}
+
+@layer utilities {
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Hard-edge drop shadows */
+  .shadow-hard-sm {
+    box-shadow: 1px 1px 0px 0px #e5e5e5;
+  }
+  .shadow-hard-md {
+    box-shadow: 1px 1px 0px 0px #e5e5e5;
+  }
+  .shadow-hard-lg {
+    box-shadow: 2px 2px 0px 0px #e5e5e5;
+  }
+  .shadow-hard-xl {
+    box-shadow: 3px 3px 0px 0px #e5e5e5;
+  }
+  
+  /* Dark mode variants */
+  .dark .shadow-hard-sm {
+    box-shadow: 1px 1px 0px 0px #1f2937;
+  }
+  .dark .shadow-hard-md {
+    box-shadow: 1px 1px 0px 0px #1f2937;
+  }
+  .dark .shadow-hard-lg {
+    box-shadow: 2px 2px 0px 0px #1f2937;
+  }
+  .dark .shadow-hard-xl {
+    box-shadow: 3px 3px 0px 0px #1f2937;
+  }
+}
