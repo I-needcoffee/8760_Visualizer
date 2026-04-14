@@ -12,6 +12,7 @@ interface WindRoseProps {
   data: EPWDataRow[];
   compareData?: EPWDataRow[];
   showDifference?: boolean;
+  stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
   gradients: GradientDef[];
@@ -26,10 +27,11 @@ interface WindRoseProps {
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
 export function WindRose({ 
-  data, compareData, showDifference, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: WindRoseProps) {
   const roseRef = useRef<SVGSVGElement>(null);
+  const compareRoseRef = useRef<SVGSVGElement>(null);
   const [colorVar, setColorVar] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
   const [gradientId, setGradientId] = useState(gradients[0].id);
   const [showSettings, setShowSettings] = useState(false);
@@ -105,8 +107,8 @@ export function WindRose({
   };
 
   // Filter data based on global filter and comfort filters
-  const filteredData = useMemo(() => {
-    return data.filter(d => {
+  const getFilteredData = (targetData: EPWDataRow[]) => {
+    return targetData.filter(d => {
       const isMonthMatch = filter.startMonth <= filter.endMonth
         ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
         : (d.month >= filter.startMonth || d.month <= filter.endMonth);
@@ -136,7 +138,10 @@ export function WindRose({
 
       return isTempMatch && isSpeedMatch;
     });
-  }, [data, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
+  };
+
+  const filteredData = useMemo(() => getFilteredData(data), [data, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
+  const filteredCompareData = useMemo(() => compareData ? getFilteredData(compareData) : [], [compareData, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
 
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
     const def = variables.find(v => v.id === colorVar) || variables.find(v => v.id === 'windSpeed') || variables[0];
@@ -149,7 +154,7 @@ export function WindRose({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[i]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return 0;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       });
       const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
       min = convertValue(-maxDiff, def.unit, true);
@@ -213,7 +218,7 @@ export function WindRose({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[idx]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return;
-        val = convertValue(primaryVal - compareVal, colorVarDef.unit, true);
+        val = convertValue(compareVal - primaryVal, colorVarDef.unit, true);
       } else {
         val = convertValue(d[colorVar] as number, colorVarDef.unit);
       }
@@ -567,14 +572,15 @@ export function WindRose({
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col">
-        <div 
-          className="w-full flex items-center justify-center" 
-          ref={containerRef}
-          style={{ height: '420px' }}
-        >
+      <div className="p-3 flex-1 flex flex-col gap-4">
+        <div className="w-full flex items-center justify-center relative" style={{ height: '420px' }}>
           <svg ref={roseRef} className="w-full h-full max-h-full" />
         </div>
+        {stackedComparison && compareData && (
+        <div className="w-full flex items-center justify-center relative" style={{ height: '420px' }}>
+          <svg ref={compareRoseRef} className="w-full h-full max-h-full" />
+        </div>
+        )}
         <div className="mt-4 flex-shrink-0">
           <InteractiveLegend 
             variable={{ 

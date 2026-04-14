@@ -13,6 +13,7 @@ interface WindExplorerProps {
   data: EPWDataRow[];
   compareData?: EPWDataRow[];
   showDifference?: boolean;
+  stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
   gradients: GradientDef[];
@@ -77,10 +78,11 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
 }
 
 export function WindExplorer({ 
-  data, compareData, showDifference, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: WindExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const compareSvgRef = useRef<SVGSVGElement>(null);
   const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
   const [colorVar, setColorVar] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
   const [gradientId, setGradientId] = useState(gradients[0].id);
@@ -246,7 +248,7 @@ export function WindExplorer({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[i]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return 0;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       });
       const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
       min = convertValue(-maxDiff, def.unit, true);
@@ -328,7 +330,7 @@ export function WindExplorer({
               return compareData[idx]?.[colorVar] as number;
             }).filter(v => v !== null);
             const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(primaryAvg - compareAvg, colorVarDef.unit, true);
+            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
             wind = averageWindVector(values, compareData, data, showDifference);
           } else {
             val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
@@ -362,7 +364,7 @@ export function WindExplorer({
               return compareData[idx]?.[colorVar] as number;
             }).filter(v => v !== null);
             const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(primaryAvg - compareAvg, colorVarDef.unit, true);
+            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
             wind = averageWindVector(values, compareData, data, showDifference);
           } else {
             val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
@@ -616,7 +618,7 @@ export function WindExplorer({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[idx]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return null;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       }).filter(v => v !== null) as number[];
 
       return {
@@ -643,14 +645,14 @@ export function WindExplorer({
       className={`w-full h-fit flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
-      style={{ minHeight: '480px' }}
+      
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-3 gap-2`}>
         <div className="flex items-center justify-between w-full gap-2">
           <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm sm:text-base ${
+            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
               exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
             }`}>
               Wind Explorer
@@ -659,12 +661,12 @@ export function WindExplorer({
               exportMode ? 'bg-gray-200' : (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
             }`}></div>
             {exportMode ? (
-              <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">{colorVarDef.name}</span>
+              <span className="text-xs font-medium text-gray-500 truncate">{colorVarDef.name}</span>
             ) : (
               <select
                 value={colorVar}
                 onChange={(e) => setColorVar(e.target.value)}
-                className={`bg-transparent border-none font-medium focus:ring-0 cursor-pointer transition-colors p-0 truncate text-xs sm:text-sm max-w-[100px] xs:max-w-[150px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`bg-transparent border-none font-medium focus:ring-0 cursor-pointer transition-colors p-0 truncate text-xs max-w-[100px] xs:max-w-[150px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
               >
                 {Object.entries(groupedVariables).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -702,7 +704,7 @@ export function WindExplorer({
                 <button
                   key={agg}
                   onClick={() => setAggregation(agg)}
-                  className={`rounded-md font-medium capitalize transition-colors shadow-hard-sm px-2 py-1 text-[10px] sm:text-xs ${
+                  className={`rounded-md font-medium capitalize transition-colors shadow-hard-sm px-2.5 py-1 text-xs ${
                     aggregation === agg 
                       ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-blue-400' : 'bg-white shadow-sm text-blue-600') 
                       : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')
@@ -715,7 +717,7 @@ export function WindExplorer({
             <div className="flex items-center gap-1 sm:gap-2">
               <button
                 onClick={() => setShowStats(!showStats)}
-                className={`rounded-md font-medium transition-colors border shadow-hard-md px-2 py-1 text-[10px] sm:text-xs ${
+                className={`rounded-md font-medium transition-colors border shadow-hard-md px-2.5 py-1 text-xs ${
                   showStats 
                     ? (theme === 'dark' ? 'bg-blue-900/30 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
                     : (theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700')
@@ -916,7 +918,7 @@ export function WindExplorer({
         >
           <svg ref={svgRef} className="w-full h-full" />
         </div>
-        <div className="mt-4 flex-shrink-0">
+        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
           <InteractiveLegend 
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
             gradientId={gradientId} 

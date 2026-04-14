@@ -43,3 +43,77 @@
     box-shadow: 3px 3px 0px 0px #1f2937;
   }
 }
+
+/* ===== UI Refinement: Grid Alignment ===== */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Ensure chart cards in the same row have equal heights */
+.react-grid-layout > div {
+  contain: layout style;
+}
+
+/* Prevent comparison ScaledWrappers from causing resize cascades */
+.comparison-grid > div {
+  contain: layout;
+}
+
+/* Comparison mode chart scaling - no ResizeObserver, pure CSS */
+.comparison-chart-wrap {
+  width: 100%;
+  position: relative;
+}
+
+/* ===== Comparison Grid Card Styles ===== */
+/* Make buttons and text smaller in narrow comparison columns */
+.comparison-chart-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+/* In comparison mode, reduce header padding and font sizes for compact layout */
+.comparison-chart-wrap .p-3 {
+  padding: 0.5rem;
+}
+
+/* Aggregation button group: make buttons smaller in comparison  */
+.comparison-chart-wrap button {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+}
+
+/* Aggregation pills container - prevent wrap, use compact spacing */
+.comparison-chart-wrap .gap-2 {
+  gap: 0.25rem;
+}
+
+/* Title text in comparison cards */
+.comparison-chart-wrap h3 {
+  font-size: 11px !important;
+}
+
+/* Variable selector in comparison cards */
+.comparison-chart-wrap select {
+  font-size: 10px !important;
+  max-width: 80px !important;
+}
+
+/* Legend in comparison cards */
+.comparison-chart-wrap .flex-shrink-0 {
+  margin-top: 4px;
+}
+
+/* Ensure SVG containers adapt to available width */
+.comparison-chart-wrap svg {
+  width: 100%;
+  height: auto;
+}
+
+/* Ensure consistent column heights in comparison grid */
+.comparison-grid {
+  align-items: stretch;
+}
+
+.comparison-grid > div > div {
+  flex: 1;
+}

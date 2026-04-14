@@ -15,6 +15,7 @@ interface UtciExplorerProps {
   data: EPWDataRow[];
   compareData?: EPWDataRow[];
   showDifference?: boolean;
+  stackedComparison?: boolean;
   onRemove?: () => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
@@ -67,10 +68,11 @@ interface UtciDataRow extends EPWDataRow {
 }
 
 export function UtciExplorer({ 
-  data, compareData, showDifference, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: UtciExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const compareSvgRef = useRef<SVGSVGElement>(null);
   const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
   const [includeSun, setIncludeSun] = useState(true);
   const [includeWind, setIncludeWind] = useState(true);
@@ -140,6 +142,36 @@ export function UtciExplorer({
     });
   }, [data, includeSun, includeWind]);
 
+  const compareUtciData: UtciDataRow[] = useMemo(() => {
+    return (compareData || []).map(d => {
+      const tdb = (d.dryBulbTemperature as number) || 0;
+      const rh = (d.relativeHumidity as number) || 50;
+      const windSpeed = (d.windSpeed as number) || 0;
+      const ghr = (d.globalHorizontalRadiation as number) || 0;
+
+      const v = includeWind ? Math.max(0.5, windSpeed) : 0.5;
+      const tr = includeSun ? tdb + (0.02 * ghr) : tdb;
+
+      // Calculate UTCI
+      let utciVal = tdb;
+      let category = getUtciCategoryForValue(tdb);
+      try {
+        const result = tc.models.utci(tdb, tr, v, rh, 'SI', true, false);
+        utciVal = isNaN(result.utci) ? tdb : result.utci;
+        category = result.stress_category || getUtciCategoryForValue(utciVal);
+      } catch (e) {
+        // Fallback
+      }
+
+      return {
+        ...d,
+        utci: utciVal as number,
+        utciCategory: category as string,
+        isComfortable: (category === 'no thermal stress' ? 1 : 0) as number
+      };
+    });
+  }, [compareData, includeSun, includeWind]);
+
   const convertUtci = (val: number) => {
     if (unitSystem === 'imperial') {
       if (showDifference) return val * 9/5; // Difference in C to difference in F
@@ -171,7 +203,7 @@ export function UtciExplorer({
             } catch (e) { return tdb; }
           };
 
-          return getUtci(d) - getUtci(cD);
+          return getUtci(cD) - getUtci(d);
         });
         maxDiff = d3.max(diffs, d => Math.abs(d)) || 10;
       } catch (e) {}
@@ -188,8 +220,10 @@ export function UtciExplorer({
   }, [data, compareData, showDifference, includeSun, includeWind]);
 
   useEffect(() => {
-    if (!svgRef.current || !utciData.length || dimensions.width === 0) return;
+    if (!svgRef.current || dimensions.width === 0) return;
 
+    const renderUtci = (svgEl: any, currentData: any[], title: string | null, isCompare: boolean) => {
+    if (!currentData || !currentData.length) return;
     const BASE_WIDTH = 350;
     const width = BASE_WIDTH;
     const height = 420;
@@ -201,7 +235,7 @@ export function UtciExplorer({
     
     const innerWidth = width - margin.left - margin.right;
 
-    const svg = d3.select(svgRef.current);
+    const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
 
     const g = svg
@@ -247,7 +281,7 @@ export function UtciExplorer({
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     if (aggregation === 'month') {
-      const groups = d3.group(utciData, d => d.month, d => d.hour);
+      const groups = d3.group(currentData, d => d.month, d => d.hour);
       Array.from(groups).forEach(([month, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = values[0].dayOfYear;
@@ -277,7 +311,7 @@ export function UtciExplorer({
               return getUtci(cD);
             }).filter(v => v !== null) as number[];
             const compareAvg = d3.mean(compareValues) || 0;
-            avgUtciVal = primaryAvg - compareAvg;
+            avgUtciVal = compareAvg - primaryAvg;
             comfortRatio = 0;
           } else {
             avgUtciVal = d3.mean(values, d => d.utci) || 0;
@@ -300,7 +334,7 @@ export function UtciExplorer({
         });
       });
     } else if (aggregation === 'week') {
-      const groups = d3.group(utciData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
+      const groups = d3.group(currentData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
       Array.from(groups).forEach(([week, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = week * 7 + 1;
@@ -325,7 +359,7 @@ export function UtciExplorer({
       });
     } else {
       // day or hour
-      heatmapData = utciData.map(d => ({
+      heatmapData = currentData.map(d => ({
         x0: d.dayOfYear,
         x1: d.dayOfYear + 1,
         y: d.hour,
@@ -448,7 +482,7 @@ export function UtciExplorer({
     let aggregatedData: { x0: number, x1: number, valueAll: number, valueSelected: number | null, comfortRatioAll: number, comfortRatioSelected: number | null, minSelected?: number, maxSelected?: number, month: number }[] = [];
     
     if (aggregation === 'hour') {
-      aggregatedData = utciData.map(d => {
+      aggregatedData = currentData.map(d => {
         const selected = isSelected(d);
         const val = convertUtci(d.utci);
         return {
@@ -464,7 +498,7 @@ export function UtciExplorer({
         };
       });
     } else if (aggregation === 'day') {
-      const days = d3.group(utciData, d => d.dayOfYear);
+      const days = d3.group(currentData, d => d.dayOfYear);
       aggregatedData = Array.from(days, ([day, values]) => {
         const selectedValues = values.filter(isSelected);
         return {
@@ -480,7 +514,7 @@ export function UtciExplorer({
         };
       });
     } else if (aggregation === 'week') {
-      const weeks = d3.group(utciData, d => Math.floor((d.dayOfYear - 1) / 7));
+      const weeks = d3.group(currentData, d => Math.floor((d.dayOfYear - 1) / 7));
       aggregatedData = Array.from(weeks, ([week, values]) => {
         const selectedValues = values.filter(isSelected);
         return {
@@ -496,7 +530,7 @@ export function UtciExplorer({
         };
       });
     } else { // month
-      const months = d3.group(utciData, d => d.month);
+      const months = d3.group(currentData, d => d.month);
       aggregatedData = Array.from(months, ([month, values]) => {
         const startDay = values[0].dayOfYear;
         const endDay = values[values.length - 1].dayOfYear + 1;
@@ -635,7 +669,34 @@ export function UtciExplorer({
       .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
       .call(g => g.selectAll(".tick line").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'));
 
-  }, [utciData, compareData, showDifference, aggregation, colorMode, gradientId, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, utciMin, utciMax]);
+
+    
+    if (title) {
+         g.append("rect")
+          .attr("x", -margin.left)
+          .attr("y", -margin.top + 4)
+          .attr("width", 4)
+          .attr("height", 16)
+          .attr("rx", 2)
+          .attr("fill", isCompare ? "#9ca3af" : "#3b82f6");
+
+         g.append("text")
+          .attr("x", -margin.left + 10)
+          .attr("y", -margin.top + 16)
+          .style("font-size", "12px")
+          .style("font-weight", "bold")
+          .style("fill", heatmapTextColor)
+          .text(title);
+    }
+  };
+
+  if (stackedComparison && compareData && compareSvgRef.current) {
+      renderUtci(svgRef.current, utciData, "Baseline Local Dataset", false);
+      renderUtci(compareSvgRef.current, compareUtciData, "Comparative Dataset", true);
+  } else {
+      renderUtci(svgRef.current, utciData, null, false);
+  }
+  }, [utciData, compareUtciData, compareData, showDifference, aggregation, colorMode, gradientId, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, utciMin, utciMax]);
 
   // Calculate local stats for filtered data
   const stats = (() => {
@@ -667,7 +728,7 @@ export function UtciExplorer({
           } catch (e) { return tdb; }
         };
 
-        return getUtci(d) - getUtci(cD);
+        return getUtci(cD) - getUtci(d);
       }).filter(v => v !== null) as number[];
 
       return {
@@ -708,14 +769,14 @@ export function UtciExplorer({
       className={`w-full flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
-      style={{ minHeight: '480px' }}
+      
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-3 gap-2`}>
         <div className="flex items-center justify-between w-full gap-2">
           <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm sm:text-base ${
+            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
               exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
             }`}>
               UTCI Comfort
@@ -925,14 +986,14 @@ export function UtciExplorer({
       <div className="p-3 flex-1 flex flex-col">
         <div 
           className="w-full" 
-          ref={containerRef}
+          
           style={{ height: '420px' }}
         >
           <svg ref={svgRef} className="w-full h-full" />
         </div>
         
         {/* Custom Legend for UTCI */}
-        <div className="mt-4 flex-shrink-0">
+        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
           {showDifference && compareData ? (
             <InteractiveLegend 
               variable={{ id: 'utci', name: 'UTCI', unit: utciUnit, min: convertUtci(utciMin), max: convertUtci(utciMax), category: 'Comfort' }} 

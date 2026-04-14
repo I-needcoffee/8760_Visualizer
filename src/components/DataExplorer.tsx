@@ -14,6 +14,7 @@ interface DataExplorerProps {
   data: EPWDataRow[];
   compareData?: EPWDataRow[];
   showDifference?: boolean;
+  stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
   gradients: GradientDef[];
@@ -26,10 +27,11 @@ interface DataExplorerProps {
 }
 
 export function DataExplorer({ 
-  data, compareData, showDifference, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: DataExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const compareSvgRef = useRef<SVGSVGElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 400 });
@@ -104,7 +106,7 @@ export function DataExplorer({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[i]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return 0;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       });
       const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
       min = convertValue(-maxDiff, def.unit, true);
@@ -114,7 +116,7 @@ export function DataExplorer({
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
 
   useEffect(() => {
-    if (!svgRef.current || !data.length || dimensions.width === 0) return;
+    if (!svgRef.current || dimensions.width === 0) return;
 
     const BASE_WIDTH = 350;
     const width = BASE_WIDTH;
@@ -188,7 +190,7 @@ export function DataExplorer({
               return compareData[idx]?.[colorVar] as number;
             }).filter(v => v !== null);
             const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(primaryAvg - compareAvg, colorVarDef.unit, true);
+            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
           } else {
             val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
           }
@@ -221,7 +223,7 @@ export function DataExplorer({
               return compareData[idx]?.[colorVar] as number;
             }).filter(v => v !== null);
             const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(primaryAvg - compareAvg, colorVarDef.unit, true);
+            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
           } else {
             val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
           }
@@ -242,7 +244,7 @@ export function DataExplorer({
       heatmapData = data.map((d, i) => {
         let val: number;
         if (showDifference && compareData) {
-          val = convertValue((d[colorVar] as number || 0) - (compareData[i]?.[colorVar] as number || 0), colorVarDef.unit, true);
+          val = convertValue((compareData[i]?.[colorVar] as number || 0) - (d[colorVar] as number || 0), colorVarDef.unit, true);
         } else {
           val = convertValue(d[colorVar] as number, colorVarDef.unit);
         }
@@ -343,7 +345,7 @@ export function DataExplorer({
       .call(g => g.selectAll(".tick line").attr("x2", innerWidth).style("stroke", theme === 'dark' ? '#374151' : '#e5e7eb').style("stroke-width", `1.5px`).attr("stroke-opacity", 0.5))
       .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `8px`));
 
-    // --- Bar Chart ---
+    // --- Bar/Line Chart ---
     const barChartG = g.append("g");
 
     const isSelected = (d: any) => {
@@ -354,231 +356,190 @@ export function DataExplorer({
       return isMonthMatch && isHourMatch;
     };
 
-    // Aggregate data
-    let aggregatedData: { x0: number, x1: number, valueAll: number, valueSelected: number | null, minSelected?: number, maxSelected?: number, month: number }[] = [];
-    
+    let aggregatedData: { x0: number, x1: number, valueAll: number, valueSelected: number | null, minSelected?: number, maxSelected?: number, compareValueAll?: number, compareValueSelected?: number | null, month: number }[] = [];
+
+    const calculateValues = (values: any[], selectedValues: any[]) => {
+      let valAll: number, valSelected: number | null = null;
+      let minSelected: number | undefined, maxSelected: number | undefined;
+      let compareValAll: number | undefined, compareValSelected: number | null = null;
+
+      if (showDifference && compareData) {
+        valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
+        const compareValuesAll = values.map(v => compareData[data.indexOf(v)]?.[colorVar] as number).filter(v => v !== null);
+        compareValAll = convertValue(d3.mean(compareValuesAll) || 0, colorVarDef.unit);
+
+        if (selectedValues.length > 0) {
+          valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+
+          const compareValuesSel = selectedValues.map(v => compareData[data.indexOf(v)]?.[colorVar] as number).filter(v => v !== null);
+          compareValSelected = convertValue(d3.mean(compareValuesSel) || 0, colorVarDef.unit);
+        }
+      } else {
+        valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
+        if (selectedValues.length > 0) {
+          valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+        }
+      }
+      return { valAll, valSelected, minSelected, maxSelected, compareValAll, compareValSelected };
+    };
+
     if (aggregation === 'hour') {
       aggregatedData = data.map((d, i) => {
         const selected = isSelected(d);
-        let val: number;
-        if (showDifference && compareData) {
-          val = convertValue((d[colorVar] as number || 0) - (compareData[i]?.[colorVar] as number || 0), colorVarDef.unit);
-        } else {
-          val = convertValue((d[colorVar] as number) || 0, colorVarDef.unit);
-        }
+        const val = convertValue((d[colorVar] as number) || 0, colorVarDef.unit);
+        const compareVal = showDifference && compareData ? convertValue((compareData[i]?.[colorVar] as number) || 0, colorVarDef.unit) : undefined;
         return {
-          x0: d.dayOfYear + d.hour / 24,
-          x1: d.dayOfYear + (d.hour + 1) / 24,
-          valueAll: val,
-          valueSelected: selected ? val : null,
-          minSelected: selected ? val : undefined,
-          maxSelected: selected ? val : undefined,
-          month: d.month
+          x0: d.dayOfYear + d.hour / 24, x1: d.dayOfYear + (d.hour + 1) / 24,
+          valueAll: val, valueSelected: selected ? val : null, minSelected: selected ? val : undefined, maxSelected: selected ? val : undefined,
+          compareValueAll: compareVal, compareValueSelected: selected ? compareVal : null, month: d.month
         };
       });
     } else if (aggregation === 'day') {
-      const days = d3.group(data, d => d.dayOfYear);
-      aggregatedData = Array.from(days, ([day, values]) => {
-        const selectedValues = values.filter(isSelected);
-        
-        let valAll: number;
-        let valSelected: number | null = null;
-        let minSelected: number | undefined;
-        let maxSelected: number | undefined;
-
-        if (showDifference && compareData) {
-          const primaryAvgAll = d3.mean(values, d => d[colorVar] as number) || 0;
-          const compareValuesAll = values.map(v => {
-            const idx = data.indexOf(v);
-            return compareData[idx]?.[colorVar] as number;
-          }).filter(v => v !== null);
-          const compareAvgAll = d3.mean(compareValuesAll) || 0;
-          valAll = convertValue(primaryAvgAll - compareAvgAll, colorVarDef.unit, true);
-
-          if (selectedValues.length > 0) {
-            const primaryAvgSel = d3.mean(selectedValues, d => d[colorVar] as number) || 0;
-            const compareValuesSel = selectedValues.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvgSel = d3.mean(compareValuesSel) || 0;
-            valSelected = convertValue(primaryAvgSel - compareAvgSel, colorVarDef.unit, true);
-            
-            // For diff min/max, it's a bit tricky. Let's just use the diff of means for now.
-            minSelected = valSelected;
-            maxSelected = valSelected;
-          }
-        } else {
-          valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          if (selectedValues.length > 0) {
-            valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-            minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-            maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          }
-        }
-
-        return {
-          x0: day,
-          x1: day + 1,
-          valueAll: valAll,
-          valueSelected: valSelected,
-          minSelected,
-          maxSelected,
-          month: values[0].month
-        };
+      aggregatedData = Array.from(d3.group(data, d => d.dayOfYear), ([day, values]) => {
+        const res = calculateValues(values, values.filter(isSelected));
+        return { x0: day, x1: day + 1, valueAll: res.valAll, valueSelected: res.valSelected, minSelected: res.minSelected, maxSelected: res.maxSelected, compareValueAll: res.compareValAll, compareValueSelected: res.compareValSelected, month: values[0].month };
       });
     } else if (aggregation === 'week') {
-      const weeks = d3.group(data, d => Math.floor((d.dayOfYear - 1) / 7));
-      aggregatedData = Array.from(weeks, ([week, values]) => {
-        const selectedValues = values.filter(isSelected);
-        
-        let valAll: number;
-        let valSelected: number | null = null;
-        let minSelected: number | undefined;
-        let maxSelected: number | undefined;
-
-        if (showDifference && compareData) {
-          const primaryAvgAll = d3.mean(values, d => d[colorVar] as number) || 0;
-          const compareValuesAll = values.map(v => {
-            const idx = data.indexOf(v);
-            return compareData[idx]?.[colorVar] as number;
-          }).filter(v => v !== null);
-          const compareAvgAll = d3.mean(compareValuesAll) || 0;
-          valAll = convertValue(primaryAvgAll - compareAvgAll, colorVarDef.unit, true);
-
-          if (selectedValues.length > 0) {
-            const primaryAvgSel = d3.mean(selectedValues, d => d[colorVar] as number) || 0;
-            const compareValuesSel = selectedValues.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvgSel = d3.mean(compareValuesSel) || 0;
-            valSelected = convertValue(primaryAvgSel - compareAvgSel, colorVarDef.unit, true);
-            minSelected = valSelected;
-            maxSelected = valSelected;
-          }
-        } else {
-          valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          if (selectedValues.length > 0) {
-            valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-            minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-            maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          }
-        }
-
-        return {
-          x0: week * 7 + 1,
-          x1: Math.min((week + 1) * 7 + 1, 366),
-          valueAll: valAll,
-          valueSelected: valSelected,
-          minSelected,
-          maxSelected,
-          month: values[0].month
-        };
+      aggregatedData = Array.from(d3.group(data, d => Math.floor((d.dayOfYear - 1) / 7)), ([week, values]) => {
+        const res = calculateValues(values, values.filter(isSelected));
+        return { x0: week * 7 + 1, x1: Math.min((week + 1) * 7 + 1, 366), valueAll: res.valAll, valueSelected: res.valSelected, minSelected: res.minSelected, maxSelected: res.maxSelected, compareValueAll: res.compareValAll, compareValueSelected: res.compareValSelected, month: values[0].month };
       });
     } else { // month
-      const months = d3.group(data, d => d.month);
-      aggregatedData = Array.from(months, ([month, values]) => {
-        const startDay = values[0].dayOfYear;
-        const endDay = values[values.length - 1].dayOfYear + 1;
-        const selectedValues = values.filter(isSelected);
-        
-        let valAll: number;
-        let valSelected: number | null = null;
-        let minSelected: number | null = null;
-        let maxSelected: number | null = null;
-
-        if (showDifference && compareData) {
-          const primaryAvgAll = d3.mean(values, d => d[colorVar] as number) || 0;
-          const compareValuesAll = values.map(v => {
-            const idx = data.indexOf(v);
-            return compareData[idx]?.[colorVar] as number;
-          }).filter(v => v !== null);
-          const compareAvgAll = d3.mean(compareValuesAll) || 0;
-          valAll = convertValue(primaryAvgAll - compareAvgAll, colorVarDef.unit, true);
-
-          if (selectedValues.length > 0) {
-            const primaryAvgSel = d3.mean(selectedValues, d => d[colorVar] as number) || 0;
-            const compareValuesSel = selectedValues.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvgSel = d3.mean(compareValuesSel) || 0;
-            valSelected = convertValue(primaryAvgSel - compareAvgSel, colorVarDef.unit, true);
-            minSelected = valSelected;
-            maxSelected = valSelected;
-          }
-        } else {
-          valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          if (selectedValues.length > 0) {
-            valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-            minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-            maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          }
-        }
-
-        return {
-          x0: startDay,
-          x1: endDay,
-          valueAll: valAll,
-          valueSelected: valSelected,
-          minSelected,
-          maxSelected,
-          month: month
-        };
+      aggregatedData = Array.from(d3.group(data, d => d.month), ([month, values]) => {
+        const res = calculateValues(values, values.filter(isSelected));
+        return { x0: values[0].dayOfYear, x1: values[values.length - 1].dayOfYear + 1, valueAll: res.valAll, valueSelected: res.valSelected, minSelected: res.minSelected, maxSelected: res.maxSelected, compareValueAll: res.compareValAll, compareValueSelected: res.compareValSelected, month: month };
       });
     }
 
-    const yMin = d3.min(aggregatedData, d => Math.min(d.valueAll, d.minSelected ?? d.valueAll)) || 0;
-    const yMax = d3.max(aggregatedData, d => Math.max(d.valueAll, d.maxSelected ?? d.valueAll)) || cMax;
+    let yMin = d3.min(aggregatedData, d => {
+        const minP = d.minSelected ?? d.valueAll;
+        const minC = d.compareValueSelected ?? d.compareValueAll ?? minP;
+        return Math.min(minP, minC);
+    }) || 0;
+    
+    let yMax = d3.max(aggregatedData, d => {
+        const maxP = d.maxSelected ?? d.valueAll;
+        const maxC = d.compareValueSelected ?? d.compareValueAll ?? maxP;
+        return Math.max(maxP, maxC);
+    }) || cMax;
 
-    const yScaleBar = d3.scaleLinear()
-      .domain([yMin, yMax])
-      .range([barChartHeight, 0])
-      .nice();
+    // Optional: Give it a bit of bottom margin if min is above 0, or zero-bound if we prefer
+    if (yMin > 0 && colorVarDef.category !== "Temperature") yMin = 0;
 
-    // Draw foreground elements (Selected Data)
-    const fgGroups = barChartG.selectAll(".fg-group")
-      .data(aggregatedData.filter(d => d.valueSelected !== null))
-      .join("g")
-      .attr("class", "fg-group");
+    const yScaleBar = d3.scaleLinear().domain([yMin, yMax]).range([barChartHeight, 0]).nice();
+    const validData = aggregatedData.filter(d => d.valueSelected !== null);
 
-    fgGroups.each(function(d) {
-      const group = d3.select(this);
-      const barW = Math.max(1, xScale(d.x1) - xScale(d.x0) - (aggregation === 'hour' ? 0 : 4));
-      const xPos = xScale(d.x0);
+    if (showDifference && compareData) {
+      // Draw Line Chart connecting dots
+      const linePrimary = d3.line<any>()
+        .x(d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
+        .y(d => yScaleBar(d.valueSelected!))
+        .curve(d3.curveMonotoneX);
 
-      // Bar from min to max
-      const val = d.valueSelected!;
-      const minVal = d.minSelected !== undefined && d.minSelected !== null ? d.minSelected : val;
-      const maxVal = d.maxSelected !== undefined && d.maxSelected !== null ? d.maxSelected : val;
-      const y0 = yScaleBar(minVal);
-      const y1 = yScaleBar(maxVal);
-      
-      group.append("rect")
-        .attr("x", xPos)
-        .attr("y", y1)
-        .attr("width", barW)
-        .attr("height", Math.max(1, y0 - y1))
-        .style("fill", colorScale(val))
-        .style("opacity", 0.6)
-        .attr("rx", aggregation === 'hour' ? 0 : 4)
-        .attr("ry", aggregation === 'hour' ? 0 : 4);
+      const lineCompare = d3.line<any>()
+        .x(d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
+        .y(d => yScaleBar(d.compareValueSelected!))
+        .curve(d3.curveMonotoneX);
 
-      // Average Indicator Circle
-      group.append("circle")
-        .attr("cx", xPos + barW / 2)
-        .attr("cy", yScaleBar(val))
-        .attr("r", Math.min(barW / 2, 4))
-        .style("fill", colorScale(val))
-        .style("stroke", "#000000")
-        .style("stroke-width", "1px");
-    });
+      const areaDiff = d3.area<any>()
+        .x(d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
+        .y0(d => yScaleBar(d.compareValueSelected!))
+        .y1(d => yScaleBar(d.valueSelected!))
+        .curve(d3.curveMonotoneX);
 
-    fgGroups.append("title")
-      .text(d => `Selected Hours Avg: ${d.valueSelected!.toFixed(1)} ${cUnit}`);
+      // Add difference shading
+      barChartG.append("path")
+        .datum(validData)
+        .attr("fill", theme === 'dark' ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)")
+        .attr("d", areaDiff);
 
-    // Y Axis for Bar Chart
+      // Add lines
+      barChartG.append("path")
+        .datum(validData)
+        .attr("fill", "none")
+        .attr("stroke", "#3b82f6") // Blue for primary
+        .attr("stroke-width", 2)
+        .attr("d", linePrimary);
+
+      barChartG.append("path")
+        .datum(validData)
+        .attr("fill", "none")
+        .attr("stroke", "#9ca3af") // Gray for comparison
+        .attr("stroke-dasharray", "4,4") // Dashed line to differentiate
+        .attr("stroke-width", 2)
+        .attr("d", lineCompare);
+
+      // Add dots
+      barChartG.selectAll(".dot-primary")
+        .data(validData)
+        .join("circle")
+        .attr("class", "dot-primary")
+        .attr("cx", d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
+        .attr("cy", d => yScaleBar(d.valueSelected!))
+        .attr("r", 3)
+        .attr("fill", "#3b82f6")
+        .append("title")
+        .text(d => `Primary: ${d.valueSelected!.toFixed(1)} ${cUnit}`);
+
+      barChartG.selectAll(".dot-compare")
+        .data(validData)
+        .join("circle")
+        .attr("class", "dot-compare")
+        .attr("cx", d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
+        .attr("cy", d => yScaleBar(d.compareValueSelected!))
+        .attr("r", 3)
+        .attr("fill", "#9ca3af")
+        .append("title")
+        .text(d => `Comparison: ${d.compareValueSelected!.toFixed(1)} ${cUnit}`);
+
+    } else {
+      // Draw standard Bar Chart
+      const fgGroups = barChartG.selectAll(".fg-group")
+        .data(validData)
+        .join("g")
+        .attr("class", "fg-group");
+
+      fgGroups.each(function(d) {
+        const group = d3.select(this);
+        const barW = Math.max(1, xScale(d.x1) - xScale(d.x0) - (aggregation === 'hour' ? 0 : 4));
+        const xPos = xScale(d.x0);
+
+        const val = d.valueSelected!;
+        const minVal = d.minSelected !== undefined && d.minSelected !== null ? d.minSelected : val;
+        const maxVal = d.maxSelected !== undefined && d.maxSelected !== null ? d.maxSelected : val;
+        const y0 = yScaleBar(minVal);
+        const y1 = yScaleBar(maxVal);
+        
+        group.append("rect")
+          .attr("x", xPos)
+          .attr("y", y1)
+          .attr("width", barW)
+          .attr("height", Math.max(1, y0 - y1))
+          .style("fill", colorScale(val))
+          .style("opacity", 0.6)
+          .attr("rx", aggregation === 'hour' ? 0 : 4)
+          .attr("ry", aggregation === 'hour' ? 0 : 4);
+
+        // Only show average indicator dot when there's a min-max range (not in hour mode)
+        if (aggregation !== 'hour') {
+          group.append("circle")
+            .attr("cx", xPos + barW / 2)
+            .attr("cy", yScaleBar(val))
+            .attr("r", Math.min(barW / 2, 4))
+            .style("fill", colorScale(val))
+            .style("stroke", "#000000")
+            .style("stroke-width", "1px");
+        }
+      });
+
+      fgGroups.append("title")
+        .text(d => `Selected Hours Avg: ${d.valueSelected!.toFixed(1)} ${cUnit}`);
+    }
+
     const yAxisBar = d3.axisLeft(yScaleBar).ticks(5);
     barChartG.append("g")
       .call(yAxisBar)
@@ -626,7 +587,7 @@ export function DataExplorer({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[idx]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return null;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       }).filter(v => v !== null) as number[];
 
       return {
@@ -653,14 +614,14 @@ export function DataExplorer({
       className={`w-full h-fit flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
-      style={{ minHeight: '480px' }}
+      
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-3 gap-2`}>
         <div className="flex items-center justify-between w-full gap-2">
           <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm sm:text-base ${
+            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
               exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
             }`}>
               {showDifference ? 'Data Difference' : 'Data Explorer'}
@@ -669,12 +630,12 @@ export function DataExplorer({
               exportMode ? 'bg-gray-200' : (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
             }`}></div>
             {exportMode ? (
-              <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">{colorVarDef.name}</span>
+              <span className="text-xs font-medium text-gray-500 truncate">{colorVarDef.name}</span>
             ) : (
               <select
                 value={colorVar}
                 onChange={(e) => setColorVar(e.target.value)}
-                className={`bg-transparent border-none font-medium focus:ring-0 cursor-pointer transition-colors p-0 truncate text-xs sm:text-sm max-w-[100px] xs:max-w-[150px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+                className={`bg-transparent border-none font-medium focus:ring-0 cursor-pointer transition-colors p-0 truncate text-xs max-w-[100px] xs:max-w-[150px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
               >
                 {Object.entries(groupedVariables).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -858,15 +819,16 @@ export function DataExplorer({
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col">
-        <div 
-          className="w-full" 
-          ref={containerRef}
-          style={{ height: '420px' }}
-        >
-          <svg ref={svgRef} className="w-full h-full" />
+      <div className="p-3 flex-1 flex flex-col gap-4">
+        <div className="w-full flex items-center justify-center relative" style={{ aspectRatio: '350/420' }}>
+          <svg ref={svgRef} className="w-full h-full max-h-full" />
         </div>
-        <div className="mt-4 flex-shrink-0">
+        {stackedComparison && compareData && (
+        <div className="w-full flex items-center justify-center relative" style={{ aspectRatio: '350/420' }}>
+          <svg ref={compareSvgRef} className="w-full h-full max-h-full" />
+        </div>
+        )}
+        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
           <InteractiveLegend 
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
             gradientId={gradientId} 

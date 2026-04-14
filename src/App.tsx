@@ -272,7 +272,7 @@ export default function App() {
     });
   };
 
-  const lastHeightUpdate = useRef<Record<string, { height: number, time: number }>>({});
+  const lastHeightUpdate = useRef<Record<string, { height: number, time: number, settleCount: number }>>({});
 
   const isDraggingRef = useRef(false);
 
@@ -283,12 +283,18 @@ export default function App() {
     const now = Date.now();
     const last = lastHeightUpdate.current[id];
     
-    // Increase stability: only update every 1500ms if change is small
-    if (last && now - last.time < 1500 && Math.abs(last.height - height) < 30) {
+    // If we've seen this exact height (within 15px) 2+ times, it's settled — ignore further updates
+    if (last && Math.abs(last.height - height) < 15) {
+      last.settleCount = (last.settleCount || 0) + 1;
+      if (last.settleCount >= 2) return; // Settled, stop updating
+    }
+    
+    // Rate-limit: only update every 2s for small changes
+    if (last && now - last.time < 2000 && Math.abs(last.height - height) < 40) {
       return;
     }
     
-    lastHeightUpdate.current[id] = { height, time: now };
+    lastHeightUpdate.current[id] = { height, time: now, settleCount: 0 };
 
     // Use a larger timeout to let the state settle
     setTimeout(() => {
@@ -301,10 +307,9 @@ export default function App() {
 
         const ROW_HEIGHT = 10;
         const MARGIN = 10;
-        const DRAG_HANDLE_HEIGHT = exportModeRef.current ? 0 : 18;
         
         // Calculate exact needed rows, ceiling to ensure no cropping
-        let neededH = Math.ceil((height + DRAG_HANDLE_HEIGHT) / (ROW_HEIGHT + MARGIN));
+        let neededH = Math.ceil(height / (ROW_HEIGHT + MARGIN)) + 1;
         
         const itemIndex = layout.findIndex(l => l.i === id);
         if (itemIndex !== -1) {
@@ -312,12 +317,11 @@ export default function App() {
           const minH = layout[itemIndex].minH || 10;
           neededH = Math.max(neededH, minH);
 
-          // Update if the change is at least 1 row to prevent cropping
-          if (Math.abs(layout[itemIndex].h - neededH) >= 1) {
+          // Only update if the change is at least 2 rows to prevent oscillation
+          if (Math.abs(layout[itemIndex].h - neededH) >= 2) {
             const newLayout = [...layout];
             newLayout[itemIndex] = { ...newLayout[itemIndex], h: neededH };
             
-            // Normalize for comparison - SORT by ID for stability
             const normalizeLayout = (l: Layout[]) => l.map(i => ({ i: i.i, x: i.x, y: i.y, w: i.w, h: i.h })).sort((a, b) => a.i.localeCompare(b.i));
             if (JSON.stringify(normalizeLayout(prev[bp])) === JSON.stringify(normalizeLayout(newLayout))) return prev;
             
@@ -329,7 +333,7 @@ export default function App() {
 
         return prev;
       });
-    }, 250);
+    }, 500);
   }, []);
 
   const lastLayoutsRef = useRef<Layouts>(layouts);
@@ -354,7 +358,7 @@ export default function App() {
     }, 0);
   }, []);
 
-  const renderChartForFile = (chart: ActiveChart, fileData: ParsedEPW, compareFileData?: ParsedEPW, isDiffMode: boolean = false) => {
+  const renderChartForFile = (chart: ActiveChart, fileData: ParsedEPW, compareFileData?: ParsedEPW, isDiffMode: boolean = false, isStacked: boolean = false) => {
     const isDiffExplorer = chart.id === 'diff-explorer';
     const onRemoveHandler = isDiffExplorer ? () => setShowDiffTable(false) : () => removeChart(chart.id);
 
@@ -366,6 +370,7 @@ export default function App() {
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
+            stackedComparison={isStacked}
             variables={fileData.variables}
             onRemove={onRemoveHandler}
             gradients={allGradients}
@@ -383,6 +388,7 @@ export default function App() {
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
+            stackedComparison={isStacked}
             variables={fileData.variables}
             onRemove={onRemoveHandler}
             gradients={allGradients}
@@ -400,6 +406,7 @@ export default function App() {
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
+            stackedComparison={isStacked}
             variables={fileData.variables}
             onRemove={onRemoveHandler}
             gradients={allGradients}
@@ -417,6 +424,7 @@ export default function App() {
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
+            stackedComparison={isStacked}
             variables={fileData.variables}
             onRemove={onRemoveHandler}
             gradients={allGradients}
@@ -434,6 +442,7 @@ export default function App() {
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
+            stackedComparison={isStacked}
             onRemove={onRemoveHandler}
             gradients={allGradients}
             filter={globalFilter}
@@ -692,7 +701,7 @@ export default function App() {
                 Add widgets below to start exploring the climate data for {selectedFiles[activeFileIndex]?.metadata.city}.
               </p>
             </div>
-          ) : viewMode === 'comparison' ? (
+          ) : viewMode === 'comparison' && selectedFiles.length >= 2 ? (
             <div className="flex flex-col gap-4 h-full min-h-[800px]">
               {/* Difference Mode Controls */}
               <div className={`flex flex-wrap items-center gap-4 p-4 rounded-xl border shadow-sm ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
@@ -741,47 +750,111 @@ export default function App() {
               </div>
 
               {selectedFiles.length >= 2 && (
-                <div className="flex flex-col lg:flex-row gap-4 flex-1">
-                  {/* Top on mobile, Right on desktop: Data Explorer Difference */}
-                  {showDiffTable && (
-                    <div className="w-full lg:w-1/2 flex flex-col order-1 lg:order-2">
-                      <div className={`flex-1 rounded-2xl border shadow-hard-xl overflow-visible ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                        <ScaledWrapper>
-                          {renderChartForFile({ id: 'diff-explorer', type: 'explorer' }, selectedFiles[differenceBaselineIndex], selectedFiles[differenceCompareIndex], true)}
-                        </ScaledWrapper>
+                <div className="flex-1 w-full overflow-x-auto min-w-0 hide-scrollbar pb-4 pt-2">
+                  <div className="comparison-grid grid gap-3 h-full items-stretch" style={{ gridTemplateColumns: showDiffTable ? '2fr 1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr 1fr', minWidth: showDiffTable ? '1800px' : '1500px' }}>
+                    {/* Column 1-2: Data Explorer Difference (spans 2fr) */}
+                    {showDiffTable && (
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-2xl border shadow-hard-xl ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}`}>
+                        <div className="w-full overflow-hidden">
+                          {renderChartForFile({ id: 'diff-explorer', type: 'explorer' }, selectedFiles[differenceBaselineIndex], selectedFiles[differenceCompareIndex], true, false)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Sun Path Column */}
+                    <div className="flex flex-col gap-2 overflow-visible">
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #3b82f6' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{selectedFiles[differenceBaselineIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-base-sunpath', type: 'sunpath' }, selectedFiles[differenceBaselineIndex])}
+                        </div>
+                      </div>
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #9ca3af' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{selectedFiles[differenceCompareIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-comp-sunpath', type: 'sunpath' }, selectedFiles[differenceCompareIndex])}
+                        </div>
                       </div>
                     </div>
-                  )}
-
-                  {/* Bottom on mobile, Left on desktop: Baseline and Comparison columns */}
-                  <div className={`flex gap-2 lg:gap-4 overflow-x-auto order-2 lg:order-1 pb-4 ${showDiffTable ? 'w-full lg:w-1/2' : 'w-full'}`}>
-                    <div className="flex-1 min-w-[140px] lg:min-w-0 flex flex-col gap-4">
-                      <div className={`sticky top-0 z-10 py-2 px-3 rounded-lg shadow-sm border backdrop-blur-md ${theme === 'dark' ? 'bg-gray-700/90 border-gray-600 text-white' : 'bg-white/90 border-gray-200 text-gray-900'}`}>
-                        <h3 className="text-xs font-bold truncate uppercase tracking-wider">{selectedFiles[differenceBaselineIndex]?.metadata.city} (Baseline)</h3>
-                      </div>
-                      {activeCharts.filter(c => c.type !== 'explorer').map(chart => (
-                        <div key={`baseline-${chart.id}`} className={`w-full flex flex-col transition-all overflow-visible rounded-2xl border shadow-hard-xl ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                          <div className="flex-1 overflow-visible rounded-2xl">
-                            <ScaledWrapper>
-                              {renderChartForFile(chart, selectedFiles[differenceBaselineIndex])}
-                            </ScaledWrapper>
-                          </div>
+                    {/* Data Explorer Column */}
+                    <div className="flex flex-col gap-2 overflow-visible">
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #3b82f6' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{selectedFiles[differenceBaselineIndex]?.metadata.city}</span>
                         </div>
-                      ))}
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-base-explorer', type: 'explorer' }, selectedFiles[differenceBaselineIndex])}
+                        </div>
+                      </div>
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #9ca3af' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{selectedFiles[differenceCompareIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-comp-explorer', type: 'explorer' }, selectedFiles[differenceCompareIndex])}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-[140px] lg:min-w-0 flex flex-col gap-4">
-                      <div className={`sticky top-0 z-10 py-2 px-3 rounded-lg shadow-sm border backdrop-blur-md ${theme === 'dark' ? 'bg-gray-700/90 border-gray-600 text-white' : 'bg-white/90 border-gray-200 text-gray-900'}`}>
-                        <h3 className="text-xs font-bold truncate uppercase tracking-wider">{selectedFiles[differenceCompareIndex]?.metadata.city} (Comparison)</h3>
-                      </div>
-                      {activeCharts.filter(c => c.type !== 'explorer').map(chart => (
-                        <div key={`compare-${chart.id}`} className={`w-full flex flex-col transition-all overflow-visible rounded-2xl border shadow-hard-xl ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                          <div className="flex-1 overflow-visible rounded-2xl">
-                            <ScaledWrapper>
-                              {renderChartForFile(chart, selectedFiles[differenceCompareIndex])}
-                            </ScaledWrapper>
-                          </div>
+                    {/* UTCI Column */}
+                    <div className="flex flex-col gap-2 overflow-visible">
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #3b82f6' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{selectedFiles[differenceBaselineIndex]?.metadata.city}</span>
                         </div>
-                      ))}
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-base-utci', type: 'utci' }, selectedFiles[differenceBaselineIndex])}
+                        </div>
+                      </div>
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #9ca3af' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{selectedFiles[differenceCompareIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-comp-utci', type: 'utci' }, selectedFiles[differenceCompareIndex])}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Wind Explorer Column */}
+                    <div className="flex flex-col gap-2 overflow-visible">
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #3b82f6' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{selectedFiles[differenceBaselineIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-base-wind', type: 'wind' }, selectedFiles[differenceBaselineIndex])}
+                        </div>
+                      </div>
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #9ca3af' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{selectedFiles[differenceCompareIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-comp-wind', type: 'wind' }, selectedFiles[differenceCompareIndex])}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Wind Rose Column */}
+                    <div className="flex flex-col gap-2 overflow-visible">
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #3b82f6' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{selectedFiles[differenceBaselineIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-base-windrose', type: 'windrose' }, selectedFiles[differenceBaselineIndex])}
+                        </div>
+                      </div>
+                      <div className={`flex flex-col overflow-visible ${exportMode ? 'bg-white' : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}`}>
+                        <div className="px-2 py-1 flex items-center gap-1.5" style={{ borderLeft: '3px solid #9ca3af' }}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{selectedFiles[differenceCompareIndex]?.metadata.city}</span>
+                        </div>
+                        <div className="comparison-chart-wrap overflow-hidden">
+                          {renderChartForFile({ id: 'cmp-comp-windrose', type: 'windrose' }, selectedFiles[differenceCompareIndex])}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -793,7 +866,7 @@ export default function App() {
               {activeCharts.map(chart => (
                 <div 
                   key={chart.id} 
-                  className={`w-full flex flex-col transition-all overflow-visible ${
+                  className={`w-full flex flex-col overflow-visible ${
                     exportMode 
                       ? 'bg-white border-none shadow-none' 
                       : `rounded-2xl border shadow-hard-xl ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`
@@ -826,14 +899,14 @@ export default function App() {
       margin={GRID_MARGIN}
     >
               {activeCharts.map(chart => (
-                <div key={chart.id} className={`w-full h-full flex flex-col transition-all overflow-hidden ${
+                <div key={chart.id} className={`w-full h-full flex flex-col overflow-hidden ${
                   exportMode 
                     ? 'bg-white border-none shadow-none' 
-                    : `bg-white dark:bg-gray-800 rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`
+                    : `rounded-xl border shadow-hard-lg ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`
                 }`}>
                   {!exportMode && (
-                    <div className="drag-handle cursor-move w-full h-4 bg-gray-50/50 dark:bg-gray-800 hover:bg-gray-100/50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center border-b border-gray-100 dark:border-gray-700 sm:flex hidden">
-                      <div className="w-8 h-1 rounded-full bg-gray-200 dark:bg-gray-600"></div>
+                    <div className={`drag-handle cursor-move w-full h-2 transition-colors flex items-center justify-center ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} sm:flex hidden`}>
+                      <div className={`w-8 h-0.5 rounded-full ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'}`}></div>
                     </div>
                   )}
                   <div className="flex-1 h-full overflow-visible relative">

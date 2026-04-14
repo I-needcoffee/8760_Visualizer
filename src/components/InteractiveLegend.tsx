@@ -51,7 +51,7 @@ export function InteractiveLegend({
         </span>
       </div>
       
-      <div className={`relative w-full rounded-full overflow-hidden flex border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} style={{ height: `${9 * fontScale}px` }}>
+      <div className={`relative w-full rounded-full overflow-hidden flex border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} style={{ height: `${8 * fontScale}px` }}>
         {isDifference ? (
           <div className="w-full h-full" style={{ background: `linear-gradient(to right, ${colors.join(', ')})` }} />
         ) : (

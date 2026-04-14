@@ -15,6 +15,7 @@ interface SunPathProps {
   data: EPWDataRow[];
   compareData?: EPWDataRow[];
   showDifference?: boolean;
+  stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
   gradients: GradientDef[];
@@ -27,10 +28,11 @@ interface SunPathProps {
 }
 
 export function SunPath({ 
-  metadata, data, compareData, showDifference, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  metadata, data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: SunPathProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const compareSvgRef = useRef<SVGSVGElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 400 });
@@ -139,6 +141,27 @@ export function SunPath({
            isTempMatch;
   });
 
+const filteredCompareData = (compareData || []).filter(d => {
+    const isMonthMatch = filter.startMonth <= filter.endMonth
+      ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
+      : (d.month >= filter.startMonth || d.month <= filter.endMonth);
+    
+    let isTempMatch = true;
+    if (tempFilterEnabled) {
+      const temp = convertValue(d.dryBulbTemperature as number, '°C');
+      if (tempFilterType === 'helpful') {
+        isTempMatch = temp < helpfulThreshold;
+      } else {
+        isTempMatch = temp > harmfulThreshold;
+      }
+    }
+
+    return isMonthMatch && 
+           d.hour >= filter.startHour && 
+           d.hour <= filter.endHour &&
+           isTempMatch;
+  });
+
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
     const def = variables.find(v => v.id === colorVar) || variables[0];
     let min = def.fixedMin !== undefined ? convertValue(def.fixedMin, def.unit) : convertValue(def.min, def.unit);
@@ -150,7 +173,7 @@ export function SunPath({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[i]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return 0;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       });
       const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
       min = convertValue(-maxDiff, def.unit, true);
@@ -166,7 +189,7 @@ export function SunPath({
         const primaryVal = d[colorVar] as number;
         const compareVal = compareData[idx]?.[colorVar] as number;
         if (primaryVal === null || compareVal === null) return null;
-        return primaryVal - compareVal;
+        return compareVal - primaryVal;
       }).filter(v => v !== null) as number[];
 
       return {
@@ -188,15 +211,17 @@ export function SunPath({
   })();
 
   useEffect(() => {
-    if (!svgRef.current || !data.length || dimensions.width === 0) return;
+    if (!svgRef.current || dimensions.width === 0) return;
 
-    const BASE_WIDTH = 350;
+const renderChart = (svgEl: any, currentData: any[], title: string | null, isCompare: boolean) => {
+    if (!currentData || !currentData.length) return;
+        const BASE_WIDTH = 350;
     const width = BASE_WIDTH;
     const height = 420;
     const margin = 30;
     const radius = Math.min(width, height) / 2 - margin;
 
-    const svg = d3.select(svgRef.current);
+    const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
 
     const g = svg
@@ -212,7 +237,7 @@ export function SunPath({
     let points: any[] = [];
     
     if (aggregation === 'hour') {
-      points = data.map((d, i) => {
+      points = currentData.map((d, i) => {
         const pos = SunCalc.getPosition(d.date, metadata.lat, metadata.lng);
         const altitude = pos.altitude * 180 / Math.PI;
         const azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360; // Convert to 0=N, 90=E
@@ -222,7 +247,7 @@ export function SunPath({
         if (showDifference && compareData) {
           const primaryVal = d[colorVar] as number;
           const compareVal = compareData[i]?.[colorVar] as number;
-          val = convertValue(primaryVal - compareVal, colorVarDef.unit, true);
+          val = convertValue(compareVal - primaryVal, colorVarDef.unit, true);
           rVal = d[radiusVar] as number; // Keep primary radius in difference mode
         } else {
           val = convertValue(d[colorVar] as number, colorVarDef.unit);
@@ -237,11 +262,11 @@ export function SunPath({
       // This creates an "average day" for the period
       let groups;
       if (aggregation === 'day') {
-        groups = d3.group(data, d => d.dayOfYear, d => d.hour);
+        groups = d3.group(currentData, d => d.dayOfYear, d => d.hour);
       } else if (aggregation === 'week') {
-        groups = d3.group(data, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
+        groups = d3.group(currentData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
       } else { // month
-        groups = d3.group(data, d => d.month, d => d.hour);
+        groups = d3.group(currentData, d => d.month, d => d.hour);
       }
 
       Array.from(groups).forEach(([period, hourGroups]) => {
@@ -259,11 +284,11 @@ export function SunPath({
             if (showDifference && compareData) {
               const primaryAvg = d3.mean(values, d => d[colorVar] as number) || 0;
               const compareValues = values.map(v => {
-                const idx = data.indexOf(v);
+                const idx = currentData.indexOf(v);
                 return compareData[idx]?.[colorVar] as number;
               }).filter(v => v !== null);
               const compareAvg = d3.mean(compareValues) || 0;
-              val = convertValue(primaryAvg - compareAvg, colorVarDef.unit, true);
+              val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
               rVal = d3.mean(values, d => d[radiusVar] as number) || 0; // Keep primary radius
             } else {
               val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
@@ -409,7 +434,7 @@ export function SunPath({
       .text(d => compass[d as keyof typeof compass] || `${d}°`);
 
     // 3. Draw Sun Path Lines (Solstices and Equinoxes)
-    const year = data[0]?.date.getFullYear() || new Date().getFullYear();
+    const year = currentData[0]?.date.getFullYear() || new Date().getFullYear();
     const keyDates = [
       { name: 'Summer Solstice', date: new Date(year, 5, 21) }, // June 21
       { name: 'Equinox', date: new Date(year, 2, 21) }, // March 21
@@ -494,6 +519,33 @@ export function SunPath({
         return `${prefix}${d.date.toLocaleString()}\nAlt: ${d.altitude.toFixed(1)}°\nAz: ${d.azimuth.toFixed(1)}°\n${colorVarDef.name}${showDifference ? ' Diff' : ''}: ${val.toFixed(1)} ${cUnit}`;
       });
 
+
+    
+    if (title) {
+         g.append("rect")
+          .attr("x", -margin + 4)
+          .attr("y", -height/2 + 4)
+          .attr("width", 4)
+          .attr("height", 16)
+          .attr("rx", 2)
+          .attr("fill", isCompare ? "#9ca3af" : "#3b82f6");
+
+         g.append("text")
+          .attr("x", -margin + 10)
+          .attr("y", -height/2 + 16)
+          .style("font-size", "12px")
+          .style("font-weight", "bold")
+          .style("fill", heatmapTextColor)
+          .text(title);
+    }
+  };
+
+  if (stackedComparison && compareData && compareSvgRef.current) {
+      renderChart(svgRef.current, data, "Baseline Local Dataset", false);
+      renderChart(compareSvgRef.current, compareData, "Comparative Dataset", true);
+  } else {
+      renderChart(svgRef.current, data, null, false);
+  }
   }, [metadata, data, compareData, showDifference, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, dimensions.width, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
 
   return (
@@ -502,20 +554,20 @@ export function SunPath({
       className={`w-full h-fit flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
-      style={{ minHeight: '480px' }}
+      
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-3 gap-2`}>
         <div className="flex items-center justify-between w-full gap-2">
           <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm sm:text-base ${
+            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
               exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
             }`}>Sun Path</h3>
             <div className={`shrink-0 w-px h-4 ${
               exportMode ? 'bg-gray-200' : (theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200')
             }`}></div>
-            <span className="text-xs sm:text-sm font-medium text-gray-500 truncate">{colorVarDef.name}</span>
+            <span className="text-xs font-medium text-gray-500 truncate">{colorVarDef.name}</span>
           </div>
           {onRemove && !exportMode && (
             <button onClick={onRemove} className={`rounded-md transition-colors shadow-hard-md p-1.5 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}>
@@ -746,15 +798,16 @@ export function SunPath({
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col">
-        <div 
-          className="w-full flex items-center justify-center" 
-          ref={containerRef}
-          style={{ height: '420px' }}
-        >
+      <div className="p-3 flex-1 flex flex-col gap-4">
+        <div className="w-full flex items-center justify-center relative" >
           <svg ref={svgRef} className="w-full h-full max-h-full" />
         </div>
-        <div className="mt-4 flex-shrink-0">
+        {stackedComparison && compareData && (
+        <div className="w-full flex items-center justify-center relative" style={{ aspectRatio: '350/420' }}>
+          <svg ref={compareSvgRef} className="w-full h-full max-h-full" />
+        </div>
+        )}
+        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
           <InteractiveLegend 
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
             gradientId={gradientId} 
