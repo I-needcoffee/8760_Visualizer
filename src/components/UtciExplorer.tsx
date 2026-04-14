@@ -7,6 +7,8 @@ import { EPWDataRow } from '../lib/epwParser';
 import tc from 'jsthermalcomfort';
 import { X, Settings2 } from 'lucide-react';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
+import { ChartHeader } from './ChartHeader';
+import { ChartType } from '../App';
 import { UnitSystem } from '../App';
 
 import { GlobalFilterState } from './GlobalFilterPanel';

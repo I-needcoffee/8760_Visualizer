@@ -5,6 +5,8 @@ import 'rc-slider/assets/index.css';
 import SunCalc from 'suncalc';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
+import { ChartHeader } from './ChartHeader';
+import { ChartType } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';

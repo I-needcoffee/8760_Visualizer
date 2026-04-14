@@ -4,6 +4,8 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
+import { ChartHeader } from './ChartHeader';
+import { ChartType } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
