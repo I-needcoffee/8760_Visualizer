@@ -23,7 +23,7 @@ export function InteractiveLegend({
   setGradientId, 
   gradients, 
   theme = 'light',
-  fontScale = 1,
+  fontScale = 0.72,
   isDifference = false
 }: InteractiveLegendProps & { theme?: 'light' | 'dark' }) {
   const gradientDef = gradients.find(g => g.id === gradientId) || gradients[0];
@@ -40,18 +40,30 @@ export function InteractiveLegend({
 
   const ticks = d3.ticks(variable.min, variable.max, 5);
 
+  const pad = 3 * fontScale;
+  const gap = 2 * fontScale;
+  const titlePx = 8 * fontScale;
+  const tickPx = 7 * fontScale;
+  const barH = 5 * fontScale;
+
   return (
-    <div 
-      className={`border flex flex-col w-full shadow-hard-lg transition-colors ${theme === 'dark' ? 'bg-gray-800/50 border-gray-800' : 'bg-white border-gray-200'}`}
-      style={{ padding: `${6 * fontScale}px`, gap: `${4 * fontScale}px`, borderRadius: `${8 * fontScale}px` }}
+    <div
+      className={`flex flex-col w-full select-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+      style={{ padding: `${pad}px`, gap: `${gap}px` }}
     >
-      <div className="flex justify-between items-center px-0.5">
-        <span className={`font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`} style={{ fontSize: `${10 * fontScale}px` }}>
+      <div className="flex justify-between items-center min-w-0 gap-1">
+        <span
+          className="font-semibold uppercase tracking-wide truncate leading-tight"
+          style={{ fontSize: `${titlePx}px` }}
+        >
           {isDifference ? `Δ ${variable.name}` : variable.name} ({variable.unit})
         </span>
       </div>
-      
-      <div className={`relative w-full rounded-full overflow-hidden flex border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} style={{ height: `${8 * fontScale}px` }}>
+
+      <div
+        className="relative w-full rounded-sm overflow-hidden flex"
+        style={{ height: `${barH}px` }}
+      >
         {isDifference ? (
           <div className="w-full h-full" style={{ background: `linear-gradient(to right, ${colors.join(', ')})` }} />
         ) : (
@@ -60,11 +72,16 @@ export function InteractiveLegend({
           ))
         )}
       </div>
-      
-      <div className="flex justify-between px-0.5">
+
+      <div className="flex justify-between gap-0.5 min-w-0">
         {ticks.map((t, i) => (
-          <span key={i} className={`font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} style={{ fontSize: `${8.5 * fontScale}px` }}>
-            {t > 0 && isDifference ? '+' : ''}{t.toFixed(t === 0 ? 0 : 1)}
+          <span
+            key={i}
+            className={`tabular-nums shrink-0 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}
+            style={{ fontSize: `${tickPx}px` }}
+          >
+            {t > 0 && isDifference ? '+' : ''}
+            {t.toFixed(t === 0 ? 0 : 1)}
           </span>
         ))}
       </div>

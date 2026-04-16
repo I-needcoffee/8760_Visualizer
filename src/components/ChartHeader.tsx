@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import React, { ReactNode } from 'react';
 import { ChartType } from '../App';
+import { ChartTypeMenu } from './ChartTypeMenu';
 
 interface ChartHeaderProps {
   chartType: ChartType | string;
@@ -21,26 +22,37 @@ export function ChartHeader({
   topContent,
   children
 }: ChartHeaderProps) {
+  const type = chartType as ChartType;
+  const exportMenuLabel =
+    type === 'sunpath' ? 'Sun Path' :
+    type === 'explorer' ? 'Data Explorer' :
+    type === 'utci' ? 'UTCI Comfort' :
+    type === 'wind' ? 'Wind Explorer' :
+    type === 'windrose' ? 'Wind Rose' : 'Chart';
+
   return (
     <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
       exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-    } p-3 gap-2`}>
+    } p-2 ${exportMode ? '' : 'gap-1.5'}`}>
       {/* Top Row */}
-      <div className="flex items-center justify-between w-full gap-2">
-        <div className="flex items-center min-w-0 gap-2 sm:gap-3">
+      <div className="flex items-center justify-between w-full gap-1.5">
+        <div className={`flex items-center min-w-0 ${exportMode ? 'gap-2 flex-1' : 'gap-1.5 sm:gap-2'}`}>
           {exportMode ? (
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm text-gray-800`}>
-              {chartType === 'sunpath' ? 'Sun Path' : 
-               chartType === 'explorer' ? 'Data Explorer' :
-               chartType === 'utci' ? 'UTCI Comfort' :
-               chartType === 'wind' ? 'Wind Explorer' :
-               chartType === 'windrose' ? 'Wind Rose' : 'Chart'}
-            </h3>
+            <>
+              <ChartTypeMenu
+                value={type}
+                label={exportMenuLabel}
+                onChange={() => {}}
+                theme="light"
+                display="icon"
+                staticIcon
+              />
+            </>
           ) : (
             <select
               value={chartType}
               onChange={(e) => onChartTypeChange && onChartTypeChange(e.target.value as ChartType)}
-              className={`font-semibold uppercase text-xs tracking-wider border rounded p-1 shadow-hard-sm cursor-pointer ${
+              className={`font-semibold uppercase text-[10px] tracking-wide border rounded px-1 py-0.5 shadow-hard-sm cursor-pointer ${
                 theme === 'dark' ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-50 text-gray-800 border-gray-200'
               }`}
             >
@@ -51,23 +63,16 @@ export function ChartHeader({
               <option value="windrose">Wind Rose</option>
             </select>
           )}
-
-          {/* Dividing line if topContent exists */}
-          {topContent && (
-            <>
-              <div className={`shrink-0 w-px h-4 ${exportMode ? 'bg-gray-200' : (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')}`}></div>
-              {topContent}
-            </>
-          )}
+          {topContent}
         </div>
         
         {/* Remove Button */}
         {onRemove && !exportMode && (
           <button 
             onClick={onRemove} 
-            className={`rounded-md transition-colors shadow-hard-md p-1.5 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+            className={`rounded-md transition-colors shadow-hard-sm p-1 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         )}
       </div>

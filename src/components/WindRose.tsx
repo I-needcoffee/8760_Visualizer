@@ -4,11 +4,12 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
-import { ChartHeader } from './ChartHeader';
 import { ChartType } from '../App';
 import { X, Settings2 } from 'lucide-react';
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
+import { ChartTypeMenu } from './ChartTypeMenu';
+import { ExportHeaderCaption } from './ExportHeaderCaption';
 
 interface WindRoseProps {
   data: EPWDataRow[];
@@ -17,6 +18,7 @@ interface WindRoseProps {
   stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
+  onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
   unitSystem: UnitSystem;
@@ -29,7 +31,7 @@ interface WindRoseProps {
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
 export function WindRose({ 
-  data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: WindRoseProps) {
   const roseRef = useRef<SVGSVGElement>(null);
@@ -37,7 +39,7 @@ export function WindRose({
   const [colorVar, setColorVar] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
   const [gradientId, setGradientId] = useState(gradients[0].id);
   const [showSettings, setShowSettings] = useState(false);
-  const [numBins, setNumBins] = useState(36);
+  const [numBins, setNumBins] = useState(16);
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempThreshold, setTempThreshold] = useState(unitSystem === 'imperial' ? 70 : 21);
   const [tempFilterType, setTempFilterType] = useState<'above' | 'below'>('above');
@@ -384,60 +386,100 @@ export function WindRose({
   return (
     <div 
       ref={outerRef}
-      className={`w-full flex flex-col relative transition-colors duration-300 ${
+      className={`group w-full h-full min-h-0 flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
-      style={{ minHeight: '500px' }}
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-3 gap-2`}>
-        <div className="flex items-center justify-between w-full gap-2">
-          <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm sm:text-base ${
-              exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
-            }`}>
-              Wind Rose
-            </h3>
+      } p-2`}>
+        {exportMode ? (
+          <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+            <ChartTypeMenu
+              value="windrose"
+              label="Wind Rose"
+              onChange={() => {}}
+              theme="light"
+              display="icon"
+              staticIcon
+            />
+            <ExportHeaderCaption
+              lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
+            />
           </div>
-          {!exportMode && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`rounded-md transition-colors border shadow-hard-md p-1 sm:p-1.5 ${
-                  showSettings 
-                    ? (theme === 'dark' ? 'bg-blue-900/30 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600')
-                }`}
-                title="Chart Settings"
+        ) : (
+        <div className="relative flex items-center w-full min-h-[28px] gap-1.5">
+          <div
+            className={`flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1 transition-[padding] duration-200 ease-out ${
+              showSettings
+                ? onRemove
+                  ? 'pr-[4.75rem]'
+                  : 'pr-9'
+                : onRemove
+                  ? 'pr-0 group-hover:pr-[4.75rem] focus-within:pr-[4.75rem]'
+                  : 'pr-0 group-hover:pr-9 focus-within:pr-9'
+            }`}
+          >
+            <ChartTypeMenu
+              value="windrose"
+              label="Wind Rose"
+              onChange={(t) => onChangeType?.(t)}
+              theme={theme}
+              disabled={!onChangeType}
+              display="icon"
+            />
+            <span
+              className={`text-[10px] font-medium truncate min-w-0 flex-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+              title="Wind Direction"
+            >
+              Wind Direction
+            </span>
+          </div>
+          <div
+            className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 shrink-0 transition-opacity duration-200 ease-out ${
+              showSettings
+                ? 'opacity-100'
+                : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setShowSettings(!showSettings)}
+              className={`rounded p-0.5 transition-colors shrink-0 ${
+                showSettings 
+                  ? (theme === 'dark' ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600') 
+                  : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+              }`}
+              title="Chart settings"
+            >
+              <Settings2 className="w-3 h-3" />
+            </button>
+            {onRemove && (
+              <button 
+                type="button"
+                onClick={onRemove} 
+                className={`rounded p-0.5 transition-colors shrink-0 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
               >
-                <Settings2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
-              {onRemove && (
-                <button 
-                  onClick={onRemove} 
-                  className={`rounded-md transition-colors shadow-hard-md p-1.5 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
+        )}
       </div>
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowSettings(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-lg w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart Settings</h3>
-              <button onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
+              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-6">
-              <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-2">
                 <div className="space-y-2">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Wind Rose Granularity</label>
                   <select
@@ -574,16 +616,16 @@ export function WindRose({
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col gap-4">
-        <div className="w-full flex items-center justify-center relative" style={{ height: '420px' }}>
-          <svg ref={roseRef} className="w-full h-full max-h-full" />
+      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
+        <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">
+          <svg ref={roseRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         {stackedComparison && compareData && (
-        <div className="w-full flex items-center justify-center relative" style={{ height: '420px' }}>
-          <svg ref={compareRoseRef} className="w-full h-full max-h-full" />
+        <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">
+          <svg ref={compareRoseRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         )}
-        <div className="mt-4 flex-shrink-0">
+        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
           <InteractiveLegend 
             variable={{ 
               id: colorVar, 
@@ -597,7 +639,6 @@ export function WindRose({
             setGradientId={setGradientId} 
             gradients={gradients} 
             theme={theme} 
-            fontScale={1} 
             isDifference={showDifference}
           />
         </div>

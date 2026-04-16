@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Calendar, Clock, Palette, Sun, Moon, Settings2, Filter } from 'lucide-react';
+import { X, Calendar, Clock, Palette, Sun, Moon, Settings, Filter } from 'lucide-react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { GlobalFilterState } from './GlobalFilterPanel';
@@ -48,19 +48,19 @@ export function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className={`rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}`}>
-        <div className={`flex items-center justify-between p-4 border-b sticky top-0 z-10 ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-          <div className="flex items-center gap-2 font-semibold">
-            <Settings2 className="w-5 h-5 text-blue-500" />
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2">
+      <div className={`rounded-xl shadow-xl max-w-md w-full max-h-[min(90vh,560px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-200'}`}>
+        <div className={`flex items-center justify-between p-2 border-b sticky top-0 z-10 ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Settings className="w-4 h-4 text-blue-500" />
             <span>Settings</span>
           </div>
-          <button onClick={onClose} className={`p-1 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-            <X className="w-5 h-5" />
+          <button type="button" onClick={onClose} className={`p-1 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-6 space-y-8">
+        <div className="p-3 space-y-4">
           {/* Unit System */}
           <div className="space-y-3">
             <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -83,10 +83,10 @@ export function SettingsModal({
           </div>
 
           {/* Time Filters */}
-          <div className="space-y-6">
-            <h3 className="font-semibold text-sm border-b pb-2 flex items-center gap-2">
-              <Filter className="w-4 h-4 text-blue-500" />
-              Global Time Filters
+          <div className="space-y-4">
+            <h3 className="font-semibold text-xs border-b pb-1.5 flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-blue-500" />
+              Global time filters
             </h3>
             
             {/* Month Filter */}
@@ -199,13 +199,13 @@ export function SettingsModal({
           </div>
 
           {/* Graphics Adjustments */}
-          <div className="space-y-6">
-            <h3 className="font-semibold text-sm border-b pb-2 flex items-center gap-2">
-              <Palette className="w-4 h-4 text-purple-500" />
-              Graphics Adjustments
+          <div className="space-y-4">
+            <h3 className="font-semibold text-xs border-b pb-1.5 flex items-center gap-2">
+              <Palette className="w-3.5 h-3.5 text-purple-500" />
+              Graphics adjustments
             </h3>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Theme Toggle */}
               <div className="space-y-3">
                 <span className="font-medium text-sm">Interface Theme</span>

@@ -7,11 +7,13 @@ import { EPWDataRow } from '../lib/epwParser';
 import tc from 'jsthermalcomfort';
 import { X, Settings2 } from 'lucide-react';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
-import { ChartHeader } from './ChartHeader';
+import { AggregationToolbar } from './AggregationToolbar';
 import { ChartType } from '../App';
 import { UnitSystem } from '../App';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
+import { ChartTypeMenu } from './ChartTypeMenu';
+import { ExportHeaderCaption } from './ExportHeaderCaption';
 
 interface UtciExplorerProps {
   data: EPWDataRow[];
@@ -19,6 +21,7 @@ interface UtciExplorerProps {
   showDifference?: boolean;
   stackedComparison?: boolean;
   onRemove?: () => void;
+  onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
   unitSystem: UnitSystem;
@@ -63,6 +66,108 @@ function getUtciCategoryForValue(val: number): string {
   return 'extreme heat stress';
 }
 
+/** Matches `InteractiveLegend` metrics so all chart footers share the same footprint */
+const LEGEND_STRIP_SCALE = 0.72;
+
+function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
+  const pad = 3 * LEGEND_STRIP_SCALE;
+  const gap = 2 * LEGEND_STRIP_SCALE;
+  const titlePx = 8 * LEGEND_STRIP_SCALE;
+  const tickPx = 7 * LEGEND_STRIP_SCALE;
+  const barH = 5 * LEGEND_STRIP_SCALE;
+  const cats = Object.keys(UTCI_COLORS);
+  const comfortIdx = cats.indexOf('no thermal stress');
+  const comfortCenterPct = ((comfortIdx + 0.5) / cats.length) * 100;
+
+  return (
+    <div
+      className={`flex flex-col w-full select-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+      style={{ padding: `${pad}px`, gap: `${gap}px` }}
+    >
+      <div className="min-w-0">
+        <span
+          className="font-semibold uppercase tracking-wide truncate leading-tight block"
+          style={{ fontSize: `${titlePx}px` }}
+        >
+          UTCI (categories)
+        </span>
+      </div>
+      <div className="flex w-full rounded-sm overflow-hidden" style={{ height: `${barH}px` }}>
+        {cats.map((cat) => (
+          <div
+            key={cat}
+            className="flex-1 h-full border-r border-black/10 last:border-r-0 dark:border-white/15"
+            style={{ backgroundColor: UTCI_COLORS[cat] }}
+          />
+        ))}
+      </div>
+      <div className="relative w-full" style={{ minHeight: `${Math.max(tickPx, 10)}px`, fontSize: `${tickPx}px` }}>
+        <span
+          className={`absolute left-0 top-0 max-w-[34%] truncate font-medium uppercase tracking-tight leading-none ${
+            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+          }`}
+        >
+          Extreme cold
+        </span>
+        <span
+          className="absolute top-0 -translate-x-1/2 font-semibold uppercase tracking-tight leading-none text-green-600 dark:text-green-400 whitespace-nowrap"
+          style={{ left: `${comfortCenterPct}%` }}
+        >
+          Comfort
+        </span>
+        <span
+          className={`absolute right-0 top-0 max-w-[34%] truncate text-right font-medium uppercase tracking-tight leading-none ${
+            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+          }`}
+        >
+          Extreme heat
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
+  const pad = 3 * LEGEND_STRIP_SCALE;
+  const gap = 2 * LEGEND_STRIP_SCALE;
+  const titlePx = 8 * LEGEND_STRIP_SCALE;
+  const tickPx = 7 * LEGEND_STRIP_SCALE;
+  const barH = 5 * LEGEND_STRIP_SCALE;
+
+  return (
+    <div
+      className={`flex flex-col w-full select-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+      style={{ padding: `${pad}px`, gap: `${gap}px` }}
+    >
+      <div className="min-w-0">
+        <span
+          className="font-semibold uppercase tracking-wide truncate leading-tight block"
+          style={{ fontSize: `${titlePx}px` }}
+        >
+          Time in comfort zone
+        </span>
+      </div>
+      <div
+        className={`w-full rounded-sm overflow-hidden ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}
+        style={{
+          height: `${barH}px`,
+          background:
+            theme === 'dark'
+              ? 'linear-gradient(to right, #1f2937, #22c55e)'
+              : 'linear-gradient(to right, #ffffff, #22c55e)',
+        }}
+      />
+      <div
+        className="flex justify-between font-medium tabular-nums leading-none"
+        style={{ minHeight: `${Math.max(tickPx, 10)}px`, fontSize: `${tickPx}px` }}
+      >
+        <span className={theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}>0%</span>
+        <span className={theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}>100%</span>
+      </div>
+    </div>
+  );
+}
+
 interface UtciDataRow extends EPWDataRow {
   utci: number;
   utciCategory: string;
@@ -70,7 +175,7 @@ interface UtciDataRow extends EPWDataRow {
 }
 
 export function UtciExplorer({ 
-  data, compareData, showDifference, stackedComparison, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: UtciExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -78,11 +183,11 @@ export function UtciExplorer({
   const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
   const [includeSun, setIncludeSun] = useState(true);
   const [includeWind, setIncludeWind] = useState(true);
-  const [colorMode, setColorMode] = useState<'categories' | 'comfortTime' | 'gradient'>('categories');
+  const [colorMode, setColorMode] = useState<'categories' | 'comfortTime' | 'gradient'>('comfortTime');
   const [gradientId, setGradientId] = useState(gradients[0].id);
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+  // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -256,9 +361,11 @@ export function UtciExplorer({
     } else if (colorMode === 'categories') {
       colorScale = utciCategoryScale;
     } else if (colorMode === 'comfortTime') {
-      colorScale = d3.scaleSequential()
+      const comfortLow = theme === 'dark' ? '#1f2937' : '#ffffff';
+      const comfortHigh = '#22c55e';
+      colorScale = d3.scaleSequential<string>()
         .domain([0, 1])
-        .interpolator(d3.interpolateRgbBasis(['#ef4444', '#f59e0b', '#10b981']));
+        .interpolator(d3.interpolateRgb(comfortLow, comfortHigh));
     } else {
       colorScale = d3.scaleSequential()
         .domain([utciMin, utciMax])
@@ -674,16 +781,8 @@ export function UtciExplorer({
 
     
     if (title) {
-         g.append("rect")
-          .attr("x", -margin.left)
-          .attr("y", -margin.top + 4)
-          .attr("width", 4)
-          .attr("height", 16)
-          .attr("rx", 2)
-          .attr("fill", isCompare ? "#9ca3af" : "#3b82f6");
-
          g.append("text")
-          .attr("x", -margin.left + 10)
+          .attr("x", -margin.left + 4)
           .attr("y", -margin.top + 16)
           .style("font-size", "12px")
           .style("font-weight", "bold")
@@ -768,117 +867,132 @@ export function UtciExplorer({
   return (
     <div 
       ref={outerRef}
-      className={`w-full flex flex-col relative transition-colors duration-300 ${
+      className={`group w-full h-full min-h-0 flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
       
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-3 gap-2`}>
-        <div className="flex items-center justify-between w-full gap-2">
-          <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
-              exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
-            }`}>
-              UTCI Comfort
-            </h3>
-          </div>
-          {onRemove && !exportMode && (
-            <button 
-              onClick={onRemove} 
-              className={`rounded-md transition-colors shadow-hard-md p-1.5 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
-            >
-              <X className="w-4 h-4" />
-            </button>
+      } p-2`}>
+        <div className="flex flex-col min-w-0">
+          {exportMode ? (
+            <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+              <ChartTypeMenu
+                value="utci"
+                label="UTCI Comfort"
+                onChange={() => {}}
+                theme="light"
+                display="icon"
+                staticIcon
+              />
+              <ExportHeaderCaption lines={[{ short: 'Outdoor Comfort', long: 'Outdoor Comfort' }]} />
+            </div>
+          ) : (
+            <>
+              <div className="relative flex items-center w-full min-h-[28px] gap-1.5">
+                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1 transition-[padding] duration-200 ease-out pr-0 group-hover:pr-9 focus-within:pr-9">
+                  <ChartTypeMenu
+                    value="utci"
+                    label="UTCI Comfort"
+                    onChange={(t) => onChangeType?.(t)}
+                    theme={theme}
+                    disabled={!onChangeType}
+                    display="icon"
+                  />
+                  <span
+                    className={`text-[10px] font-medium truncate min-w-0 flex-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                    title="Outdoor Comfort"
+                  >
+                    Outdoor Comfort
+                  </span>
+                </div>
+                {onRemove && (
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 flex shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 ease-out group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
+                    <button 
+                      type="button"
+                      onClick={onRemove} 
+                      className={`rounded-md transition-colors shadow-hard-sm p-1 shrink-0 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto">
+                <div className="pt-1.5">
+                  <AggregationToolbar
+                    value={aggregation}
+                    onChange={setAggregation}
+                    theme={theme}
+                    trailing={
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowStats(!showStats)}
+                          className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                            showStats
+                              ? (theme === 'dark' ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600')
+                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                          }`}
+                          title="Statistics"
+                        >
+                          Stats
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowSettings(!showSettings)}
+                          className={`rounded p-0.5 transition-colors ${
+                            showSettings
+                              ? (theme === 'dark' ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600')
+                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                          }`}
+                          title="Chart settings"
+                        >
+                          <Settings2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    }
+                  />
+                </div>
+              </div>
+            </>
           )}
         </div>
-        {exportMode ? (
-          <div className="flex flex-wrap items-center justify-between w-full gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Aggregation:</span>
-              <span className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                {aggregation}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between w-full gap-2">
-            <div className={`flex flex-wrap rounded-lg p-1 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              {(['hour', 'day', 'week', 'month'] as const).map(agg => (
-                <button
-                  key={agg}
-                  onClick={() => setAggregation(agg)}
-                  className={`rounded-md font-medium capitalize transition-colors shadow-hard-sm px-3 py-1 text-xs ${
-                    aggregation === agg 
-                      ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-blue-400' : 'bg-white shadow-sm text-blue-600') 
-                      : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')
-                  }`}
-                >
-                  {agg}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowStats(!showStats)}
-                className={`rounded-md font-medium transition-colors border shadow-hard-md px-3 py-1 text-xs ${
-                  showStats 
-                    ? (theme === 'dark' ? 'bg-blue-900/50 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700')
-                }`}
-                title="Toggle Statistics"
-              >
-                Stats
-              </button>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`rounded-md transition-colors border shadow-hard-md p-1.5 ${
-                  showSettings 
-                    ? (theme === 'dark' ? 'bg-blue-900/50 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600')
-                }`}
-                title="Chart Settings"
-              >
-                <Settings2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Stats Modal */}
       {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowStats(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Comfort Statistics</h3>
-              <button onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Comfort statistics</h3>
+              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average UTCI</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {utciUnit}</div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average UTCI</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {utciUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Comfort Ratio</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>{(stats.comfortRatio * 100).toFixed(1)}%</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Comfort ratio</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>{(stats.comfortRatio * 100).toFixed(1)}%</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {utciUnit}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+                <div className={`text-xs font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {utciUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h4 className={`text-sm font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Stress Category Breakdown</h4>
-              <div className="space-y-2">
+            <div className="space-y-2">
+              <h4 className={`text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Stress category breakdown</h4>
+              <div className="space-y-1.5">
                 {stats.categoryPercentages.map(cat => (
                   <div key={cat.category} className="space-y-1">
                     <div className="flex justify-between text-xs">
@@ -901,17 +1015,17 @@ export function UtciExplorer({
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowSettings(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-lg w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>UTCI Chart Settings</h3>
-              <button onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>UTCI chart settings</h3>
+              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
             
-            <div className="grid grid-cols-1 gap-6">
-              <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-2">
                 <div className="space-y-2">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Calculation Inputs</label>
                   <div className="space-y-2">
@@ -945,14 +1059,14 @@ export function UtciExplorer({
                       theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
                     }`}
                   >
-                    <option value="categories">Stress Categories</option>
-                    <option value="comfortTime">Comfort Ratio</option>
-                    <option value="gradient">Temperature Gradient</option>
+                    <option value="comfortTime">Time in comfort zone</option>
+                    <option value="categories">Stress categories</option>
+                    <option value="gradient">Temperature gradient</option>
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {colorMode === 'gradient' && (
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
@@ -985,17 +1099,13 @@ export function UtciExplorer({
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col">
-        <div 
-          className="w-full" 
-          
-          style={{ height: '420px' }}
-        >
-          <svg ref={svgRef} className="w-full h-full" />
+      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
+        <div className="w-full flex-1 min-h-0 min-w-0 relative">
+          <svg ref={svgRef} className="w-full h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         
         {/* Custom Legend for UTCI */}
-        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
+        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
           {showDifference && compareData ? (
             <InteractiveLegend 
               variable={{ id: 'utci', name: 'UTCI', unit: utciUnit, min: convertUtci(utciMin), max: convertUtci(utciMax), category: 'Comfort' }} 
@@ -1003,37 +1113,10 @@ export function UtciExplorer({
               setGradientId={setGradientId} 
               gradients={gradients}
               theme={theme}
-              fontScale={1}
               isDifference={true}
             />
           ) : colorMode === 'categories' ? (
-            <div className={`p-2.5 rounded-xl border shadow-sm ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className={`font-semibold uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>UTCI Stress Categories</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 transition-all ${hoveredCategory ? 'opacity-100' : 'opacity-0'} ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {hoveredCategory ? hoveredCategory.charAt(0).toUpperCase() + hoveredCategory.slice(1) : ''}
-                  </span>
-                </div>
-                <div className="relative h-4 w-full rounded-full overflow-hidden border border-gray-100 dark:border-gray-700 flex">
-                  {Object.entries(UTCI_COLORS).map(([cat, color], i) => (
-                    <div 
-                      key={cat} 
-                      className="flex-1 h-full border-r border-white/20 last:border-r-0 cursor-pointer transition-opacity hover:opacity-80" 
-                      style={{ backgroundColor: color }}
-                      onMouseEnter={() => setHoveredCategory(cat)}
-                      onMouseLeave={() => setHoveredCategory(null)}
-                      title={cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between px-1">
-                  <span className="text-[9px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-tighter">Extreme Cold</span>
-                  <span className="text-[9px] font-bold text-green-600 dark:text-green-400 uppercase tracking-tighter">Comfort</span>
-                  <span className="text-[9px] font-bold text-red-700 dark:text-red-400 uppercase tracking-tighter">Extreme Heat</span>
-                </div>
-              </div>
-            </div>
+            <UtciCategoryLegendStrip theme={theme} />
           ) : colorMode === 'gradient' ? (
             <InteractiveLegend 
               variable={{ id: 'utci', name: 'UTCI', unit: utciUnit, min: convertUtci(utciMin), max: convertUtci(utciMax), category: 'Comfort' }} 
@@ -1041,17 +1124,9 @@ export function UtciExplorer({
               setGradientId={setGradientId} 
               gradients={gradients}
               theme={theme}
-              fontScale={1}
             />
           ) : (
-            <div className={`p-3 rounded-xl border shadow-sm ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <h4 className={`font-semibold uppercase tracking-wider text-xs mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Time in Comfort Zone</h4>
-              <div className="flex items-center gap-3">
-                <span className={`font-medium text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>0%</span>
-                <div className={`flex-1 rounded-full border h-3 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-200'}`} style={{ background: 'linear-gradient(to right, #ffffff, #22c55e)' }}></div>
-                <span className={`font-medium text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>100%</span>
-              </div>
-            </div>
+            <UtciComfortTimeLegendStrip theme={theme} />
           )}
         </div>
       </div>

@@ -463,11 +463,8 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       )}
 
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-3xl px-4 flex flex-col sm:flex-row gap-2 items-center pointer-events-none">
-        <div className="relative flex-1 w-full flex items-center gap-2 pointer-events-auto bg-white p-2 rounded-full shadow-hard-md border border-gray-200">
-          <div className="bg-blue-50 p-2 rounded-full text-blue-600 flex-shrink-0" title="Live Database Connected">
-            <Database className="w-5 h-5" />
-          </div>
-          <div className="relative flex-1">
+        <div className="relative flex-1 w-full pointer-events-auto bg-white p-2 rounded-full shadow-hard-md border border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
@@ -477,19 +474,43 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
               className="w-full pl-9 pr-4 py-2 bg-transparent border-none focus:ring-0 outline-none transition-all text-sm text-gray-700"
             />
           </div>
+          <div
+            className="inline-flex h-11 items-stretch rounded-full border border-gray-200 bg-gray-100 p-1 shadow-hard-sm gap-0.5 shrink-0"
+            role="group"
+            aria-label="Weather dataset source"
+          >
+            <button
+              type="button"
+              aria-pressed={!showFuture}
+              onClick={() => setShowFuture(false)}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 ${
+                !showFuture
+                  ? 'bg-gray-300 text-gray-900 shadow-md hover:bg-gray-600 hover:text-white'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
+              }`}
+              title="NREL global EPW database (typical years)"
+            >
+              <Database className="w-4 h-4 shrink-0 opacity-80" />
+              <span className="truncate">Historical</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={showFuture}
+              onClick={() => setShowFuture(true)}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
+                showFuture
+                  ? 'bg-white text-orange-700 shadow-sm ring-1 ring-orange-200/80'
+                  : 'text-gray-500 hover:text-orange-800 hover:bg-white/60'
+              }`}
+              title="Future projections from uploaded ZIP or samples"
+            >
+              <CloudLightning className="w-4 h-4 shrink-0" />
+              <span className="truncate">Future</span>
+            </button>
+          </div>
         </div>
         
         <div className="flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={() => setShowFuture(!showFuture)}
-            className={`flex items-center justify-center px-4 h-12 rounded-full shadow-hard-md transition-colors border border-gray-200 font-medium text-sm gap-2 ${
-              showFuture ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-            title="Toggle Future Weather Data"
-          >
-            <CloudLightning className="w-4 h-4" />
-            <span className="hidden sm:inline">{showFuture ? 'Future Weather' : 'Historical'}</span>
-          </button>
 
           <input 
             type="file" 
@@ -500,7 +521,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center w-12 h-12 bg-white text-blue-600 rounded-full shadow-hard-md hover:bg-gray-50 transition-colors border border-gray-200"
+            className="flex items-center justify-center w-12 h-12 bg-white text-gray-700 rounded-full shadow-hard-md hover:bg-gray-50 transition-colors border border-gray-200"
             title="Upload .epw"
           >
             <Upload className="w-5 h-5" />
@@ -530,7 +551,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
           <div className="flex flex-col gap-3">
             <button 
               onClick={loadSampleFuture}
-              className="flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-xl font-medium transition-colors text-sm border border-blue-200"
+              className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-xl font-medium transition-colors text-sm border border-gray-200"
             >
               <Info className="w-4 h-4" />
               Try with Sample Data
@@ -592,7 +613,11 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
                       </p>
                       <button
                         onClick={() => handleSampleSelect(loc)}
-                        className={`${loc.isFuture ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} text-white px-4 py-2 rounded-full text-sm font-medium transition-colors w-full shadow-hard-sm`}
+                        className={`${
+                          loc.isFuture
+                            ? 'bg-orange-600 hover:bg-orange-700'
+                            : 'bg-[#3388ff] hover:bg-[#2d7de0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3388ff] focus-visible:ring-offset-2'
+                        } text-white px-4 py-2 rounded-full text-sm font-medium transition-colors w-full shadow-hard-sm`}
                       >
                         Load Data
                       </button>

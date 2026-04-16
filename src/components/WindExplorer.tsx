@@ -4,12 +4,15 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
-import { ChartHeader } from './ChartHeader';
+import { AggregationToolbar } from './AggregationToolbar';
 import { ChartType } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
+import { ChartTypeMenu } from './ChartTypeMenu';
+import { ExportHeaderCaption } from './ExportHeaderCaption';
+import { VariableChartSelect } from './VariableChartSelect';
 
 interface WindExplorerProps {
   data: EPWDataRow[];
@@ -18,6 +21,7 @@ interface WindExplorerProps {
   stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
+  onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
   unitSystem: UnitSystem;
@@ -80,7 +84,7 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
 }
 
 export function WindExplorer({ 
-  data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: WindExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -90,6 +94,7 @@ export function WindExplorer({
   const [gradientId, setGradientId] = useState(gradients[0].id);
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -205,7 +210,7 @@ export function WindExplorer({
   }, {} as Record<string, EPWVariable[]>);
 
   // Calculate local stats for filtered data
-  const filteredData = useMemo(() => {
+  const filteredData = useMemo((): EPWDataRow[] => {
     return data.filter(d => {
       const isMonthMatch = filter.startMonth <= filter.endMonth
         ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
@@ -265,6 +270,8 @@ export function WindExplorer({
       return;
     }
 
+    const rows: EPWDataRow[] = filteredData as EPWDataRow[];
+
     // --- Main Chart (1224 + Bar) ---
     const BASE_WIDTH = 350;
     const width = BASE_WIDTH;
@@ -317,7 +324,7 @@ export function WindExplorer({
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     if (aggregation === 'month') {
-      const groups = d3.group(filteredData, d => d.month, d => d.hour);
+      const groups = d3.group(rows, d => d.month, d => d.hour);
       Array.from(groups).forEach(([month, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = values[0].dayOfYear;
@@ -352,7 +359,7 @@ export function WindExplorer({
         });
       });
     } else if (aggregation === 'week') {
-      const groups = d3.group(filteredData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
+      const groups = d3.group(rows, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
       Array.from(groups).forEach(([week, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = week * 7 + 1;
@@ -388,7 +395,7 @@ export function WindExplorer({
       });
     } else {
       // day or hour
-      heatmapData = filteredData.map(d => ({
+      heatmapData = rows.map(d => ({
         x0: d.dayOfYear,
         x1: d.dayOfYear + 1,
         y: d.hour,
@@ -478,7 +485,7 @@ export function WindExplorer({
     let aggregatedData: { x0: number, x1: number, valueSelected: number, minSelected?: number, maxSelected?: number, month: number }[] = [];
     
     if (aggregation === 'hour') {
-      aggregatedData = filteredData.map(d => {
+      aggregatedData = rows.map(d => {
         const val = convertValue((d[colorVar] as number) || 0, colorVarDef.unit);
         return {
           x0: d.dayOfYear + d.hour / 24,
@@ -490,7 +497,7 @@ export function WindExplorer({
         };
       });
     } else if (aggregation === 'day') {
-      const days = d3.group(filteredData, d => d.dayOfYear);
+      const days = d3.group(rows, d => d.dayOfYear);
       aggregatedData = Array.from(days, ([day, values]) => {
         return {
           x0: day,
@@ -502,7 +509,7 @@ export function WindExplorer({
         };
       });
     } else if (aggregation === 'week') {
-      const weeks = d3.group(filteredData, d => Math.floor((d.dayOfYear - 1) / 7));
+      const weeks = d3.group(rows, d => Math.floor((d.dayOfYear - 1) / 7));
       aggregatedData = Array.from(weeks, ([week, values]) => {
         return {
           x0: week * 7 + 1,
@@ -514,7 +521,7 @@ export function WindExplorer({
         };
       });
     } else { // month
-      const months = d3.group(filteredData, d => d.month);
+      const months = d3.group(rows, d => d.month);
       aggregatedData = Array.from(months, ([month, values]) => {
         const startDay = values[0].dayOfYear;
         const endDay = values[values.length - 1].dayOfYear + 1;
@@ -644,132 +651,135 @@ export function WindExplorer({
   return (
     <div 
       ref={outerRef}
-      className={`w-full h-fit flex flex-col relative transition-colors duration-300 ${
+      className={`group w-full h-full min-h-0 flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
       
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-3 gap-2`}>
-        <div className="flex items-center justify-between w-full gap-2">
-          <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
-              exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
-            }`}>
-              Wind Explorer
-            </h3>
-            <div className={`shrink-0 w-px h-4 ${
-              exportMode ? 'bg-gray-200' : (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
-            }`}></div>
-            {exportMode ? (
-              <span className="text-xs font-medium text-gray-500 truncate">{colorVarDef.name}</span>
-            ) : (
-              <select
-                value={colorVar}
-                onChange={(e) => setColorVar(e.target.value)}
-                className={`bg-transparent border-none font-medium focus:ring-0 cursor-pointer transition-colors p-0 truncate text-xs max-w-[100px] xs:max-w-[150px] sm:max-w-[200px] ${theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
-              >
-                {Object.entries(groupedVariables).map(([category, vars]) => (
-                  <optgroup key={category} label={category}>
-                    {vars.map(v => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
+      } p-2`}>
+        <div className="flex flex-col min-w-0">
+          {exportMode ? (
+            <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+              <ChartTypeMenu
+                value="wind"
+                label="Wind Explorer"
+                onChange={() => {}}
+                theme="light"
+                display="icon"
+                staticIcon
+              />
+              <ExportHeaderCaption
+                lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between w-full gap-1.5">
+                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1">
+                  <ChartTypeMenu
+                    value="wind"
+                    label="Wind Explorer"
+                    onChange={(t) => onChangeType?.(t)}
+                    theme={theme}
+                    disabled={!onChangeType}
+                    display="icon"
+                  />
+                  <VariableChartSelect
+                    value={colorVar}
+                    onChange={setColorVar}
+                    selectedLabel={colorVarDef.name}
+                    theme={theme}
+                  >
+                    {Object.entries(groupedVariables).map(([category, vars]) => (
+                      <optgroup key={category} label={category}>
+                        {vars.map(v => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                      </optgroup>
                     ))}
-                  </optgroup>
-                ))}
-              </select>
-            )}
-          </div>
-          {onRemove && !exportMode && (
-            <button 
-              onClick={onRemove} 
-              className={`rounded-md transition-colors shadow-hard-md p-1.5 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
-            >
-              <X className="w-4 h-4" />
-            </button>
+                  </VariableChartSelect>
+                </div>
+                {onRemove && (
+                  <div className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
+                    <button 
+                      onClick={onRemove} 
+                      className={`rounded-md transition-colors shadow-hard-sm p-1 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto">
+                <div className="pt-1.5">
+                  <AggregationToolbar
+                    value={aggregation}
+                    onChange={setAggregation}
+                    theme={theme}
+                    trailing={
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowStats(!showStats)}
+                          className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                            showStats
+                              ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
+                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                          }`}
+                          title="Statistics"
+                        >
+                          Stats
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowSettings(!showSettings)}
+                          className={`rounded p-0.5 transition-colors ${
+                            showSettings
+                              ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
+                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                          }`}
+                          title="Chart settings"
+                        >
+                          <Settings2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    }
+                  />
+                </div>
+              </div>
+            </>
           )}
         </div>
-        
-        {exportMode ? (
-          <div className="flex flex-wrap items-center justify-between w-full gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Aggregation:</span>
-              <span className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                {aggregation}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between w-full gap-2">
-            <div className={`flex flex-wrap rounded-lg p-1 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              {(['hour', 'day', 'week', 'month'] as const).map(agg => (
-                <button
-                  key={agg}
-                  onClick={() => setAggregation(agg)}
-                  className={`rounded-md font-medium capitalize transition-colors shadow-hard-sm px-2.5 py-1 text-xs ${
-                    aggregation === agg 
-                      ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-blue-400' : 'bg-white shadow-sm text-blue-600') 
-                      : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')
-                  }`}
-                >
-                  {agg}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <button
-                onClick={() => setShowStats(!showStats)}
-                className={`rounded-md font-medium transition-colors border shadow-hard-md px-2.5 py-1 text-xs ${
-                  showStats 
-                    ? (theme === 'dark' ? 'bg-blue-900/30 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700')
-                }`}
-                title="Toggle Statistics"
-              >
-                Stats
-              </button>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`rounded-md transition-colors border shadow-hard-md p-1 sm:p-1.5 ${
-                  showSettings 
-                    ? (theme === 'dark' ? 'bg-blue-900/30 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600')
-                }`}
-                title="Chart Settings"
-              >
-                <Settings2 className="w-3 h-3 sm:w-4 sm:h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Stats Modal */}
       {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowStats(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
-              <button onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
+              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
               </div>
             </div>
           </div>
@@ -777,21 +787,21 @@ export function WindExplorer({
       )}
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowSettings(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-lg w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart Settings</h3>
-              <button onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
+              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 gap-3">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
                   <button 
                     onClick={() => setShowGradientModal(true)}
-                    className="text-[10px] font-bold text-blue-500 hover:text-blue-600 uppercase tracking-tight"
+                    className="text-[10px] font-bold text-gray-600 hover:text-gray-800 uppercase tracking-tight"
                   >
                     + Create
                   </button>
@@ -802,7 +812,7 @@ export function WindExplorer({
                       key={g.id}
                       onClick={() => setGradientId(g.id)}
                       className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all shadow-hard-sm ${
-                        gradientId === g.id ? 'border-blue-500 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
+                        gradientId === g.id ? 'border-gray-700 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                       }`}
                       style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
                       title={g.name}
@@ -822,7 +832,7 @@ export function WindExplorer({
                     </button>
                     <button
                       onClick={() => applyPreset('winter')}
-                      className={`px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors ${theme === 'dark' ? 'bg-blue-900/30 text-blue-400 border-blue-800 hover:bg-blue-900/50' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100'}`}
+                      className={`px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors ${theme === 'dark' ? 'bg-gray-800/80 text-gray-200 border-gray-600 hover:bg-gray-800' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
                     >
                       Winter Chill
                     </button>
@@ -848,7 +858,7 @@ export function WindExplorer({
                     type="checkbox"
                     checked={tempFilterEnabled}
                     onChange={(e) => setTempFilterEnabled(e.target.checked)}
-                    className={`rounded text-blue-600 focus:ring-blue-500 ${theme === 'dark' ? 'border-gray-600 bg-gray-800' : 'border-gray-300'}`}
+                    className={`rounded text-gray-700 focus:ring-gray-500 ${theme === 'dark' ? 'border-gray-600 bg-gray-800' : 'border-gray-300'}`}
                   />
                   <span className={`text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Filter by Temperature</span>
                 </label>
@@ -857,7 +867,7 @@ export function WindExplorer({
                     <select
                       value={tempFilterType}
                       onChange={(e) => setTempFilterType(e.target.value as 'above' | 'below')}
-                      className={`text-xs rounded-lg block p-1.5 transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-blue-500 focus:border-blue-500 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-blue-500 focus:border-blue-500 hover:bg-white'}`}
+                      className={`text-xs rounded-lg block p-1.5 transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                     >
                       <option value="above">Above</option>
                       <option value="below">Below</option>
@@ -867,7 +877,7 @@ export function WindExplorer({
                         type="number"
                         value={tempThreshold}
                         onChange={(e) => setTempThreshold(Number(e.target.value))}
-                        className={`w-full text-xs rounded-lg block p-1.5 transition-all pr-6 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-blue-500 focus:border-blue-500 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-blue-500 focus:border-blue-500 hover:bg-white'}`}
+                        className={`w-full text-xs rounded-lg block p-1.5 transition-all pr-6 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                       />
                       <span className={`absolute right-2 top-1.5 text-[10px] ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>{unitSystem === 'imperial' ? '°F' : '°C'}</span>
                     </div>
@@ -881,7 +891,7 @@ export function WindExplorer({
                     type="checkbox"
                     checked={speedFilterEnabled}
                     onChange={(e) => setSpeedFilterEnabled(e.target.checked)}
-                    className={`rounded text-blue-600 focus:ring-blue-500 ${theme === 'dark' ? 'border-gray-600 bg-gray-800' : 'border-gray-300'}`}
+                    className={`rounded text-gray-700 focus:ring-gray-500 ${theme === 'dark' ? 'border-gray-600 bg-gray-800' : 'border-gray-300'}`}
                   />
                   <span className={`text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Filter by Wind Speed</span>
                 </label>
@@ -890,7 +900,7 @@ export function WindExplorer({
                     <select
                       value={speedFilterType}
                       onChange={(e) => setSpeedFilterType(e.target.value as 'above' | 'below')}
-                      className={`text-xs rounded-lg block p-1.5 transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-blue-500 focus:border-blue-500 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-blue-500 focus:border-blue-500 hover:bg-white'}`}
+                      className={`text-xs rounded-lg block p-1.5 transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                     >
                       <option value="above">Above</option>
                       <option value="below">Below</option>
@@ -900,7 +910,7 @@ export function WindExplorer({
                         type="number"
                         value={speedThreshold}
                         onChange={(e) => setSpeedThreshold(Number(e.target.value))}
-                        className={`w-full text-xs rounded-lg block p-1.5 transition-all pr-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-blue-500 focus:border-blue-500 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-blue-500 focus:border-blue-500 hover:bg-white'}`}
+                        className={`w-full text-xs rounded-lg block p-1.5 transition-all pr-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                       />
                       <span className={`absolute right-2 top-1.5 text-[10px] ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>{unitSystem === 'imperial' ? 'mph' : 'm/s'}</span>
                     </div>
@@ -912,22 +922,20 @@ export function WindExplorer({
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col">
+      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
         <div 
-          className="w-full" 
+          className="w-full flex-1 min-h-0 min-w-0 relative" 
           ref={containerRef}
-          style={{ height: '420px' }}
         >
-          <svg ref={svgRef} className="w-full h-full" />
+          <svg ref={svgRef} className="w-full h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
-        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
+        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
           <InteractiveLegend 
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
             gradientId={gradientId} 
             setGradientId={setGradientId} 
             gradients={gradients} 
             theme={theme} 
-            fontScale={1} 
             isDifference={showDifference}
           />
         </div>

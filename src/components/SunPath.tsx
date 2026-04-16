@@ -5,12 +5,14 @@ import 'rc-slider/assets/index.css';
 import SunCalc from 'suncalc';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
-import { ChartHeader } from './ChartHeader';
+import { AggregationToolbar } from './AggregationToolbar';
 import { ChartType } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
+import { ChartTypeMenu } from './ChartTypeMenu';
+import { ExportHeaderCaption } from './ExportHeaderCaption';
 
 interface SunPathProps {
   metadata: EPWMetadata;
@@ -20,6 +22,7 @@ interface SunPathProps {
   stackedComparison?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
+  onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
   unitSystem: UnitSystem;
@@ -30,39 +33,64 @@ interface SunPathProps {
 }
 
 export function SunPath({ 
-  metadata, data, compareData, showDifference, stackedComparison, variables, onRemove, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  metadata, data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode
 }: SunPathProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 400 });
+  const primaryChartSlotRef = useRef<HTMLDivElement>(null);
+  const compareChartSlotRef = useRef<HTMLDivElement>(null);
+  const [slotSize, setSlotSize] = useState({
+    primary: { w: 400, h: 380 },
+    compare: { w: 400, h: 380 },
+  });
 
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!outerRef.current) return;
-    const observer = new ResizeObserver(entries => {
-      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
-      
-      resizeTimeoutRef.current = setTimeout(() => {
-        for (let entry of entries) {
-          const newWidth = Math.round(entry.contentRect.width);
-          
-          setDimensions(prev => {
-            if (prev.width === newWidth) return prev;
-            return { width: newWidth };
-          });
+    const elP = primaryChartSlotRef.current;
+    if (!elP) return;
+
+    const readSizes = () => {
+      const pr = elP.getBoundingClientRect();
+      const pw = Math.max(120, Math.round(pr.width));
+      const ph = Math.max(120, Math.round(pr.height));
+      const elC = compareChartSlotRef.current;
+      let cw = pw;
+      let ch = ph;
+      if (elC) {
+        const cr = elC.getBoundingClientRect();
+        cw = Math.max(120, Math.round(cr.width));
+        ch = Math.max(120, Math.round(cr.height));
+      }
+      setSlotSize(prev => {
+        if (
+          prev.primary.w === pw &&
+          prev.primary.h === ph &&
+          prev.compare.w === cw &&
+          prev.compare.h === ch
+        ) {
+          return prev;
         }
-      }, 100);
+        return { primary: { w: pw, h: ph }, compare: { w: cw, h: ch } };
+      });
+    };
+
+    const observer = new ResizeObserver(() => {
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+      resizeTimeoutRef.current = setTimeout(readSizes, 50);
     });
-    observer.observe(outerRef.current);
+    observer.observe(elP);
+    const elC = compareChartSlotRef.current;
+    if (elC) observer.observe(elC);
+    readSizes();
+
     return () => {
       observer.disconnect();
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
     };
-  }, []);
+  }, [stackedComparison, compareData]);
   const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('week');
   const [colorVar, setColorVar] = useState(variables[0]?.id || '');
   const [radiusVar, setRadiusVar] = useState(variables.find(v => v.id === 'globalHorizontalRadiation')?.id || variables[0]?.id || '');
@@ -71,6 +99,7 @@ export function SunPath({
   const [radiusMax, setRadiusMax] = useState<number | string>(10);
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  // chart type switching handled by ChartTypeMenu
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempFilterType, setTempFilterType] = useState<'helpful' | 'harmful'>('helpful');
   const [helpfulThreshold, setHelpfulThreshold] = useState(unitSystem === 'imperial' ? 68 : 20);
@@ -213,15 +242,32 @@ const filteredCompareData = (compareData || []).filter(d => {
   })();
 
   useEffect(() => {
-    if (!svgRef.current || dimensions.width === 0) return;
+    if (!svgRef.current) return;
+    const { w: pw, h: ph } = slotSize.primary;
+    if (pw === 0 || ph === 0) return;
 
-const renderChart = (svgEl: any, currentData: any[], title: string | null, isCompare: boolean) => {
+    const renderChart = (
+      svgEl: SVGSVGElement,
+      currentData: any[],
+      title: string | null,
+      isCompare: boolean,
+      width: number,
+      height: number
+    ) => {
     if (!currentData || !currentData.length) return;
-        const BASE_WIDTH = 350;
-    const width = BASE_WIDTH;
-    const height = 420;
-    const margin = 30;
-    const radius = Math.min(width, height) / 2 - margin;
+    const rMaxPx = Math.min(
+      28,
+      Math.max(4, typeof radiusMax === 'number' ? radiusMax : parseFloat(String(radiusMax)) || 10)
+    );
+    const labelRim = 18;
+    const titleReserve = title ? 22 : 0;
+    const sideReserve = 12;
+    const rawRadius = Math.min(
+      width / 2 - sideReserve - labelRim - rMaxPx * 0.35,
+      height / 2 - labelRim - rMaxPx * 0.35 - titleReserve / 2
+    );
+    const maxRadius = Math.min(width, height) / 2 - 6;
+    const radius = Math.max(24, Math.min(rawRadius, maxRadius));
 
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
@@ -258,7 +304,6 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
         
         return { ...d, altitude, azimuth, _val: val, _rVal: rVal };
       }).filter(d => d.altitude > 0);
-      console.log('SunPath points (hour aggregation):', points.length, points[0]);
     } else {
       // Aggregate data by hour of day, then by the selected period
       // This creates an "average day" for the period
@@ -313,7 +358,6 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
           }
         });
       });
-      console.log('SunPath points (aggregated):', points.length, points[0]);
     }
 
     // Color scale
@@ -524,16 +568,9 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
 
     
     if (title) {
-         g.append("rect")
-          .attr("x", -margin + 4)
-          .attr("y", -height/2 + 4)
-          .attr("width", 4)
-          .attr("height", 16)
-          .attr("rx", 2)
-          .attr("fill", isCompare ? "#9ca3af" : "#3b82f6");
-
+         const titleMargin = 12;
          g.append("text")
-          .attr("x", -margin + 10)
+          .attr("x", -titleMargin + 4)
           .attr("y", -height/2 + 16)
           .style("font-size", "12px")
           .style("font-weight", "bold")
@@ -543,119 +580,152 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
   };
 
   if (stackedComparison && compareData && compareSvgRef.current) {
-      renderChart(svgRef.current, data, "Baseline Local Dataset", false);
-      renderChart(compareSvgRef.current, compareData, "Comparative Dataset", true);
+      const { w: cw, h: ch } = slotSize.compare;
+      renderChart(svgRef.current, data, "Baseline Local Dataset", false, pw, ph);
+      renderChart(compareSvgRef.current, compareData, "Comparative Dataset", true, cw, ch);
   } else {
-      renderChart(svgRef.current, data, null, false);
+      renderChart(svgRef.current, data, null, false, pw, ph);
   }
-  }, [metadata, data, compareData, showDifference, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, dimensions.width, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
+  }, [metadata, data, compareData, showDifference, stackedComparison, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, slotSize.primary.w, slotSize.primary.h, slotSize.compare.w, slotSize.compare.h, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
 
   return (
     <div 
       ref={outerRef}
-      className={`w-full h-fit flex flex-col relative transition-colors duration-300 ${
+      className={`group w-full h-full min-h-0 flex flex-col relative transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
       
     >
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-3 gap-2`}>
-        <div className="flex items-center justify-between w-full gap-2">
-          <div className="flex items-center min-w-0 gap-2 sm:gap-3">
-            <h3 className={`font-semibold whitespace-nowrap uppercase tracking-wider text-sm ${
-              exportMode ? 'text-gray-800' : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
-            }`}>Sun Path</h3>
-            <div className={`shrink-0 w-px h-4 ${
-              exportMode ? 'bg-gray-200' : (theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200')
-            }`}></div>
-            <span className="text-xs font-medium text-gray-500 truncate">{colorVarDef.name}</span>
-          </div>
-          {onRemove && !exportMode && (
-            <button onClick={onRemove} className={`rounded-md transition-colors shadow-hard-md p-1.5 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}>
-              <X className="w-4 h-4" />
-            </button>
+      } p-2`}>
+        <div className="flex flex-col min-w-0">
+          {exportMode ? (
+            <div className="flex items-start gap-2 min-w-0">
+              <div className="shrink-0 pt-0.5">
+                <ChartTypeMenu
+                  value="sunpath"
+                  label="Sun Path"
+                  onChange={() => {}}
+                  theme="light"
+                  display="icon"
+                  staticIcon
+                />
+              </div>
+              <ExportHeaderCaption
+                lines={[
+                  {
+                    short: `Color · ${colorVarDef.category}`,
+                    long: `Color · ${colorVarDef.name}`,
+                  },
+                  {
+                    short: `Radius · ${radiusVarDef.category}`,
+                    long: `Radius · ${radiusVarDef.name}`,
+                  },
+                ]}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="relative flex items-center w-full min-h-[28px] gap-1.5">
+                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1 transition-[padding] duration-200 ease-out pr-0 group-hover:pr-9 focus-within:pr-9">
+                  <ChartTypeMenu
+                    value="sunpath"
+                    label="Sun Path"
+                    onChange={(t) => onChangeType?.(t)}
+                    theme={theme}
+                    disabled={!onChangeType}
+                    display="icon"
+                  />
+                  <span
+                    className={`text-[10px] font-medium truncate min-w-0 flex-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
+                    title={colorVarDef.name}
+                  >
+                    {colorVarDef.name}
+                  </span>
+                </div>
+                {onRemove && (
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 flex shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 ease-out group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
+                    <button
+                      type="button"
+                      onClick={onRemove}
+                      className={`rounded-md transition-colors shadow-hard-sm p-1 shrink-0 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div
+                className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto"
+              >
+                <div className="pt-1.5">
+                  <AggregationToolbar
+                    value={aggregation}
+                    onChange={setAggregation}
+                    theme={theme}
+                    trailing={
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowStats(!showStats)}
+                        className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                          showStats
+                            ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
+                            : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                        }`}
+                        title="Statistics"
+                      >
+                        Stats
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowSettings(!showSettings)}
+                        className={`rounded p-0.5 transition-colors ${
+                          showSettings
+                            ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
+                            : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                        }`}
+                        title="Chart settings"
+                      >
+                        <Settings2 className="w-3 h-3" />
+                      </button>
+                    </>
+                  }
+                />
+              </div>
+            </div>
+            </>
           )}
         </div>
-        
-        {exportMode ? (
-          <div className="flex flex-wrap items-center justify-between w-full gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Aggregation:</span>
-              <span className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                {aggregation}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between w-full gap-2">
-            <div className={`flex flex-wrap rounded-lg p-1 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              {(['hour', 'day', 'week', 'month'] as const).map(agg => (
-                <button
-                  key={agg}
-                  onClick={() => setAggregation(agg)}
-                  className={`rounded-md font-medium capitalize transition-colors shadow-hard-sm px-3 py-1 text-xs ${
-                    aggregation === agg ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {agg}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowStats(!showStats)}
-                className={`rounded-md font-medium transition-colors border shadow-hard-md px-3 py-1 text-xs ${
-                  showStats 
-                    ? (theme === 'dark' ? 'bg-blue-900/50 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700')
-                }`}
-                title="Toggle Statistics"
-              >
-                Stats
-              </button>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`rounded-md transition-colors border shadow-hard-md p-1.5 ${
-                  showSettings 
-                    ? (theme === 'dark' ? 'bg-blue-900/50 border-blue-800 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-600') 
-                    : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600')
-                }`}
-                title="Chart Settings"
-              >
-                <Settings2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Stats Modal */}
       {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowStats(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
-              <button onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
+              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
               </div>
-              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-xl font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
+              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
               </div>
             </div>
           </div>
@@ -664,21 +734,21 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowSettings(false)}>
-          <div className={`p-6 rounded-xl shadow-hard-xl max-w-lg w-full max-h-[90vh] overflow-y-auto ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart Settings</h3>
-              <button onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
+          <div className={`p-3 rounded-lg shadow-hard-xl max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
+              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 gap-3">
               <div className="space-y-2">
                 <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Variable</label>
                 <select
                   value={colorVar}
                   onChange={(e) => setColorVar(e.target.value)}
-                  className={`w-full text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                  className={`w-full text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                 >
                   {Object.entries(groupedVariables).map(([category, vars]) => (
                     <optgroup key={category} label={category}>
@@ -694,7 +764,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                 <select
                   value={radiusVar}
                   onChange={(e) => setRadiusVar(e.target.value)}
-                  className={`w-full text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                  className={`w-full text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                 >
                   {Object.entries(groupedVariables).map(([category, vars]) => (
                     <optgroup key={category} label={category}>
@@ -712,14 +782,14 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                     type="number"
                     value={radiusMin}
                     onChange={(e) => setRadiusMin(e.target.value)}
-                    className={`w-1/2 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                    className={`w-1/2 text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                     placeholder="Min"
                   />
                   <input
                     type="number"
                     value={radiusMax}
                     onChange={(e) => setRadiusMax(e.target.value)}
-                    className={`w-1/2 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                    className={`w-1/2 text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                     placeholder="Max"
                   />
                 </div>
@@ -729,7 +799,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
                   <button 
                     onClick={() => setShowGradientModal(true)}
-                    className="text-[10px] font-bold text-blue-500 hover:text-blue-600 uppercase tracking-tight"
+                    className="text-[10px] font-bold text-gray-600 hover:text-gray-800 uppercase tracking-tight"
                   >
                     + Create
                   </button>
@@ -740,7 +810,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                       key={g.id}
                       onClick={() => setGradientId(g.id)}
                       className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all shadow-hard-sm ${
-                        gradientId === g.id ? 'border-blue-500 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
+                        gradientId === g.id ? 'border-gray-700 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                       }`}
                       style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
                       title={g.name}
@@ -749,7 +819,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                 </div>
               </div>
 
-              <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                     Temperature Filter
@@ -761,7 +831,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                       checked={tempFilterEnabled}
                       onChange={e => setTempFilterEnabled(e.target.checked)}
                     />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-gray-700"></div>
                   </label>
                 </div>
                 
@@ -770,7 +840,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                     <select
                       value={tempFilterType}
                       onChange={e => setTempFilterType(e.target.value as any)}
-                      className={`flex-1 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                      className={`flex-1 text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                     >
                       <option value="helpful">Helpful (Below)</option>
                       <option value="harmful">Harmful (Above)</option>
@@ -786,7 +856,7 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
                             setHarmfulThreshold(Number(e.target.value));
                           }
                         }}
-                        className={`w-full text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                        className={`w-full text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                       />
                       <span className={`absolute right-3 top-2.5 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                         {unitSystem === 'imperial' ? '°F' : '°C'}
@@ -800,23 +870,28 @@ const renderChart = (svgEl: any, currentData: any[], title: string | null, isCom
         </div>
       )}
 
-      <div className="p-3 flex-1 flex flex-col gap-4">
-        <div className="w-full flex items-center justify-center relative" >
-          <svg ref={svgRef} className="w-full h-full max-h-full" />
+      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
+        <div
+          ref={primaryChartSlotRef}
+          className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative min-h-[140px]"
+        >
+          <svg ref={svgRef} className="w-full h-full max-h-full max-w-full block" preserveAspectRatio="xMidYMid meet" />
         </div>
         {stackedComparison && compareData && (
-        <div className="w-full flex items-center justify-center relative" style={{ aspectRatio: '350/420' }}>
-          <svg ref={compareSvgRef} className="w-full h-full max-h-full" />
+        <div
+          ref={compareChartSlotRef}
+          className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative min-h-[140px]"
+        >
+          <svg ref={compareSvgRef} className="w-full h-full max-h-full max-w-full block" preserveAspectRatio="xMidYMid meet" />
         </div>
         )}
-        <div className="mt-2 flex-shrink-0" style={{ minHeight: "52px" }}>
+        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
           <InteractiveLegend 
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
             gradientId={gradientId} 
             setGradientId={setGradientId} 
             gradients={gradients} 
             theme={theme} 
-            fontScale={1} 
             isDifference={showDifference}
           />
         </div>

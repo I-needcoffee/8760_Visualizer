@@ -1,0 +1,30 @@
+diff --git a/node_modules/jsthermalcomfort/lib/cjs/types/models/pet_steady.d.ts b/node_modules/jsthermalcomfort/lib/cjs/types/models/pet_steady.d.ts
+index 56f157e..dc19579 100644
+--- a/node_modules/jsthermalcomfort/lib/cjs/types/models/pet_steady.d.ts
++++ b/node_modules/jsthermalcomfort/lib/cjs/types/models/pet_steady.d.ts
+@@ -58,8 +58,8 @@ export type PetSteadyResult = {
+      */
+     pet: number;
+ };
+-export type NewtonRaphsonFunction = (: [number, number, number]) => [number, number, number];
+-export type NewtonRaphsonSingleFunction = (: [number]) => [number];
++export type NewtonRaphsonFunction = (args: [number, number, number]) => [number, number, number];
++export type NewtonRaphsonSingleFunction = (args: [number]) => [number];
+ export type VasomotricitytRet = {
+     /**
+      * - Blood flow rate, [kg/m2/h]
+diff --git a/node_modules/jsthermalcomfort/lib/esm/types/models/pet_steady.d.ts b/node_modules/jsthermalcomfort/lib/esm/types/models/pet_steady.d.ts
+index 56f157e..dc19579 100644
+--- a/node_modules/jsthermalcomfort/lib/esm/types/models/pet_steady.d.ts
++++ b/node_modules/jsthermalcomfort/lib/esm/types/models/pet_steady.d.ts
+@@ -58,8 +58,8 @@ export type PetSteadyResult = {
+      */
+     pet: number;
+ };
+-export type NewtonRaphsonFunction = (: [number, number, number]) => [number, number, number];
+-export type NewtonRaphsonSingleFunction = (: [number]) => [number];
++export type NewtonRaphsonFunction = (args: [number, number, number]) => [number, number, number];
++export type NewtonRaphsonSingleFunction = (args: [number]) => [number];
+ export type VasomotricitytRet = {
+     /**
+      * - Blood flow rate, [kg/m2/h]

@@ -159,7 +159,7 @@ export function SummaryStats({ data, compareData, showDifference, variables, fil
           {!showDifference && (
             <div className={`p-4 rounded-xl shadow-hard-md border ${theme === 'dark' ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
               <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Comfort Time</div>
-              <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>{comfortPercent.toFixed(1)}%</div>
+              <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{comfortPercent.toFixed(1)}%</div>
             </div>
           )}
         </>

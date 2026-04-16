@@ -1,20 +1,27 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Climate Compare
 
-# Run and deploy your AI Studio app
+Web dashboard for comparing EPW (EnergyPlus Weather) datasets: sun path, data explorer, wind, wind rose, and UTCI comfort views. Built with React, Vite, Tailwind CSS, and D3.
 
-This contains everything you need to run your app locally.
+## Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/5361f3f0-4c91-4284-8874-b53d2ec08f86
+- [Node.js](https://nodejs.org/) (current LTS recommended)
 
-## Run Locally
+## Run locally
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+npm run dev
+```
 
+Then open the URL Vite prints (typically `http://127.0.0.1:5173`).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Build
+
+```bash
+npm run build
+npm run preview
+```
+
+## EPW proxy (development)
+
+The dev server exposes `/api/proxy-epw` so the app can fetch remote EPW files without browser CORS issues.
