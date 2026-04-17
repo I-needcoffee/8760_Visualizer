@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { BarChart2, Compass, GripVertical, Sun, ThermometerSun, Wind } from 'lucide-react';
 import { ChartType, ChartConfig, LayoutMode } from '../App';
-import { GripVertical, Plus } from 'lucide-react';
 
 const SLOT_DRAG_MIME = 'application/x-climate-slot-index';
 
@@ -89,21 +90,27 @@ export function SingleModeLayout({
     baseClass: string
   ) => {
     const globalIndex = pageIndex * slotsPerPage + idx;
-    const showHandle = !!reorderMode && !exportMode && slot.type !== 'empty';
+    const reorderChrome = !!reorderMode && !exportMode;
+    const showHandle = reorderChrome && slot.type !== 'empty';
     const isDragging = dragSource === globalIndex;
     const isDropTarget =
       dropHover === globalIndex && dragSource !== null && dragSource !== globalIndex;
 
     const dragRing = isDropTarget
       ? theme === 'dark'
-        ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-gray-900'
-        : 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white'
+        ? 'ring-[3px] ring-sky-400 ring-offset-2 ring-offset-gray-900'
+        : 'ring-[3px] ring-sky-500 ring-offset-2 ring-offset-white'
       : '';
+
+    const chartReorderDim =
+      reorderChrome && slot.type !== 'empty'
+        ? `grayscale contrast-[0.94] ${isDragging ? 'opacity-45' : 'opacity-[0.9]'} transition-[filter,opacity] duration-200`
+        : '';
 
     return (
       <div
         key={slot.id || idx}
-        className={`${baseClass} relative ${dragRing} ${isDragging ? 'opacity-45 saturate-0' : ''}`}
+        className={`${baseClass} relative ${dragRing} ${slot.type === 'empty' ? '!overflow-visible' : ''}`}
         style={{ contain: 'layout style' }}
         onDragOver={e => onDragOver(e, globalIndex)}
         onDragLeave={e => onDragLeave(e, globalIndex)}
@@ -114,22 +121,24 @@ export function SingleModeLayout({
             draggable
             onDragStart={e => onDragStart(e, globalIndex)}
             onDragEnd={onDragEnd}
-            className={`absolute left-2 top-2 z-30 flex cursor-grab items-center gap-1 rounded-md border px-1.5 py-1 shadow-hard-sm active:cursor-grabbing select-none ${
+            className={`absolute left-1/2 top-1/2 z-[45] flex -translate-x-1/2 -translate-y-1/2 cursor-grab items-center gap-2 rounded-full border px-3.5 py-1.5 shadow-sm active:cursor-grabbing select-none ${
               theme === 'dark'
-                ? 'border-gray-600 bg-gray-700/95 text-gray-200 hover:bg-gray-600'
-                : 'border-gray-300 bg-gray-100/95 text-gray-700 hover:bg-gray-200'
+                ? 'border-blue-900/50 bg-blue-900/55 text-blue-300 hover:bg-blue-900/75'
+                : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
             }`}
-            title="Drag onto another card to swap positions"
+            title="Drag this handle onto another card to swap positions"
             onClick={e => e.stopPropagation()}
           >
-            <GripVertical className="w-4 h-4 shrink-0" aria-hidden />
-            <span className="hidden text-[9px] font-bold uppercase tracking-wide sm:inline">Move</span>
+            <GripVertical className="h-5 w-5 shrink-0" aria-hidden />
+            <span className="text-[10px] font-bold uppercase tracking-wide">Move</span>
           </div>
         )}
         {slot.type === 'empty' ? (
-          <EmptySlot onSelectType={type => onSelectSlotType(globalIndex, type)} theme={theme} />
+          <div className={reorderChrome ? 'grayscale opacity-80 transition-[filter,opacity] duration-200' : ''}>
+            <EmptySlot onSelectType={type => onSelectSlotType(globalIndex, type)} theme={theme} />
+          </div>
         ) : (
-          renderChart(slot)
+          <div className={`min-h-0 flex-1 flex flex-col overflow-hidden ${chartReorderDim}`}>{renderChart(slot)}</div>
         )}
       </div>
     );
@@ -192,33 +201,53 @@ export function SingleModeLayout({
   );
 }
 
-function EmptySlot({ onSelectType, theme }: { onSelectType: (t: ChartType) => void; theme: string }) {
+const EMPTY_SLOT_CHOICES: { type: ChartType; label: string; Icon: LucideIcon }[] = [
+  { type: 'sunpath', label: 'Sun Path', Icon: Sun },
+  { type: 'explorer', label: 'Data Explorer', Icon: BarChart2 },
+  { type: 'utci', label: 'UTCI Comfort', Icon: ThermometerSun },
+  { type: 'wind', label: 'Wind Explorer', Icon: Wind },
+  { type: 'windrose', label: 'Wind Rose', Icon: Compass },
+];
+
+function EmptySlot({ onSelectType, theme }: { onSelectType: (t: ChartType) => void; theme: 'light' | 'dark' }) {
   return (
-    <div className="flex-1 w-full h-full flex flex-col items-center justify-center p-6 bg-transparent gap-4">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col p-2 sm:p-3">
       <div
-        className={`w-12 h-12 rounded-full flex items-center justify-center ${
-          theme === 'dark' ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'
+        className={`flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 py-5 sm:px-4 sm:py-6 ${
+          theme === 'dark'
+            ? 'border-gray-600 bg-gray-900/20'
+            : 'border-gray-300 bg-gray-50/40'
         }`}
       >
-        <Plus size={24} />
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-3 sm:gap-4">
+          {EMPTY_SLOT_CHOICES.map(({ type, label, Icon }) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => onSelectType(type)}
+              aria-label={label}
+              title={label}
+              className={`group relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all active:scale-95 sm:h-12 sm:w-12 ${
+                theme === 'dark'
+                  ? 'border-gray-600 bg-gray-800 text-gray-200 hover:border-gray-500 hover:bg-gray-700 hover:text-white'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <Icon className="h-5 w-5 sm:h-[22px] sm:w-[22px]" strokeWidth={2} aria-hidden />
+              <span
+                className={`pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 ${
+                  theme === 'dark'
+                    ? 'bg-gray-100 text-gray-900 ring-1 ring-gray-700/30'
+                    : 'bg-gray-900 text-white ring-1 ring-black/10'
+                }`}
+                role="tooltip"
+              >
+                {label}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
-      <span className={`font-medium text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Fill Slot</span>
-      <select
-        onChange={e => onSelectType(e.target.value as ChartType)}
-        className={`mt-2 p-2 rounded-md font-semibold text-sm border shadow-sm outline-none ${
-          theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
-        }`}
-        value=""
-      >
-        <option value="" disabled>
-          Select Chart Type...
-        </option>
-        <option value="sunpath">Sun Path</option>
-        <option value="explorer">Data Explorer</option>
-        <option value="utci">UTCI Comfort</option>
-        <option value="wind">Wind Explorer</option>
-        <option value="windrose">Wind Rose</option>
-      </select>
     </div>
   );
 }

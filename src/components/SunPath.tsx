@@ -6,20 +6,25 @@ import SunCalc from 'suncalc';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
-import { ChartType } from '../App';
+import type { ChartType, CompareSunpathSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
+import { CardModal } from './CardModal';
 
 interface SunPathProps {
   metadata: EPWMetadata;
+  /** When drawing the comparison panel, sun positions use this location. */
+  compareMetadata?: EPWMetadata;
   data: EPWDataRow[];
   compareData?: EPWDataRow[];
   showDifference?: boolean;
   stackedComparison?: boolean;
+  /** Baseline left, comparison right when stacked with compare data. */
+  pairComparisonHorizontal?: boolean;
   variables: EPWVariable[];
   onRemove?: () => void;
   onChangeType?: (type: ChartType) => void;
@@ -30,11 +35,32 @@ interface SunPathProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  pairSuppressHeader?: boolean;
+  pairModalHost?: boolean;
+  sunpathShared?: CompareSunpathSharedControls;
 }
 
-export function SunPath({ 
-  metadata, data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode
+export function SunPath({
+  metadata,
+  compareMetadata,
+  data,
+  compareData,
+  showDifference,
+  stackedComparison,
+  pairComparisonHorizontal,
+  variables,
+  onRemove,
+  onChangeType,
+  gradients,
+  filter,
+  unitSystem,
+  heatmapTextColor,
+  theme,
+  setShowGradientModal,
+  exportMode,
+  pairSuppressHeader,
+  pairModalHost,
+  sunpathShared,
 }: SunPathProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
@@ -90,15 +116,43 @@ export function SunPath({
       observer.disconnect();
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
     };
-  }, [stackedComparison, compareData]);
-  const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('week');
-  const [colorVar, setColorVar] = useState(variables[0]?.id || '');
-  const [radiusVar, setRadiusVar] = useState(variables.find(v => v.id === 'globalHorizontalRadiation')?.id || variables[0]?.id || '');
-  const [gradientId, setGradientId] = useState(gradients[0].id);
-  const [radiusMin, setRadiusMin] = useState<number | string>(2);
-  const [radiusMax, setRadiusMax] = useState<number | string>(10);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showStats, setShowStats] = useState(false);
+  }, [stackedComparison, compareData, pairComparisonHorizontal]);
+  const [iAgg, setIAgg] = useState<'hour' | 'day' | 'week' | 'month'>('week');
+  const aggregation = sunpathShared?.aggregation ?? iAgg;
+  const setAggregation = sunpathShared?.setAggregation ?? setIAgg;
+
+  const [iColor, setIColor] = useState(variables[0]?.id || '');
+  const colorVar = sunpathShared?.colorVar ?? iColor;
+  const setColorVar = sunpathShared?.setColorVar ?? setIColor;
+
+  const [iRadius, setIRadius] = useState(
+    variables.find(v => v.id === 'globalHorizontalRadiation')?.id || variables[0]?.id || ''
+  );
+  const radiusVar = sunpathShared?.radiusVar ?? iRadius;
+  const setRadiusVar = sunpathShared?.setRadiusVar ?? setIRadius;
+
+  const [iGrad, setIGrad] = useState(gradients[0].id);
+  const gradientId = sunpathShared?.gradientId ?? iGrad;
+  const setGradientId = sunpathShared?.setGradientId ?? setIGrad;
+
+  const [iRadMin, setIRadMin] = useState<number | string>(1);
+  const radiusMin = sunpathShared?.radiusMin ?? iRadMin;
+  const setRadiusMin = sunpathShared?.setRadiusMin ?? setIRadMin;
+
+  const [iRadMax, setIRadMax] = useState<number | string>(5);
+  const radiusMax = sunpathShared?.radiusMax ?? iRadMax;
+  const setRadiusMax = sunpathShared?.setRadiusMax ?? setIRadMax;
+
+  const [iShowSettings, setIShowSettings] = useState(false);
+  const showSettings = sunpathShared?.showSettings ?? iShowSettings;
+  const setShowSettings = sunpathShared?.setShowSettings ?? setIShowSettings;
+
+  const [iShowStats, setIShowStats] = useState(false);
+  const showStats = sunpathShared?.showStats ?? iShowStats;
+  const setShowStats = sunpathShared?.setShowStats ?? setIShowStats;
+
+  const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
+  const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
   // chart type switching handled by ChartTypeMenu
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempFilterType, setTempFilterType] = useState<'helpful' | 'harmful'>('helpful');
@@ -255,19 +309,28 @@ const filteredCompareData = (compareData || []).filter(d => {
       height: number
     ) => {
     if (!currentData || !currentData.length) return;
-    const rMaxPx = Math.min(
-      28,
-      Math.max(4, typeof radiusMax === 'number' ? radiusMax : parseFloat(String(radiusMax)) || 10)
-    );
-    const labelRim = 18;
-    const titleReserve = title ? 22 : 0;
-    const sideReserve = 12;
+
+    const locMeta = isCompare && compareMetadata ? compareMetadata : metadata;
+
+    /** Baseline min(width,height) where radius slider values (px) were tuned — scales with resize. */
+    const refChartDim = 220;
+    const sizeScale = Math.max(0.4, Math.min(2.4, Math.min(width, height) / refChartDim));
+
+    const rMinUser = typeof radiusMin === 'number' ? radiusMin : parseFloat(String(radiusMin)) || 1;
+    const rMaxUser = typeof radiusMax === 'number' ? radiusMax : parseFloat(String(radiusMax)) || 5;
+    const rMinPx = Math.max(0.35, rMinUser * sizeScale);
+    const rMaxPxPoints = Math.max(rMinPx + 0.25, rMaxUser * sizeScale);
+
+    const rMaxPxLayout = Math.min(28 * sizeScale, Math.max(4 * sizeScale, rMaxUser * sizeScale));
+    const labelRim = 18 * sizeScale;
+    const titleReserve = title ? 22 * sizeScale : 0;
+    const sideReserve = 12 * sizeScale;
     const rawRadius = Math.min(
-      width / 2 - sideReserve - labelRim - rMaxPx * 0.35,
-      height / 2 - labelRim - rMaxPx * 0.35 - titleReserve / 2
+      width / 2 - sideReserve - labelRim - rMaxPxLayout * 0.35,
+      height / 2 - labelRim - rMaxPxLayout * 0.35 - titleReserve / 2
     );
-    const maxRadius = Math.min(width, height) / 2 - 6;
-    const radius = Math.max(24, Math.min(rawRadius, maxRadius));
+    const maxRadius = Math.min(width, height) / 2 - 6 * sizeScale;
+    const radius = Math.max(24 * sizeScale, Math.min(rawRadius, maxRadius));
 
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
@@ -286,7 +349,7 @@ const filteredCompareData = (compareData || []).filter(d => {
     
     if (aggregation === 'hour') {
       points = currentData.map((d, i) => {
-        const pos = SunCalc.getPosition(d.date, metadata.lat, metadata.lng);
+        const pos = SunCalc.getPosition(d.date, locMeta.lat, locMeta.lng);
         const altitude = pos.altitude * 180 / Math.PI;
         const azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360; // Convert to 0=N, 90=E
         
@@ -320,7 +383,7 @@ const filteredCompareData = (compareData || []).filter(d => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           // Use the middle date of the period for sun position calculation
           const midDate = values[Math.floor(values.length / 2)].date;
-          const pos = SunCalc.getPosition(midDate, metadata.lat, metadata.lng);
+          const pos = SunCalc.getPosition(midDate, locMeta.lat, locMeta.lng);
           const altitude = pos.altitude * 180 / Math.PI;
           
           if (altitude > 0) {
@@ -374,14 +437,13 @@ const filteredCompareData = (compareData || []).filter(d => {
         .interpolator(d3.interpolateRgbBasis(gradientDef.colors));
     }
 
-    // Radius scale
-    const rMin = typeof radiusMin === 'number' ? radiusMin : (parseFloat(radiusMin) || 5);
-    const rMax = typeof radiusMax === 'number' ? radiusMax : (parseFloat(radiusMax) || 25);
+    // Radius scale (data → px), px range scales with chart so circles stay proportional
     const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0];
     const pointRadiusScale = d3.scaleLinear()
       .domain([radiusVarDef.min, radiusVarDef.max])
-      .range([rMin as number, rMax as number])
+      .range([rMinPx, rMaxPxPoints])
       .clamp(true);
+    const haloExtra = Math.max(0.5, sizeScale);
 
     // Sort points so larger circles are drawn first (at the bottom)
     points.sort((a, b) => ((b._rVal as number) || 0) - ((a._rVal as number) || 0));
@@ -499,7 +561,7 @@ const filteredCompareData = (compareData || []).filter(d => {
         for (let m = 0; m < 60; m += 10) {
           const d = new Date(kd.date);
           d.setHours(h, m, 0, 0);
-          const pos = SunCalc.getPosition(d, metadata.lat, metadata.lng);
+          const pos = SunCalc.getPosition(d, locMeta.lat, locMeta.lng);
           const altitude = pos.altitude * 180 / Math.PI;
           if (altitude >= 0) { // Stop exactly at horizon
             const azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
@@ -541,7 +603,7 @@ const filteredCompareData = (compareData || []).filter(d => {
       .attr("class", "data-point-bg")
       .attr("cx", d => rScale(d.altitude) * Math.sin(aScale(d.azimuth)))
       .attr("cy", d => -rScale(d.altitude) * Math.cos(aScale(d.azimuth)))
-      .attr("r", d => (pointRadiusScale(d._rVal as number) || 0) + 2) // +2px for outline
+      .attr("r", d => (pointRadiusScale(d._rVal as number) || 0) + haloExtra)
       .style("fill", theme === 'dark' ? '#111827' : '#1f2937')
       .style("opacity", 0.8)
       .style("pointer-events", "none");
@@ -579,14 +641,16 @@ const filteredCompareData = (compareData || []).filter(d => {
     }
   };
 
-  if (stackedComparison && compareData && compareSvgRef.current) {
+  if (stackedComparison && compareData) {
       const { w: cw, h: ch } = slotSize.compare;
-      renderChart(svgRef.current, data, "Baseline Local Dataset", false, pw, ph);
-      renderChart(compareSvgRef.current, compareData, "Comparative Dataset", true, cw, ch);
+      renderChart(svgRef.current, data, null, false, pw, ph);
+      if (compareSvgRef.current && cw > 0 && ch > 0) {
+        renderChart(compareSvgRef.current, compareData, null, true, cw, ch);
+      }
   } else {
       renderChart(svgRef.current, data, null, false, pw, ph);
   }
-  }, [metadata, data, compareData, showDifference, stackedComparison, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, slotSize.primary.w, slotSize.primary.h, slotSize.compare.w, slotSize.compare.h, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
+  }, [metadata, compareMetadata, data, compareData, showDifference, stackedComparison, pairComparisonHorizontal, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, slotSize.primary.w, slotSize.primary.h, slotSize.compare.w, slotSize.compare.h, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
 
   return (
     <div 
@@ -596,6 +660,7 @@ const filteredCompareData = (compareData || []).filter(d => {
       }`}
       
     >
+      {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-2`}>
@@ -649,7 +714,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                     <button
                       type="button"
                       onClick={onRemove}
-                      className={`rounded-md transition-colors shadow-hard-sm p-1 shrink-0 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-hard-sm transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -669,7 +734,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                       <button
                         type="button"
                         onClick={() => setShowStats(!showStats)}
-                        className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                           showStats
                             ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
                             : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
@@ -681,7 +746,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                       <button
                         type="button"
                         onClick={() => setShowSettings(!showSettings)}
-                        className={`rounded p-0.5 transition-colors ${
+                        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                           showSettings
                             ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
                             : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
@@ -699,50 +764,44 @@ const filteredCompareData = (compareData || []).filter(d => {
           )}
         </div>
       </div>
-
-      {/* Stats Modal */}
-      {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
-              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
-              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-3">
+      <CardModal
+        open={showStatsModal}
+        onClose={() => setShowStats(false)}
+        title="Statistics"
+        theme={theme}
+        anchorRef={outerRef as any}
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
+          </div>
+        </div>
+      </CardModal>
+
+      <CardModal
+        open={showSettingsModal}
+        onClose={() => setShowSettings(false)}
+        title="Chart settings"
+        theme={theme}
+        anchorRef={outerRef as any}
+        maxWidthPx={460}
+      >
+        <div className="grid grid-cols-1 gap-3">
               <div className="space-y-2">
                 <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Variable</label>
                 <select
@@ -782,14 +841,14 @@ const filteredCompareData = (compareData || []).filter(d => {
                     type="number"
                     value={radiusMin}
                     onChange={(e) => setRadiusMin(e.target.value)}
-                    className={`w-1/2 text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                    className={`block w-1/2 rounded-full border p-2.5 text-sm outline-none transition-all focus:border-gray-500 focus:ring-gray-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                     placeholder="Min"
                   />
                   <input
                     type="number"
                     value={radiusMax}
                     onChange={(e) => setRadiusMax(e.target.value)}
-                    className={`w-1/2 text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                    className={`block w-1/2 rounded-full border p-2.5 text-sm outline-none transition-all focus:border-gray-500 focus:ring-gray-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                     placeholder="Max"
                   />
                 </div>
@@ -804,12 +863,12 @@ const filteredCompareData = (compareData || []).filter(d => {
                     + Create
                   </button>
                 </div>
-                <div className={`flex p-1.5 rounded-lg overflow-x-auto border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                <div className={`flex overflow-x-auto rounded-full border p-1.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
                   {gradients.map(g => (
                     <button
                       key={g.id}
                       onClick={() => setGradientId(g.id)}
-                      className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all shadow-hard-sm ${
+                      className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all shadow-hard-sm ${
                         gradientId === g.id ? 'border-gray-700 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                       }`}
                       style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
@@ -840,7 +899,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                     <select
                       value={tempFilterType}
                       onChange={e => setTempFilterType(e.target.value as any)}
-                      className={`flex-1 text-sm rounded-lg focus:ring-gray-500 focus:border-gray-500 block p-2.5 transition-all outline-none border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
+                      className={`block flex-1 rounded-full border p-2.5 text-sm outline-none transition-all focus:border-gray-500 focus:ring-gray-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
                     >
                       <option value="helpful">Helpful (Below)</option>
                       <option value="harmful">Harmful (Above)</option>
@@ -865,33 +924,45 @@ const filteredCompareData = (compareData || []).filter(d => {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
         </div>
-      )}
+      </CardModal>
 
-      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-0 py-1">
         <div
-          ref={primaryChartSlotRef}
-          className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative min-h-[140px]"
+          className={`flex min-h-0 flex-1 ${
+            stackedComparison && compareData && pairComparisonHorizontal
+              ? 'min-h-[160px] flex-row divide-x divide-gray-200 dark:divide-gray-700'
+              : stackedComparison && compareData
+                ? 'min-h-[160px] flex-col gap-1'
+                : 'flex-col'
+          }`}
         >
-          <svg ref={svgRef} className="w-full h-full max-h-full max-w-full block" preserveAspectRatio="xMidYMid meet" />
+          <div
+            ref={primaryChartSlotRef}
+            className={`relative flex min-h-[120px] min-w-0 flex-1 items-center justify-center ${
+              stackedComparison && compareData && !pairComparisonHorizontal ? 'min-h-[140px]' : ''
+            }`}
+          >
+            <svg ref={svgRef} className="block h-full max-h-full w-full max-w-full" preserveAspectRatio="xMidYMid meet" />
+          </div>
+          {stackedComparison && compareData && (
+            <div
+              ref={compareChartSlotRef}
+              className={`relative flex min-h-[120px] min-w-0 flex-1 items-center justify-center ${
+                !pairComparisonHorizontal ? 'min-h-[140px]' : ''
+              }`}
+            >
+              <svg ref={compareSvgRef} className="block h-full max-h-full w-full max-w-full" preserveAspectRatio="xMidYMid meet" />
+            </div>
+          )}
         </div>
-        {stackedComparison && compareData && (
-        <div
-          ref={compareChartSlotRef}
-          className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative min-h-[140px]"
-        >
-          <svg ref={compareSvgRef} className="w-full h-full max-h-full max-w-full block" preserveAspectRatio="xMidYMid meet" />
-        </div>
-        )}
-        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
-          <InteractiveLegend 
-            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
-            gradientId={gradientId} 
-            setGradientId={setGradientId} 
-            gradients={gradients} 
-            theme={theme} 
+        <div className="w-full shrink-0 border-t border-gray-200 px-0.5 pt-1 dark:border-gray-700">
+          <InteractiveLegend
+            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
+            gradientId={gradientId}
+            setGradientId={setGradientId}
+            gradients={gradients}
+            theme={theme}
             isDifference={showDifference}
           />
         </div>

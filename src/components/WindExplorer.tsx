@@ -5,7 +5,7 @@ import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
-import { ChartType } from '../App';
+import type { ChartType, CompareWindSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
@@ -13,6 +13,7 @@ import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
+import { CardModal } from './CardModal';
 
 interface WindExplorerProps {
   data: EPWDataRow[];
@@ -29,6 +30,11 @@ interface WindExplorerProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  comparePane?: 'primary' | 'secondary';
+  paneCity?: string;
+  pairSuppressHeader?: boolean;
+  pairModalHost?: boolean;
+  windShared?: CompareWindSharedControls;
 }
 
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -85,15 +91,33 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
 
 export function WindExplorer({ 
   data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode
+  setShowGradientModal, exportMode, comparePane, paneCity,
+  pairSuppressHeader, pairModalHost, windShared
 }: WindExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
-  const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
-  const [colorVar, setColorVar] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
-  const [gradientId, setGradientId] = useState(gradients[0].id);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showStats, setShowStats] = useState(false);
+  const [iAgg, setIAgg] = useState<'hour' | 'day' | 'week' | 'month'>('month');
+  const aggregation = windShared?.aggregation ?? iAgg;
+  const setAggregation = windShared?.setAggregation ?? setIAgg;
+
+  const [iColor, setIColor] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
+  const colorVar = windShared?.colorVar ?? iColor;
+  const setColorVar = windShared?.setColorVar ?? setIColor;
+
+  const [iGrad, setIGrad] = useState(gradients[0].id);
+  const gradientId = windShared?.gradientId ?? iGrad;
+  const setGradientId = windShared?.setGradientId ?? setIGrad;
+
+  const [iShowSettings, setIShowSettings] = useState(false);
+  const showSettings = windShared?.showSettings ?? iShowSettings;
+  const setShowSettings = windShared?.setShowSettings ?? setIShowSettings;
+
+  const [iShowStats, setIShowStats] = useState(false);
+  const showStats = windShared?.showStats ?? iShowStats;
+  const setShowStats = windShared?.setShowStats ?? setIShowStats;
+
+  const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
+  const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
   // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
@@ -563,15 +587,21 @@ export function WindExplorer({
       const minVal = d.minSelected ?? d.valueSelected;
       const maxVal = d.maxSelected ?? d.valueSelected;
       
+      const yMaxPx = yScaleBar(maxVal);
+      const yMinPx = yScaleBar(minVal);
+      const topY = Math.min(yMaxPx, yMinPx);
+      const barH = Math.max(1, Math.abs(yMinPx - yMaxPx));
+      const pillR = Math.min(barW / 2, barH / 2);
+
       group.append("rect")
         .attr("x", xPos)
-        .attr("y", yScaleBar(maxVal))
+        .attr("y", topY)
         .attr("width", barW)
-        .attr("height", Math.max(1, Math.abs(yScaleBar(maxVal) - yScaleBar(minVal))))
+        .attr("height", barH)
         .style("fill", colorScale(d.valueSelected))
         .style("opacity", 0.6)
-        .attr("rx", aggregation === 'hour' ? 0 : 4)
-        .attr("ry", aggregation === 'hour' ? 0 : 4);
+        .attr("rx", pillR)
+        .attr("ry", pillR);
 
       // Average Indicator Circle
       group.append("circle")
@@ -656,6 +686,7 @@ export function WindExplorer({
       }`}
       
     >
+      {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-2`}>
@@ -674,14 +705,82 @@ export function WindExplorer({
                 lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
               />
             </div>
+          ) : comparePane === 'secondary' ? (
+            <>
+              <div
+                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  theme === 'dark'
+                    ? 'border-orange-800/60 bg-orange-950/45 text-orange-100'
+                    : 'border-orange-200 bg-orange-50 text-orange-900'
+                }`}
+              >
+                Comparison · {paneCity ?? '—'}
+              </div>
+              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
+                <div className="pt-1.5">
+                  <AggregationToolbar
+                    value={aggregation}
+                    onChange={setAggregation}
+                    theme={theme}
+                    trailing={
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowStats(!showStats)}
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
+                            showStats
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                          }`}
+                          title="Statistics"
+                        >
+                          Stats
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowSettings(!showSettings)}
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
+                            showSettings
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                          }`}
+                          title="Chart settings"
+                        >
+                          <Settings2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    }
+                  />
+                </div>
+              </div>
+            </>
           ) : (
             <>
-              <div className="flex items-center justify-between w-full gap-1.5">
-                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1">
+              {comparePane === 'primary' && paneCity && (
+                <div
+                  className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                    theme === 'dark'
+                      ? 'border-blue-800/60 bg-blue-950/45 text-blue-100'
+                      : 'border-blue-200 bg-blue-50 text-blue-900'
+                  }`}
+                >
+                  Baseline · {paneCity}
+                </div>
+              )}
+              <div className="flex w-full items-center justify-between gap-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                   <ChartTypeMenu
                     value="wind"
                     label="Wind Explorer"
-                    onChange={(t) => onChangeType?.(t)}
+                    onChange={t => onChangeType?.(t)}
                     theme={theme}
                     disabled={!onChangeType}
                     display="icon"
@@ -695,24 +794,27 @@ export function WindExplorer({
                     {Object.entries(groupedVariables).map(([category, vars]) => (
                       <optgroup key={category} label={category}>
                         {vars.map(v => (
-                          <option key={v.id} value={v.id}>{v.name}</option>
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
                         ))}
                       </optgroup>
                     ))}
                   </VariableChartSelect>
                 </div>
                 {onRemove && (
-                  <div className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
-                    <button 
-                      onClick={onRemove} 
-                      className={`rounded-md transition-colors shadow-hard-sm p-1 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                  <div className="opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                    <button
+                      type="button"
+                      onClick={onRemove}
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full p-0 shadow-hard-sm transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/20 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 )}
               </div>
-              <div className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto">
+              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
                 <div className="pt-1.5">
                   <AggregationToolbar
                     value={aggregation}
@@ -723,10 +825,14 @@ export function WindExplorer({
                         <button
                           type="button"
                           onClick={() => setShowStats(!showStats)}
-                          className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                             showStats
-                              ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
-                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                           }`}
                           title="Statistics"
                         >
@@ -735,14 +841,18 @@ export function WindExplorer({
                         <button
                           type="button"
                           onClick={() => setShowSettings(!showSettings)}
-                          className={`rounded p-0.5 transition-colors ${
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                             showSettings
-                              ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
-                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                           }`}
                           title="Chart settings"
                         >
-                          <Settings2 className="w-3 h-3" />
+                          <Settings2 className="h-3 w-3" />
                         </button>
                       </>
                     }
@@ -753,49 +863,43 @@ export function WindExplorer({
           )}
         </div>
       </div>
+      )}
 
-      {/* Stats Modal */}
-      {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
-              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
-              </div>
-            </div>
+      <CardModal
+        open={showStatsModal}
+        onClose={() => setShowStats(false)}
+        title="Statistics"
+        theme={theme}
+        anchorRef={outerRef as any}
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
           </div>
         </div>
-      )}
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
-              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-3">
+      </CardModal>
+      <CardModal
+        open={showSettingsModal}
+        onClose={() => setShowSettings(false)}
+        title="Chart settings"
+        theme={theme}
+        anchorRef={outerRef as any}
+        maxWidthPx={460}
+      >
+        <div className="grid grid-cols-1 gap-3">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
@@ -806,12 +910,12 @@ export function WindExplorer({
                     + Create
                   </button>
                 </div>
-                <div className={`flex p-1.5 rounded-lg overflow-x-auto border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                <div className={`flex overflow-x-auto rounded-full border p-1.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
                   {gradients.map(g => (
                     <button
                       key={g.id}
                       onClick={() => setGradientId(g.id)}
-                      className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all shadow-hard-sm ${
+                      className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all shadow-hard-sm ${
                         gradientId === g.id ? 'border-gray-700 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                       }`}
                       style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
@@ -826,25 +930,25 @@ export function WindExplorer({
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       onClick={() => applyPreset('summer')}
-                      className={`px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors ${theme === 'dark' ? 'bg-orange-900/30 text-orange-400 border-orange-800 hover:bg-orange-900/50' : 'bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100'}`}
+                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold transition-colors ${theme === 'dark' ? 'bg-orange-900/30 text-orange-400 border-orange-800 hover:bg-orange-900/50' : 'bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100'}`}
                     >
                       Summer Cooling
                     </button>
                     <button
                       onClick={() => applyPreset('winter')}
-                      className={`px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors ${theme === 'dark' ? 'bg-gray-800/80 text-gray-200 border-gray-600 hover:bg-gray-800' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
+                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold transition-colors ${theme === 'dark' ? 'bg-gray-800/80 text-gray-200 border-gray-600 hover:bg-gray-800' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
                     >
                       Winter Chill
                     </button>
                     <button
                       onClick={() => applyPreset('pedestrian')}
-                      className={`px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors ${theme === 'dark' ? 'bg-green-900/30 text-green-400 border-green-800 hover:bg-green-900/50' : 'bg-green-50 text-green-700 border-green-100 hover:bg-green-100'}`}
+                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold transition-colors ${theme === 'dark' ? 'bg-green-900/30 text-green-400 border-green-800 hover:bg-green-900/50' : 'bg-green-50 text-green-700 border-green-100 hover:bg-green-100'}`}
                     >
                       Pedestrian
                     </button>
                     <button
                       onClick={() => applyPreset('sitting')}
-                      className={`px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors ${theme === 'dark' ? 'bg-teal-900/30 text-teal-400 border-teal-800 hover:bg-teal-900/50' : 'bg-teal-50 text-teal-700 border-teal-100 hover:bg-teal-100'}`}
+                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold transition-colors ${theme === 'dark' ? 'bg-teal-900/30 text-teal-400 border-teal-800 hover:bg-teal-900/50' : 'bg-teal-50 text-teal-700 border-teal-100 hover:bg-teal-100'}`}
                     >
                       Sitting
                     </button>
@@ -867,7 +971,7 @@ export function WindExplorer({
                     <select
                       value={tempFilterType}
                       onChange={(e) => setTempFilterType(e.target.value as 'above' | 'below')}
-                      className={`text-xs rounded-lg block p-1.5 transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
+                      className={`block rounded-full border p-1.5 text-xs transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                     >
                       <option value="above">Above</option>
                       <option value="below">Below</option>
@@ -877,7 +981,7 @@ export function WindExplorer({
                         type="number"
                         value={tempThreshold}
                         onChange={(e) => setTempThreshold(Number(e.target.value))}
-                        className={`w-full text-xs rounded-lg block p-1.5 transition-all pr-6 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
+                        className={`block w-full rounded-full border p-1.5 pr-6 text-xs transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                       />
                       <span className={`absolute right-2 top-1.5 text-[10px] ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>{unitSystem === 'imperial' ? '°F' : '°C'}</span>
                     </div>
@@ -900,7 +1004,7 @@ export function WindExplorer({
                     <select
                       value={speedFilterType}
                       onChange={(e) => setSpeedFilterType(e.target.value as 'above' | 'below')}
-                      className={`text-xs rounded-lg block p-1.5 transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
+                      className={`block rounded-full border p-1.5 text-xs transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                     >
                       <option value="above">Above</option>
                       <option value="below">Below</option>
@@ -910,17 +1014,15 @@ export function WindExplorer({
                         type="number"
                         value={speedThreshold}
                         onChange={(e) => setSpeedThreshold(Number(e.target.value))}
-                        className={`w-full text-xs rounded-lg block p-1.5 transition-all pr-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
+                        className={`block w-full rounded-full border p-1.5 pr-10 text-xs transition-all ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-500 focus:border-gray-700 hover:bg-gray-700' : 'bg-gray-50 border-gray-200 text-gray-900 focus:ring-gray-500 focus:border-gray-700 hover:bg-white'}`}
                       />
                       <span className={`absolute right-2 top-1.5 text-[10px] ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>{unitSystem === 'imperial' ? 'mph' : 'm/s'}</span>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
         </div>
-      )}
+      </CardModal>
 
       <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
         <div 

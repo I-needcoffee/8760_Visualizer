@@ -52,7 +52,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                   <Calendar className="w-4 h-4 text-blue-500" style={{ width: '16px', height: '16px' }} />
                   <span className="font-semibold" style={{ fontSize: '14px' }}>Months</span>
                 </div>
-                <span className={`font-mono px-2 py-0.5 rounded font-medium border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-500'}`} style={{ fontSize: '12px' }}>
+                <span className={`font-mono px-2 py-0.5 rounded-full font-medium border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-500'}`} style={{ fontSize: '12px' }}>
                   {filter.startMonth <= filter.endMonth 
                     ? `${MONTHS[filter.startMonth - 1]} - ${MONTHS[filter.endMonth - 1]}`
                     : `${MONTHS[filter.startMonth - 1]} - ${MONTHS[filter.endMonth - 1]} (Wrap)`}
@@ -88,7 +88,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                   <button
                     key={preset.label}
                     onClick={() => onChange({ ...filter, startMonth: preset.range[0], endMonth: preset.range[1] })}
-                    className={`font-medium rounded-md transition-colors border shadow-hard-sm ${
+                    className={`font-medium rounded-full transition-colors border shadow-hard-sm ${
                       filter.startMonth === preset.range[0] && filter.endMonth === preset.range[1]
                         ? (theme === 'dark' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
@@ -110,7 +110,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                   <Clock className="w-4 h-4 text-amber-500" style={{ width: '16px', height: '16px' }} />
                   <span className="font-semibold" style={{ fontSize: '14px' }}>Hours</span>
                 </div>
-                <span className={`font-mono px-2 py-0.5 rounded font-medium border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-500'}`} style={{ fontSize: '12px' }}>
+                <span className={`font-mono px-2 py-0.5 rounded-full font-medium border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-500'}`} style={{ fontSize: '12px' }}>
                   {filter.startHour.toString().padStart(2, '0')}:00 - {filter.endHour.toString().padStart(2, '0')}:59
                 </span>
               </div>
@@ -144,7 +144,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                   <button
                     key={preset.label}
                     onClick={() => onChange({ ...filter, startHour: preset.range[0], endHour: preset.range[1] })}
-                    className={`font-medium rounded-md transition-colors border shadow-hard-sm ${
+                    className={`font-medium rounded-full transition-colors border shadow-hard-sm ${
                       filter.startHour === preset.range[0] && filter.endHour === preset.range[1]
                         ? (theme === 'dark' ? 'bg-amber-900/50 text-amber-300 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')

@@ -55,7 +55,7 @@ export function SettingsModal({
             <Settings className="w-4 h-4 text-blue-500" />
             <span>Settings</span>
           </div>
-          <button type="button" onClick={onClose} className={`p-1 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+          <button type="button" onClick={onClose} className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -66,16 +66,16 @@ export function SettingsModal({
             <h3 className="font-semibold text-sm flex items-center gap-2">
               Unit System
             </h3>
-            <div className={`flex items-center p-1 rounded-lg inline-flex ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+            <div className={`flex items-center p-1 rounded-full inline-flex ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
               <button
                 onClick={() => setUnitSystem('metric')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${unitSystem === 'metric' ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-white' : 'bg-white shadow-sm text-gray-900') : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}
+                className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${unitSystem === 'metric' ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-white' : 'bg-white shadow-sm text-gray-900') : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}
               >
                 Metric
               </button>
               <button
                 onClick={() => setUnitSystem('imperial')}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${unitSystem === 'imperial' ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-white' : 'bg-white shadow-sm text-gray-900') : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}
+                className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${unitSystem === 'imperial' ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-white' : 'bg-white shadow-sm text-gray-900') : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}
               >
                 Imperial
               </button>
@@ -96,7 +96,7 @@ export function SettingsModal({
                   <Calendar className="w-4 h-4 text-blue-500" />
                   <span>Months</span>
                 </div>
-                <span className={`font-mono px-2 py-0.5 rounded border text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
+                <span className={`rounded-full border px-2 py-0.5 font-mono text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
                   {filter.startMonth <= filter.endMonth 
                     ? `${MONTHS[filter.startMonth - 1]} - ${MONTHS[filter.endMonth - 1]}`
                     : `${MONTHS[filter.startMonth - 1]} - ${MONTHS[filter.endMonth - 1]} (Wrap)`}
@@ -132,7 +132,7 @@ export function SettingsModal({
                   <button
                     key={preset.label}
                     onClick={() => onChangeFilter({ ...filter, startMonth: preset.range[0], endMonth: preset.range[1] })}
-                    className={`text-xs font-medium rounded-md transition-colors border px-3 py-1.5 ${
+                    className={`text-xs font-medium rounded-full transition-colors border px-3 py-1.5 ${
                       filter.startMonth === preset.range[0] && filter.endMonth === preset.range[1]
                         ? (theme === 'dark' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
@@ -151,7 +151,7 @@ export function SettingsModal({
                   <Clock className="w-4 h-4 text-amber-500" />
                   <span>Hours</span>
                 </div>
-                <span className={`font-mono px-2 py-0.5 rounded border text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
+                <span className={`rounded-full border px-2 py-0.5 font-mono text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
                   {filter.startHour.toString().padStart(2, '0')}:00 - {filter.endHour.toString().padStart(2, '0')}:59
                 </span>
               </div>
@@ -185,7 +185,7 @@ export function SettingsModal({
                   <button
                     key={preset.label}
                     onClick={() => onChangeFilter({ ...filter, startHour: preset.range[0], endHour: preset.range[1] })}
-                    className={`text-xs font-medium rounded-md transition-colors border px-3 py-1.5 ${
+                    className={`text-xs font-medium rounded-full transition-colors border px-3 py-1.5 ${
                       filter.startHour === preset.range[0] && filter.endHour === preset.range[1]
                         ? (theme === 'dark' ? 'bg-amber-900/50 text-amber-300 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
@@ -215,7 +215,7 @@ export function SettingsModal({
                       setTheme('light');
                       setHeatmapTextColor('#000000');
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors border text-sm p-2 ${theme === 'light' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'light' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'}`}
                   >
                     <Sun className="w-4 h-4" />
                     Light
@@ -225,7 +225,7 @@ export function SettingsModal({
                       setTheme('dark');
                       setHeatmapTextColor('#ffffff');
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-indigo-900/50 text-indigo-300 border-indigo-700' : 'bg-transparent text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-indigo-900/50 text-indigo-300 border-indigo-700' : 'bg-transparent text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                   >
                     <Moon className="w-4 h-4" />
                     Dark
@@ -239,10 +239,10 @@ export function SettingsModal({
                   <span>Chart Text Color</span>
                   <div className="flex items-center gap-2">
                     <div 
-                      className={`w-3 h-3 rounded border ${theme === 'dark' ? 'border-gray-600' : 'border-gray-200'}`} 
+                      className={`h-3 w-3 rounded-full border ${theme === 'dark' ? 'border-gray-600' : 'border-gray-200'}`} 
                       style={{ backgroundColor: heatmapTextColor }}
                     />
-                    <span className={`font-mono px-2 py-0.5 rounded border text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
+                    <span className={`rounded-full border px-2 py-0.5 font-mono text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
                       {heatmapTextColor.toUpperCase()}
                     </span>
                   </div>
@@ -278,7 +278,7 @@ export function SettingsModal({
                     onClose();
                     setShowGradientModal(true);
                   }}
-                  className={`flex items-center justify-center gap-1.5 w-full rounded-lg font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border-purple-800' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-100'}`}
+                  className={`flex items-center justify-center gap-1.5 w-full rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border-purple-800' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-100'}`}
                 >
                   <Palette className="w-4 h-4" />
                   Create New Gradient

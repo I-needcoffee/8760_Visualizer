@@ -54,7 +54,7 @@ export function AggregationToolbar({
       className="flex flex-nowrap items-center justify-between gap-1 w-full min-w-0"
     >
       <div
-        className={`flex flex-nowrap shrink min-w-0 rounded-md p-0.5 gap-0.5 ${
+        className={`flex flex-nowrap shrink min-w-0 rounded-full p-0.5 gap-0.5 ${
           dark ? 'bg-gray-700' : 'bg-gray-100'
         }`}
       >
@@ -64,7 +64,7 @@ export function AggregationToolbar({
             type="button"
             title={FULL[agg]}
             onClick={() => onChange(agg)}
-            className={`rounded shrink-0 font-semibold capitalize transition-colors whitespace-nowrap leading-none ${
+            className={`rounded-full shrink-0 font-semibold capitalize transition-colors whitespace-nowrap leading-none ${
               compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
             } ${
               value === agg

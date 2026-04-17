@@ -8,12 +8,13 @@ import tc from 'jsthermalcomfort';
 import { X, Settings2 } from 'lucide-react';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
-import { ChartType } from '../App';
+import type { ChartType, CompareUtciSharedControls } from '../App';
 import { UnitSystem } from '../App';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
+import { CardModal } from './CardModal';
 
 interface UtciExplorerProps {
   data: EPWDataRow[];
@@ -29,6 +30,11 @@ interface UtciExplorerProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  comparePane?: 'primary' | 'secondary';
+  paneCity?: string;
+  pairSuppressHeader?: boolean;
+  pairModalHost?: boolean;
+  utciShared?: CompareUtciSharedControls;
 }
 
 const UTCI_COLORS: Record<string, string> = {
@@ -174,19 +180,58 @@ interface UtciDataRow extends EPWDataRow {
   isComfortable: number;
 }
 
-export function UtciExplorer({ 
-  data, compareData, showDifference, stackedComparison, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode
+export function UtciExplorer({
+  data,
+  compareData,
+  showDifference,
+  stackedComparison,
+  onRemove,
+  onChangeType,
+  gradients,
+  filter,
+  unitSystem,
+  heatmapTextColor,
+  theme,
+  setShowGradientModal,
+  exportMode,
+  comparePane,
+  paneCity,
+  pairSuppressHeader,
+  pairModalHost,
+  utciShared,
 }: UtciExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
-  const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
-  const [includeSun, setIncludeSun] = useState(true);
-  const [includeWind, setIncludeWind] = useState(true);
-  const [colorMode, setColorMode] = useState<'categories' | 'comfortTime' | 'gradient'>('comfortTime');
-  const [gradientId, setGradientId] = useState(gradients[0].id);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showStats, setShowStats] = useState(false);
+  const [iAgg, setIAgg] = useState<'hour' | 'day' | 'week' | 'month'>('month');
+  const aggregation = utciShared?.aggregation ?? iAgg;
+  const setAggregation = utciShared?.setAggregation ?? setIAgg;
+
+  const [iSun, setISun] = useState(true);
+  const includeSun = utciShared?.includeSun ?? iSun;
+  const setIncludeSun = utciShared?.setIncludeSun ?? setISun;
+
+  const [iWind, setIWind] = useState(true);
+  const includeWind = utciShared?.includeWind ?? iWind;
+  const setIncludeWind = utciShared?.setIncludeWind ?? setIWind;
+
+  const [iColorMode, setIColorMode] = useState<'categories' | 'comfortTime' | 'gradient'>('comfortTime');
+  const colorMode = utciShared?.colorMode ?? iColorMode;
+  const setColorMode = utciShared?.setColorMode ?? setIColorMode;
+
+  const [iGrad, setIGrad] = useState(gradients[0].id);
+  const gradientId = utciShared?.gradientId ?? iGrad;
+  const setGradientId = utciShared?.setGradientId ?? setIGrad;
+
+  const [iShowSettings, setIShowSettings] = useState(false);
+  const showSettings = utciShared?.showSettings ?? iShowSettings;
+  const setShowSettings = utciShared?.setShowSettings ?? setIShowSettings;
+
+  const [iShowStats, setIShowStats] = useState(false);
+  const showStats = utciShared?.showStats ?? iShowStats;
+  const setShowStats = utciShared?.setShowStats ?? setIShowStats;
+
+  const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
+  const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
   // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
@@ -688,31 +733,39 @@ export function UtciExplorer({
       const xPos = xScale(d.x0);
 
       if (colorMode === 'comfortTime') {
+        const yHi = yScaleBar(d.comfortRatioSelected!);
+        const yLo = yScaleBar(0);
+        const topY = Math.min(yHi, yLo);
+        const barH = Math.max(1, Math.abs(yLo - yHi));
+        const pillR = Math.min(barW / 2, barH / 2);
         group.append("rect")
           .attr("x", xPos)
-          .attr("y", yScaleBar(d.comfortRatioSelected!))
+          .attr("y", topY)
           .attr("width", barW)
-          .attr("height", Math.abs(yScaleBar(d.comfortRatioSelected!) - yScaleBar(0)))
+          .attr("height", barH)
           .style("fill", getFillColor(d.valueSelected!, d.comfortRatioSelected!))
-          .attr("rx", aggregation === 'hour' ? 0 : 8)
-          .attr("ry", aggregation === 'hour' ? 0 : 8);
+          .attr("rx", pillR)
+          .attr("ry", pillR);
       } else {
         // Bar from min to max
         const val = d.valueSelected!;
         const minVal = d.minSelected !== undefined && d.minSelected !== null ? d.minSelected : val;
         const maxVal = d.maxSelected !== undefined && d.maxSelected !== null ? d.maxSelected : val;
-        const y0 = yScaleBar(minVal);
-        const y1 = yScaleBar(maxVal);
-        
+        const yMinPx = yScaleBar(minVal);
+        const yMaxPx = yScaleBar(maxVal);
+        const topY = Math.min(yMinPx, yMaxPx);
+        const barH = Math.max(1, Math.abs(yMinPx - yMaxPx));
+        const pillR = Math.min(barW / 2, barH / 2);
+
         group.append("rect")
           .attr("x", xPos)
-          .attr("y", y1)
+          .attr("y", topY)
           .attr("width", barW)
-          .attr("height", Math.max(1, y0 - y1))
+          .attr("height", barH)
           .style("fill", getFillColor(val, d.comfortRatioSelected!))
           .style("opacity", 0.6)
-          .attr("rx", aggregation === 'hour' ? 0 : 4)
-          .attr("ry", aggregation === 'hour' ? 0 : 4);
+          .attr("rx", pillR)
+          .attr("ry", pillR);
 
         // Average Indicator Circle
         group.append("circle")
@@ -872,6 +925,7 @@ export function UtciExplorer({
       }`}
       
     >
+      {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-2`}>
@@ -888,38 +942,18 @@ export function UtciExplorer({
               />
               <ExportHeaderCaption lines={[{ short: 'Outdoor Comfort', long: 'Outdoor Comfort' }]} />
             </div>
-          ) : (
+          ) : comparePane === 'secondary' ? (
             <>
-              <div className="relative flex items-center w-full min-h-[28px] gap-1.5">
-                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1 transition-[padding] duration-200 ease-out pr-0 group-hover:pr-9 focus-within:pr-9">
-                  <ChartTypeMenu
-                    value="utci"
-                    label="UTCI Comfort"
-                    onChange={(t) => onChangeType?.(t)}
-                    theme={theme}
-                    disabled={!onChangeType}
-                    display="icon"
-                  />
-                  <span
-                    className={`text-[10px] font-medium truncate min-w-0 flex-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
-                    title="Outdoor Comfort"
-                  >
-                    Outdoor Comfort
-                  </span>
-                </div>
-                {onRemove && (
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 flex shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 ease-out group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
-                    <button 
-                      type="button"
-                      onClick={onRemove} 
-                      className={`rounded-md transition-colors shadow-hard-sm p-1 shrink-0 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+              <div
+                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  theme === 'dark'
+                    ? 'border-orange-800/60 bg-orange-950/45 text-orange-100'
+                    : 'border-orange-200 bg-orange-50 text-orange-900'
+                }`}
+              >
+                Comparison · {paneCity ?? '—'}
               </div>
-              <div className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto">
+              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
                 <div className="pt-1.5">
                   <AggregationToolbar
                     value={aggregation}
@@ -930,10 +964,14 @@ export function UtciExplorer({
                         <button
                           type="button"
                           onClick={() => setShowStats(!showStats)}
-                          className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                             showStats
-                              ? (theme === 'dark' ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600')
-                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                              ? theme === 'dark'
+                                ? 'bg-blue-900/40 text-blue-400'
+                                : 'bg-blue-50 text-blue-600'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                           }`}
                           title="Statistics"
                         >
@@ -942,14 +980,106 @@ export function UtciExplorer({
                         <button
                           type="button"
                           onClick={() => setShowSettings(!showSettings)}
-                          className={`rounded p-0.5 transition-colors ${
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                             showSettings
-                              ? (theme === 'dark' ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600')
-                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                              ? theme === 'dark'
+                                ? 'bg-blue-900/40 text-blue-400'
+                                : 'bg-blue-50 text-blue-600'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                           }`}
                           title="Chart settings"
                         >
-                          <Settings2 className="w-3 h-3" />
+                          <Settings2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    }
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {comparePane === 'primary' && paneCity && (
+                <div
+                  className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                    theme === 'dark'
+                      ? 'border-blue-800/60 bg-blue-950/45 text-blue-100'
+                      : 'border-blue-200 bg-blue-50 text-blue-900'
+                  }`}
+                >
+                  Baseline · {paneCity}
+                </div>
+              )}
+              <div className="relative flex min-h-[28px] w-full items-center gap-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 pr-0 transition-[padding] duration-200 ease-out group-hover:pr-9 focus-within:pr-9 sm:gap-2">
+                  <ChartTypeMenu
+                    value="utci"
+                    label="UTCI Comfort"
+                    onChange={t => onChangeType?.(t)}
+                    theme={theme}
+                    disabled={!onChangeType}
+                    display="icon"
+                  />
+                  <span
+                    className={`min-w-0 flex-1 truncate text-[10px] font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                    title="Outdoor Comfort"
+                  >
+                    Outdoor Comfort
+                  </span>
+                </div>
+                {onRemove && (
+                  <div className="pointer-events-none absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 opacity-0 transition-opacity duration-200 ease-out group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                    <button
+                      type="button"
+                      onClick={onRemove}
+                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full p-0 shadow-hard-sm transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
+                <div className="pt-1.5">
+                  <AggregationToolbar
+                    value={aggregation}
+                    onChange={setAggregation}
+                    theme={theme}
+                    trailing={
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowStats(!showStats)}
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
+                            showStats
+                              ? theme === 'dark'
+                                ? 'bg-blue-900/40 text-blue-400'
+                                : 'bg-blue-50 text-blue-600'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                          }`}
+                          title="Statistics"
+                        >
+                          Stats
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowSettings(!showSettings)}
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
+                            showSettings
+                              ? theme === 'dark'
+                                ? 'bg-blue-900/40 text-blue-400'
+                                : 'bg-blue-50 text-blue-600'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                          }`}
+                          title="Chart settings"
+                        >
+                          <Settings2 className="h-3 w-3" />
                         </button>
                       </>
                     }
@@ -960,102 +1090,96 @@ export function UtciExplorer({
           )}
         </div>
       </div>
-
-      {/* Stats Modal */}
-      {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Comfort statistics</h3>
-              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average UTCI</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {utciUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Comfort ratio</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>{(stats.comfortRatio * 100).toFixed(1)}%</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-xs font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {utciUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className={`text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Stress category breakdown</h4>
-              <div className="space-y-1.5">
-                {stats.categoryPercentages.map(cat => (
-                  <div key={cat.category} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className={`capitalize ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>{cat.category}</span>
-                      <span className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>{cat.percentage.toFixed(1)}%</span>
-                    </div>
-                    <div className={`h-1.5 w-full rounded-full ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                      <div 
-                        className="h-full rounded-full" 
-                        style={{ backgroundColor: UTCI_COLORS[cat.category], width: `${cat.percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>UTCI chart settings</h3>
-              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-3">
-              <div className="space-y-2">
-                <div className="space-y-2">
-                  <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Calculation Inputs</label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={includeSun} 
-                        onChange={e => setIncludeSun(e.target.checked)}
-                        className="rounded text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Include Solar Radiation</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={includeWind} 
-                        onChange={e => setIncludeWind(e.target.checked)}
-                        className="rounded text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Include Wind Speed</span>
-                    </label>
-                  </div>
+      <CardModal
+        open={showStatsModal}
+        onClose={() => setShowStats(false)}
+        title="Comfort statistics"
+        theme={theme}
+        anchorRef={outerRef as any}
+        maxWidthPx={520}
+      >
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average UTCI</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {utciUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Comfort ratio</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>{(stats.comfortRatio * 100).toFixed(1)}%</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+            <div className={`text-xs font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {utciUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className={`text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Stress category breakdown</h4>
+          <div className="space-y-1.5">
+            {stats.categoryPercentages.map(cat => (
+              <div key={cat.category} className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className={`capitalize ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>{cat.category}</span>
+                  <span className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>{cat.percentage.toFixed(1)}%</span>
                 </div>
+                <div className={`h-1.5 w-full rounded-full ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: UTCI_COLORS[cat.category], width: `${cat.percentage}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardModal>
+
+      <CardModal
+        open={showSettingsModal}
+        onClose={() => setShowSettings(false)}
+        title="UTCI chart settings"
+        theme={theme}
+        anchorRef={outerRef as any}
+        maxWidthPx={520}
+      >
+        <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-2">
+            <div className="space-y-2">
+              <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Calculation Inputs</label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeSun}
+                    onChange={e => setIncludeSun(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Include Solar Radiation</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeWind}
+                    onChange={e => setIncludeWind(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Include Wind Speed</span>
+                </label>
+              </div>
+            </div>
 
                 <div className="space-y-2">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Visualization Mode</label>
                   <select 
                     value={colorMode} 
                     onChange={e => setColorMode(e.target.value as any)}
-                    className={`w-full p-2 rounded-md border text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${
+                    className={`w-full rounded-full border p-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500 ${
                       theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
                     }`}
                   >
@@ -1083,7 +1207,7 @@ export function UtciExplorer({
                         <button
                           key={g.id}
                           onClick={() => setGradientId(g.id)}
-                          className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all ${
+                          className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all ${
                             gradientId === g.id ? 'border-blue-500 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                           }`}
                           style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
@@ -1095,9 +1219,7 @@ export function UtciExplorer({
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+      </CardModal>
 
       <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
         <div className="w-full flex-1 min-h-0 min-w-0 relative">

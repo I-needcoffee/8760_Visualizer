@@ -72,7 +72,7 @@ export function ChartTypeMenu({
     const Icon = ICON[value];
     return (
       <div
-        className={`shrink-0 w-6 h-6 flex items-center justify-center text-gray-700 ${className ?? ''}`}
+        className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-gray-700 ${className ?? ''}`}
         title={label}
         aria-label={label}
       >
@@ -93,7 +93,7 @@ export function ChartTypeMenu({
         aria-controls={menuId}
         className={
           display === 'icon'
-            ? `shrink-0 w-6 h-6 flex items-center justify-center transition-colors ${
+            ? `shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors ${
                 disabled ? 'opacity-60 cursor-default' : 'hover:text-gray-900 dark:hover:text-white'
               } ${dark ? 'text-gray-300' : 'text-gray-600'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 ${className ?? ''}`
             : `inline-flex max-w-full min-w-0 font-semibold uppercase tracking-wide text-[10px] underline-offset-2 transition-colors truncate w-max ${
@@ -128,7 +128,7 @@ export function ChartTypeMenu({
                   setOpen(false);
                   onChange(t);
                 }}
-                className={`w-full text-left px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                className={`w-full text-left px-3 py-1.5 text-[12px] font-semibold transition-colors rounded-full ${
                   active
                     ? dark
                       ? 'bg-gray-700 text-white'

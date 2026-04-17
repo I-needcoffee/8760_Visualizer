@@ -5,7 +5,7 @@ import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
-import { ChartType } from '../App';
+import type { ChartType, CompareExplorerSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
 import { GlobalFilterState } from './GlobalFilterPanel';
@@ -14,6 +14,14 @@ import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
+import { CardModal } from './CardModal';
+
+/** Dual-series line chart in difference mode: baseline vs comparison (not Δ heatmap colors). */
+function compareExplorerLineColors(theme: 'light' | 'dark') {
+  return theme === 'dark'
+    ? { baseline: '#d1d5db', comparison: '#ffffff' }
+    : { baseline: '#e5e7eb', comparison: '#000000' };
+}
 
 interface DataExplorerProps {
   data: EPWDataRow[];
@@ -32,11 +40,25 @@ interface DataExplorerProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  comparePane?: 'primary' | 'secondary';
+  paneCity?: string;
+  pairSuppressHeader?: boolean;
+  pairModalHost?: boolean;
+  explorerShared?: CompareExplorerSharedControls;
+  /** Difference column: reduce outer padding so the card fills height cleanly */
+  diffFillColumn?: boolean;
 }
 
 export function DataExplorer({ 
   data, compareData, showDifference, stackedComparison, variables, defaultVariableId, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode
+  setShowGradientModal,
+  exportMode,
+  comparePane,
+  paneCity,
+  pairSuppressHeader,
+  pairModalHost,
+  explorerShared,
+  diffFillColumn,
 }: DataExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
@@ -68,17 +90,31 @@ export function DataExplorer({
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
     };
   }, []);
-  const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
-  const [showStats, setShowStats] = useState(false);
-  // chart type switching handled by ChartTypeMenu
-  
-  // Internal state for this specific chart instance
-  const [colorVar, setColorVar] = useState(() => {
+  const [internalAggregation, setInternalAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
+  const aggregation = explorerShared?.aggregation ?? internalAggregation;
+  const setAggregation = explorerShared?.setAggregation ?? setInternalAggregation;
+
+  const [internalShowStats, setInternalShowStats] = useState(false);
+  const showStats = explorerShared?.showStats ?? internalShowStats;
+  const setShowStats = explorerShared?.setShowStats ?? setInternalShowStats;
+
+  const [internalColorVar, setInternalColorVar] = useState(() => {
     if (defaultVariableId && variables.some((v) => v.id === defaultVariableId)) return defaultVariableId;
     return variables.find((v) => v.category === 'Temperature')?.id || variables[0].id;
   });
-  const [gradientId, setGradientId] = useState(gradients[0].id);
-  const [showSettings, setShowSettings] = useState(false);
+  const colorVar = explorerShared?.colorVar ?? internalColorVar;
+  const setColorVar = explorerShared?.setColorVar ?? setInternalColorVar;
+
+  const [internalGradientId, setInternalGradientId] = useState(gradients[0].id);
+  const gradientId = explorerShared?.gradientId ?? internalGradientId;
+  const setGradientId = explorerShared?.setGradientId ?? setInternalGradientId;
+
+  const [internalShowSettings, setInternalShowSettings] = useState(false);
+  const showSettings = explorerShared?.showSettings ?? internalShowSettings;
+  const setShowSettings = explorerShared?.setShowSettings ?? setInternalShowSettings;
+
+  const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
+  const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
 
   const convertValue = (val: number | null | undefined, unit: string, isDelta: boolean = false) => {
     if (val === null || val === undefined) return 0;
@@ -444,20 +480,29 @@ export function DataExplorer({
 
     const yScaleBar = d3.scaleLinear().domain([yMin, yMax]).range([barChartHeight, 0]).nice();
     const validData = aggregatedData.filter(d => d.valueSelected !== null);
+    const pairLineData = aggregatedData.filter(
+      d => d.valueSelected !== null && d.compareValueSelected !== null
+    );
 
     if (showDifference && compareData) {
       // Draw Line Chart connecting dots
-      const linePrimary = d3.line<any>()
+      const linePrimary = d3
+        .line<(typeof pairLineData)[0]>()
+        .defined(d => d.valueSelected != null && d.compareValueSelected != null)
         .x(d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
         .y(d => yScaleBar(d.valueSelected!))
         .curve(d3.curveMonotoneX);
 
-      const lineCompare = d3.line<any>()
+      const lineCompare = d3
+        .line<(typeof pairLineData)[0]>()
+        .defined(d => d.valueSelected != null && d.compareValueSelected != null)
         .x(d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
         .y(d => yScaleBar(d.compareValueSelected!))
         .curve(d3.curveMonotoneX);
 
-      const areaDiff = d3.area<any>()
+      const areaDiff = d3
+        .area<(typeof pairLineData)[0]>()
+        .defined(d => d.valueSelected != null && d.compareValueSelected != null)
         .x(d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
         .y0(d => yScaleBar(d.compareValueSelected!))
         .y1(d => yScaleBar(d.valueSelected!))
@@ -465,46 +510,51 @@ export function DataExplorer({
 
       // Add difference shading
       barChartG.append("path")
-        .datum(validData)
+        .datum(pairLineData)
         .attr("fill", theme === 'dark' ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)")
         .attr("d", areaDiff);
 
+      const { baseline: lineBaseline, comparison: lineComparison } = compareExplorerLineColors(theme);
+
       // Add lines
       barChartG.append("path")
-        .datum(validData)
+        .datum(pairLineData)
         .attr("fill", "none")
-        .attr("stroke", "#3b82f6") // Blue for primary
-        .attr("stroke-width", 2)
+        .attr("stroke", lineBaseline)
+        .attr("stroke-width", 2.25)
+        .attr("stroke-linecap", "round")
+        .attr("stroke-linejoin", "round")
         .attr("d", linePrimary);
 
       barChartG.append("path")
-        .datum(validData)
+        .datum(pairLineData)
         .attr("fill", "none")
-        .attr("stroke", "#9ca3af") // Gray for comparison
-        .attr("stroke-dasharray", "4,4") // Dashed line to differentiate
-        .attr("stroke-width", 2)
+        .attr("stroke", lineComparison)
+        .attr("stroke-width", 2.25)
+        .attr("stroke-linecap", "round")
+        .attr("stroke-linejoin", "round")
         .attr("d", lineCompare);
 
       // Add dots
       barChartG.selectAll(".dot-primary")
-        .data(validData)
+        .data(pairLineData)
         .join("circle")
         .attr("class", "dot-primary")
         .attr("cx", d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
         .attr("cy", d => yScaleBar(d.valueSelected!))
         .attr("r", 3)
-        .attr("fill", "#3b82f6")
+        .attr("fill", lineBaseline)
         .append("title")
         .text(d => `Primary: ${d.valueSelected!.toFixed(1)} ${cUnit}`);
 
       barChartG.selectAll(".dot-compare")
-        .data(validData)
+        .data(pairLineData)
         .join("circle")
         .attr("class", "dot-compare")
         .attr("cx", d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
         .attr("cy", d => yScaleBar(d.compareValueSelected!))
         .attr("r", 3)
-        .attr("fill", "#9ca3af")
+        .attr("fill", lineComparison)
         .append("title")
         .text(d => `Comparison: ${d.compareValueSelected!.toFixed(1)} ${cUnit}`);
 
@@ -523,18 +573,21 @@ export function DataExplorer({
         const val = d.valueSelected!;
         const minVal = d.minSelected !== undefined && d.minSelected !== null ? d.minSelected : val;
         const maxVal = d.maxSelected !== undefined && d.maxSelected !== null ? d.maxSelected : val;
-        const y0 = yScaleBar(minVal);
-        const y1 = yScaleBar(maxVal);
-        
+        const yMinPx = yScaleBar(minVal);
+        const yMaxPx = yScaleBar(maxVal);
+        const topY = Math.min(yMinPx, yMaxPx);
+        const barH = Math.max(1, Math.abs(yMinPx - yMaxPx));
+        const pillR = Math.min(barW / 2, barH / 2);
+
         group.append("rect")
           .attr("x", xPos)
-          .attr("y", y1)
+          .attr("y", topY)
           .attr("width", barW)
-          .attr("height", Math.max(1, y0 - y1))
+          .attr("height", barH)
           .style("fill", colorScale(val))
           .style("opacity", 0.6)
-          .attr("rx", aggregation === 'hour' ? 0 : 4)
-          .attr("ry", aggregation === 'hour' ? 0 : 4);
+          .attr("rx", pillR)
+          .attr("ry", pillR);
 
         // Only show average indicator dot when there's a min-max range (not in hour mode)
         if (aggregation !== 'hour') {
@@ -623,14 +676,17 @@ export function DataExplorer({
   return (
     <div 
       ref={outerRef}
-      className={`group w-full h-full min-h-0 flex flex-col relative transition-colors duration-300 ${
+      className={`group relative flex h-full min-h-0 w-full flex-col transition-colors duration-300 ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
       
     >
-      <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
-        exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-2`}>
+      {(exportMode || !pairSuppressHeader) && (
+      <div
+        className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
+          exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
+        } ${diffFillColumn && !exportMode ? 'shrink-0 py-1' : 'p-2'}`}
+      >
         <div className="flex flex-col min-w-0">
           {exportMode ? (
             <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
@@ -646,18 +702,19 @@ export function DataExplorer({
                 lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
               />
             </div>
-          ) : (
+          ) : comparePane === 'secondary' ? (
             <>
-              <div className="flex items-center justify-between w-full gap-1.5">
-                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1">
-                  <ChartTypeMenu
-                    value="explorer"
-                    label={showDifference ? 'Data Difference' : 'Data Explorer'}
-                    onChange={(t) => onChangeType?.(t)}
-                    theme={theme}
-                    disabled={!onChangeType}
-                    display="icon"
-                  />
+              <div
+                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  theme === 'dark'
+                    ? 'border-gray-700 bg-gray-950 text-gray-100'
+                    : 'border-gray-800 bg-gray-950 text-white'
+                }`}
+              >
+                Comparison · {paneCity ?? '—'}
+              </div>
+              <div className="flex w-full items-center justify-between gap-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                   <VariableChartSelect
                     value={colorVar}
                     onChange={setColorVar}
@@ -667,20 +724,115 @@ export function DataExplorer({
                     {Object.entries(groupedVariables).map(([category, vars]) => (
                       <optgroup key={category} label={category}>
                         {vars.map(v => (
-                          <option key={v.id} value={v.id}>{v.name}</option>
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </VariableChartSelect>
+                </div>
+              </div>
+              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
+                <div className="pt-1.5">
+                  <AggregationToolbar
+                    value={aggregation}
+                    onChange={setAggregation}
+                    theme={theme}
+                    trailing={
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowStats(!showStats)}
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
+                            showStats
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                          }`}
+                          title="Statistics"
+                        >
+                          Stats
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowSettings(!showSettings)}
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
+                            showSettings
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                          }`}
+                          title="Chart settings"
+                        >
+                          <Settings2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    }
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {comparePane === 'primary' && paneCity && (
+                <div
+                  className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                    theme === 'dark'
+                      ? 'border-gray-600 bg-gray-700/50 text-gray-100'
+                      : 'border-gray-300 bg-gray-200/90 text-gray-900'
+                  }`}
+                >
+                  Baseline · {paneCity}
+                </div>
+              )}
+              <div className="flex items-center justify-between w-full gap-1.5">
+                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1">
+                  <ChartTypeMenu
+                    value="explorer"
+                    label={showDifference ? 'Data Difference' : 'Data Explorer'}
+                    onChange={t => onChangeType?.(t)}
+                    theme={theme}
+                    disabled={!onChangeType}
+                    display="icon"
+                  />
+                  <VariableChartSelect
+                    value={colorVar}
+                    onChange={setColorVar}
+                    selectedLabel={colorVarDef.name}
+                    theme={theme}
+                    variant={showDifference && diffFillColumn ? 'pill' : 'default'}
+                  >
+                    {Object.entries(groupedVariables).map(([category, vars]) => (
+                      <optgroup key={category} label={category}>
+                        {vars.map(v => (
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
                         ))}
                       </optgroup>
                     ))}
                   </VariableChartSelect>
                 </div>
                 {onRemove && (
-                  <div className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
-                    <button 
-                      onClick={onRemove} 
-                      className={`flex items-center gap-0.5 rounded-md transition-all shadow-hard-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide active:scale-95 ${
-                        showDifference 
-                          ? (theme === 'dark' ? 'bg-red-900/20 text-red-400 border border-red-800/50 hover:bg-red-900/40' : 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100')
-                          : (theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50')
+                  <div className="pointer-events-none opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                    <button
+                      type="button"
+                      onClick={onRemove}
+                      className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-hard-sm transition-all active:scale-95 ${
+                        showDifference
+                          ? theme === 'dark'
+                            ? 'border border-red-800/50 bg-red-900/20 text-red-400 hover:bg-red-900/40'
+                            : 'border border-red-100 bg-red-50 text-red-600 hover:bg-red-100'
+                          : theme === 'dark'
+                            ? 'text-gray-400 hover:bg-red-900/20 hover:text-red-400'
+                            : 'text-gray-400 hover:bg-red-50 hover:text-red-500'
                       }`}
                     >
                       {showDifference ? (
@@ -695,7 +847,7 @@ export function DataExplorer({
                   </div>
                 )}
               </div>
-              <div className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto">
+              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
                 <div className="pt-1.5">
                   <AggregationToolbar
                     value={aggregation}
@@ -706,10 +858,14 @@ export function DataExplorer({
                         <button
                           type="button"
                           onClick={() => setShowStats(!showStats)}
-                          className={`rounded font-semibold transition-colors px-1.5 py-0.5 text-[9px] leading-none ${
+                          className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                             showStats
-                              ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
-                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                           }`}
                           title="Statistics"
                         >
@@ -718,10 +874,14 @@ export function DataExplorer({
                         <button
                           type="button"
                           onClick={() => setShowSettings(!showSettings)}
-                          className={`rounded p-0.5 transition-colors ${
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                             showSettings
-                              ? (theme === 'dark' ? 'bg-gray-700/90 text-gray-200' : 'bg-gray-100 text-gray-800')
-                              : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/90 text-gray-200'
+                                : 'bg-gray-100 text-gray-800'
+                              : theme === 'dark'
+                                ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                                : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                           }`}
                           title="Chart settings"
                         >
@@ -736,105 +896,103 @@ export function DataExplorer({
           )}
         </div>
       </div>
+      )}
 
-      {/* Stats Modal */}
-      {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowStats(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Statistics</h3>
-              <button type="button" onClick={() => setShowStats(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
-              </div>
-              <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
-                <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
-              </div>
-            </div>
+      <CardModal
+        open={showStatsModal}
+        onClose={() => setShowStats(false)}
+        title="Statistics"
+        theme={theme}
+        anchorRef={outerRef as any}
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Average</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.avg.toFixed(1)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.min.toFixed(1)} / {stats.max.toFixed(1)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.total.toFixed(0)} {cUnit}</div>
+          </div>
+          <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Samples</div>
+            <div className={`text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.count}</div>
           </div>
         </div>
-      )}
+      </CardModal>
 
       {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
-              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
+      <CardModal
+        open={showSettingsModal}
+        onClose={() => setShowSettings(false)}
+        title="Chart settings"
+        theme={theme}
+        anchorRef={outerRef as any}
+      >
+        <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
+              <button 
+                type="button"
+                onClick={() => setShowGradientModal(true)}
+                className="text-[10px] font-bold text-gray-600 hover:text-gray-800 uppercase tracking-tight"
+              >
+                + Create
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-3">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
-                  <button 
-                    onClick={() => setShowGradientModal(true)}
-                    className="text-[10px] font-bold text-gray-600 hover:text-gray-800 uppercase tracking-tight"
-                  >
-                    + Create
-                  </button>
-                </div>
-                <div className={`flex p-1.5 rounded-lg overflow-x-auto border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                  {gradients.map(g => (
-                    <button
-                      key={g.id}
-                      onClick={() => setGradientId(g.id)}
-                      className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all shadow-hard-sm ${
-                        gradientId === g.id ? 'border-gray-700 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
-                      }`}
-                      style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
-                      title={g.name}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Variable</label>
-                <select 
-                  value={colorVar} 
-                  onChange={e => setColorVar(e.target.value)}
-                  className={`w-full p-2 rounded-md border text-sm focus:ring-2 focus:ring-gray-500 outline-none transition-colors ${
-                    theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+            <div className={`flex overflow-x-auto rounded-full border p-1.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              {gradients.map(g => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => setGradientId(g.id)}
+                  className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all shadow-hard-sm ${
+                    gradientId === g.id ? 'border-gray-700 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                   }`}
-                >
-                  {Object.entries(
-                    variables.reduce((acc, variable) => {
-                      const category = variable.category || 'Other';
-                      if (!acc[category]) acc[category] = [];
-                      acc[category].push(variable);
-                      return acc;
-                    }, {} as Record<string, typeof variables>)
-                  ).map(([category, vars]) => (
-                    <optgroup key={category} label={category}>
-                      {vars.map(v => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
+                  style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
+                  title={g.name}
+                />
+              ))}
             </div>
           </div>
+          <div className="space-y-2">
+            <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Variable</label>
+            <select 
+              value={colorVar} 
+              onChange={e => setColorVar(e.target.value)}
+              className={`w-full rounded-full border p-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-gray-500 ${
+                theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+              }`}
+            >
+              {Object.entries(
+                variables.reduce((acc, variable) => {
+                  const category = variable.category || 'Other';
+                  if (!acc[category]) acc[category] = [];
+                  acc[category].push(variable);
+                  return acc;
+                }, {} as Record<string, typeof variables>)
+              ).map(([category, vars]) => (
+                <optgroup key={category} label={category}>
+                  {vars.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
         </div>
-      )}
+      </CardModal>
 
-      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-hidden px-0 ${
+          diffFillColumn ? 'py-0' : 'py-1'
+        }`}
+      >
         <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">
           <svg ref={svgRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>

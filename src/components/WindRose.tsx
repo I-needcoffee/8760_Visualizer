@@ -4,12 +4,13 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
-import { ChartType } from '../App';
+import type { ChartType, CompareWindRoseSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
+import { CardModal } from './CardModal';
 
 interface WindRoseProps {
   data: EPWDataRow[];
@@ -26,20 +27,39 @@ interface WindRoseProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  comparePane?: 'primary' | 'secondary';
+  paneCity?: string;
+  pairSuppressHeader?: boolean;
+  pairModalHost?: boolean;
+  windRoseShared?: CompareWindRoseSharedControls;
 }
 
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
 export function WindRose({ 
   data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode
+  setShowGradientModal, exportMode, comparePane, paneCity,
+  pairSuppressHeader, pairModalHost, windRoseShared
 }: WindRoseProps) {
   const roseRef = useRef<SVGSVGElement>(null);
   const compareRoseRef = useRef<SVGSVGElement>(null);
-  const [colorVar, setColorVar] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
-  const [gradientId, setGradientId] = useState(gradients[0].id);
-  const [showSettings, setShowSettings] = useState(false);
-  const [numBins, setNumBins] = useState(16);
+  const [iCv, setICv] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
+  const colorVar = windRoseShared?.colorVar ?? iCv;
+  const setColorVar = windRoseShared?.setColorVar ?? setICv;
+
+  const [iGrad, setIGrad] = useState(gradients[0].id);
+  const gradientId = windRoseShared?.gradientId ?? iGrad;
+  const setGradientId = windRoseShared?.setGradientId ?? setIGrad;
+
+  const [iShowSettings, setIShowSettings] = useState(false);
+  const showSettings = windRoseShared?.showSettings ?? iShowSettings;
+  const setShowSettings = windRoseShared?.setShowSettings ?? setIShowSettings;
+
+  const [iBins, setIBins] = useState(16);
+  const numBins = windRoseShared?.numBins ?? iBins;
+  const setNumBins = windRoseShared?.setNumBins ?? setIBins;
+
+  const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempThreshold, setTempThreshold] = useState(unitSystem === 'imperial' ? 70 : 21);
   const [tempFilterType, setTempFilterType] = useState<'above' | 'below'>('above');
@@ -390,6 +410,7 @@ export function WindRose({
         exportMode ? 'bg-white' : (theme === 'dark' ? 'bg-gray-800' : 'bg-white')
       }`}
     >
+      {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } p-2`}>
@@ -407,78 +428,124 @@ export function WindRose({
               lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
             />
           </div>
-        ) : (
-        <div className="relative flex items-center w-full min-h-[28px] gap-1.5">
-          <div
-            className={`flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1 transition-[padding] duration-200 ease-out ${
-              showSettings
-                ? onRemove
-                  ? 'pr-[4.75rem]'
-                  : 'pr-9'
-                : onRemove
-                  ? 'pr-0 group-hover:pr-[4.75rem] focus-within:pr-[4.75rem]'
-                  : 'pr-0 group-hover:pr-9 focus-within:pr-9'
-            }`}
-          >
-            <ChartTypeMenu
-              value="windrose"
-              label="Wind Rose"
-              onChange={(t) => onChangeType?.(t)}
-              theme={theme}
-              disabled={!onChangeType}
-              display="icon"
-            />
-            <span
-              className={`text-[10px] font-medium truncate min-w-0 flex-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
-              title="Wind Direction"
-            >
-              Wind Direction
-            </span>
-          </div>
-          <div
-            className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 shrink-0 transition-opacity duration-200 ease-out ${
-              showSettings
-                ? 'opacity-100'
-                : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setShowSettings(!showSettings)}
-              className={`rounded p-0.5 transition-colors shrink-0 ${
-                showSettings 
-                  ? (theme === 'dark' ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-50 text-blue-600') 
-                  : (theme === 'dark' ? 'bg-gray-800 text-gray-400 hover:text-gray-200' : 'bg-gray-50 text-gray-500 hover:text-gray-800')
+        ) : comparePane === 'secondary' ? (
+          <>
+            <div
+              className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                theme === 'dark'
+                  ? 'border-orange-800/60 bg-orange-950/45 text-orange-100'
+                  : 'border-orange-200 bg-orange-50 text-orange-900'
               }`}
-              title="Chart settings"
             >
-              <Settings2 className="w-3 h-3" />
-            </button>
-            {onRemove && (
-              <button 
+              Comparison · {paneCity ?? '—'}
+            </div>
+            <div className="flex min-h-[28px] items-center justify-end gap-1">
+              <button
                 type="button"
-                onClick={onRemove} 
-                className={`rounded p-0.5 transition-colors shrink-0 ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                onClick={() => setShowSettings(!showSettings)}
+                className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
+                  showSettings
+                    ? theme === 'dark'
+                      ? 'bg-blue-900/40 text-blue-400'
+                      : 'bg-blue-50 text-blue-600'
+                    : theme === 'dark'
+                      ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                      : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                }`}
+                title="Chart settings"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-        )}
-      </div>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" onClick={() => setShowSettings(false)}>
-          <div className={`p-3 rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full max-h-[min(88vh,520px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Chart settings</h3>
-              <button type="button" onClick={() => setShowSettings(false)} className={`p-1 rounded-md ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
-                <X className="w-4 h-4" />
+                <Settings2 className="h-3 w-3" />
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-3">
+          </>
+        ) : (
+          <>
+            {comparePane === 'primary' && paneCity && (
+              <div
+                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  theme === 'dark'
+                    ? 'border-blue-800/60 bg-blue-950/45 text-blue-100'
+                    : 'border-blue-200 bg-blue-50 text-blue-900'
+                }`}
+              >
+                Baseline · {paneCity}
+              </div>
+            )}
+            <div className="relative flex min-h-[28px] w-full items-center gap-1.5">
+              <div
+                className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ease-out sm:gap-2 ${
+                  showSettings
+                    ? onRemove
+                      ? 'pr-[4.75rem]'
+                      : 'pr-9'
+                    : onRemove
+                      ? 'pr-0 group-hover:pr-[4.75rem] focus-within:pr-[4.75rem]'
+                      : 'pr-0 group-hover:pr-9 focus-within:pr-9'
+                }`}
+              >
+                <ChartTypeMenu
+                  value="windrose"
+                  label="Wind Rose"
+                  onChange={t => onChangeType?.(t)}
+                  theme={theme}
+                  disabled={!onChangeType}
+                  display="icon"
+                />
+                <span
+                  className={`min-w-0 flex-1 truncate text-[10px] font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                  title="Wind Direction"
+                >
+                  Wind Direction
+                </span>
+              </div>
+              <div
+                className={`absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 items-center gap-1 transition-opacity duration-200 ease-out ${
+                  showSettings
+                    ? 'opacity-100'
+                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
+                    showSettings
+                      ? theme === 'dark'
+                        ? 'bg-blue-900/40 text-blue-400'
+                        : 'bg-blue-50 text-blue-600'
+                      : theme === 'dark'
+                        ? 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                        : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                  }`}
+                  title="Chart settings"
+                >
+                  <Settings2 className="h-3 w-3" />
+                </button>
+                {onRemove && (
+                  <button
+                    type="button"
+                    onClick={onRemove}
+                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/20 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      )}
+
+      <CardModal
+        open={showSettingsModal}
+        onClose={() => setShowSettings(false)}
+        title="Chart settings"
+        theme={theme}
+        anchorRef={outerRef as any}
+        maxWidthPx={520}
+      >
+        <div className="grid grid-cols-1 gap-3">
               <div className="space-y-2">
                 <div className="space-y-2">
                   <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Wind Rose Granularity</label>
@@ -509,13 +576,13 @@ export function WindRose({
                       <div className="flex gap-2">
                         <button 
                           onClick={() => setTempFilterType('above')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-bold rounded border transition-all ${tempFilterType === 'above' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
+                          className={`flex-1 rounded-full border px-2 py-1 text-[10px] font-bold transition-all ${tempFilterType === 'above' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
                         >
                           ABOVE
                         </button>
                         <button 
                           onClick={() => setTempFilterType('below')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-bold rounded border transition-all ${tempFilterType === 'below' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
+                          className={`flex-1 rounded-full border px-2 py-1 text-[10px] font-bold transition-all ${tempFilterType === 'below' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
                         >
                           BELOW
                         </button>
@@ -554,13 +621,13 @@ export function WindRose({
                       <div className="flex gap-2">
                         <button 
                           onClick={() => setSpeedFilterType('above')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-bold rounded border transition-all ${speedFilterType === 'above' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
+                          className={`flex-1 rounded-full border px-2 py-1 text-[10px] font-bold transition-all ${speedFilterType === 'above' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
                         >
                           ABOVE
                         </button>
                         <button 
                           onClick={() => setSpeedFilterType('below')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-bold rounded border transition-all ${speedFilterType === 'below' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
+                          className={`flex-1 rounded-full border px-2 py-1 text-[10px] font-bold transition-all ${speedFilterType === 'below' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-gray-300 text-gray-500'}`}
                         >
                           BELOW
                         </button>
@@ -601,7 +668,7 @@ export function WindRose({
                       <button
                         key={g.id}
                         onClick={() => setGradientId(g.id)}
-                        className={`flex-shrink-0 w-8 h-8 rounded-md mx-1 border-2 transition-all shadow-hard-sm ${
+                        className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all shadow-hard-sm ${
                           gradientId === g.id ? 'border-blue-500 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
                         }`}
                         style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
@@ -611,10 +678,8 @@ export function WindRose({
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
         </div>
-      )}
+      </CardModal>
 
       <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
         <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">

@@ -1,7 +1,7 @@
 import { useState, useRef, ChangeEvent, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Search, Upload, ExternalLink, Database, CloudLightning, X, Plus, Info } from 'lucide-react';
+import { Search, Upload, ExternalLink, Database, CloudLightning, Info, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import { parseEPW, ParsedEPW } from '../lib/epwParser';
 import JSZip from 'jszip';
@@ -43,7 +43,50 @@ interface EPWLocation {
   url?: string;
   epwData?: string; // For future weather files loaded from ZIP
   isFuture?: boolean;
+  /** Basename from URL or ZIP entry */
   filename?: string;
+}
+
+function epwBasenameFromUrl(url?: string): string {
+  if (!url) return '';
+  const path = url.split('?')[0];
+  const seg = path.split('/').pop();
+  return seg || '';
+}
+
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const la1 = (aLat * Math.PI) / 180;
+  const la2 = (bLat * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+function nearestStationsFromPoint(
+  locations: EPWLocation[],
+  lat: number,
+  lng: number,
+  count: number
+): EPWLocation[] {
+  const valid = locations.filter(
+    l =>
+      typeof l.lat === 'number' &&
+      !isNaN(l.lat) &&
+      isFinite(l.lat) &&
+      typeof l.lng === 'number' &&
+      !isNaN(l.lng) &&
+      isFinite(l.lng)
+  );
+  return [...valid]
+    .sort(
+      (a, b) =>
+        haversineKm(lat, lng, a.lat, a.lng) - haversineKm(lat, lng, b.lat, b.lng)
+    )
+    .slice(0, count);
 }
 
 interface MapSelectorProps {
@@ -120,6 +163,29 @@ function LocationFlyer({ center, zoom }: { center: [number, number], zoom: numbe
   return null;
 }
 
+/** Fits the map so all given points (search pin + nearest stations) stay in view. */
+function FitBoundsController({
+  points,
+  trigger,
+}: {
+  points: [number, number][] | null;
+  trigger: number;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!trigger || !points || points.length === 0) return;
+    try {
+      const b = L.latLngBounds(points);
+      if (b.isValid()) {
+        map.fitBounds(b, { padding: [88, 88], maxZoom: 11, animate: true });
+      }
+    } catch (e) {
+      console.warn('fitBounds failed', e);
+    }
+  }, [trigger, points, map]);
+  return null;
+}
+
 const generateSampleEPW = (name: string, year: number, baseTemp: number, amplitude: number) => {
   const header = `LOCATION,${name},CA,USA,Custom,999999,37.7749,-122.4194,-8.0,2.0
 DESIGN CONDITIONS,1,Climate Design Data 2009 ASHRAE Handbook,,Heating,1,-5.4,-3.4,-14.7,0.9,-3.9,-12.3,1.2,-2.1,13.3,10.6,12.1,10.1,2.5,350,Cooling,7,8.8,28.2,16.8,25.9,16.1,23.9,15.5,18.0,25.1,16.9,23.3,16.3,4.1,300,Extreme,10.1,8.5,7.3,31.5,-9.6,33.5,-11.2,35.2,-12.7,37.1,-14.5,39.2
@@ -158,6 +224,10 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
   const [showFuture, setShowFuture] = useState(false);
   const [visibleLocations, setVisibleLocations] = useState<EPWLocation[]>([]);
   const [loadingDb, setLoadingDb] = useState(true);
+  const [searchPin, setSearchPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [fitBoundsPoints, setFitBoundsPoints] = useState<[number, number][] | null>(null);
+  const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   
@@ -181,6 +251,11 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       setShowFuture(true);
     }
   }, [isSelectingCompare, futureLocations.length]);
+
+  useEffect(() => {
+    setSearchPin(null);
+    setFitBoundsPoints(null);
+  }, [showFuture]);
 
   // Load cached ZIP on mount
   useEffect(() => {
@@ -240,7 +315,8 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             name: feature.properties.title || 'Unknown Location',
             lat,
             lng,
-            url: url
+            url: url,
+            filename: url ? epwBasenameFromUrl(url) : undefined,
           };
         }).filter((loc: EPWLocation) => {
           return loc.url && 
@@ -363,16 +439,59 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     return showFuture ? futureLocations : locations;
   }, [showFuture, futureLocations, locations]);
 
-  const filteredLocations = useMemo(() => {
-    if (!search.trim()) return visibleLocations;
-    
-    const searchLower = search.toLowerCase();
-    // When searching, search across ALL active locations, not just visible ones
-    // Limit to 100 results to prevent lag
-    return activeLocations
-      .filter(loc => loc.name.toLowerCase().includes(searchLower))
-      .slice(0, 100);
-  }, [search, activeLocations, visibleLocations]);
+  const handleLocationSearch = async () => {
+    const q = search.trim();
+    if (!q) return;
+    setErrorMsg(null);
+
+    if (activeLocations.length === 0) {
+      setErrorMsg(
+        showFuture
+          ? 'Add a future-weather ZIP (or sample), or switch to Historical to search the global catalog.'
+          : 'Weather stations are still loading — try again in a moment.'
+      );
+      return;
+    }
+
+    setLocating(true);
+    try {
+      const res = await fetch(`/api/nominatim?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error('Geocoding service error');
+      const data = (await res.json()) as { lat?: string; lon?: string }[];
+      if (!Array.isArray(data) || data.length === 0) {
+        setErrorMsg('Location not found. Try a city, airport code, address, or landmark.');
+        return;
+      }
+      const lat = parseFloat(String(data[0].lat));
+      const lon = parseFloat(String(data[0].lon));
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        setErrorMsg('Unexpected geocoding response.');
+        return;
+      }
+      const nearest = nearestStationsFromPoint(activeLocations, lat, lon, 2);
+      if (nearest.length === 0) {
+        setErrorMsg('No stations found near that place in the current dataset.');
+        return;
+      }
+      const pts: [number, number][] = [[lat, lon]];
+      for (const s of nearest) {
+        const dup = pts.some(
+          p => Math.abs(p[0] - s.lat) < 1e-7 && Math.abs(p[1] - s.lng) < 1e-7
+        );
+        if (!dup) pts.push([s.lat, s.lng]);
+      }
+      setSearchPin({ lat, lng: lon });
+      setFitBoundsPoints(pts);
+      setFitBoundsTrigger(t => t + 1);
+    } catch (e) {
+      console.error(e);
+      setErrorMsg(
+        'Could not look up that place. Run the app with Vite (npm run dev / vite preview) so /api/nominatim is available, or pan the map to pick a station.'
+      );
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const handleSampleSelect = async (loc: EPWLocation) => {
     setLoading(true);
@@ -456,7 +575,12 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       {errorMsg && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[2000] bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-2xl shadow-md flex items-center gap-3">
           <span className="block sm:inline">{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="text-red-700 hover:text-red-900 font-bold">
+          <button
+            type="button"
+            onClick={() => setErrorMsg(null)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-bold leading-none text-red-700 transition-colors hover:bg-red-200/60 hover:text-red-900"
+            aria-label="Dismiss"
+          >
             &times;
           </button>
         </div>
@@ -464,16 +588,37 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
 
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-3xl px-4 flex flex-col sm:flex-row gap-2 items-center pointer-events-none">
         <div className="relative flex-1 w-full pointer-events-auto bg-white p-2 rounded-full shadow-hard-md border border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <div className="relative flex min-w-0 flex-1 flex-row items-center">
+            {locating ? (
+              <Loader2
+                className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 animate-spin text-gray-500"
+                aria-hidden
+              />
+            ) : (
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-gray-400"
+                aria-hidden
+              />
+            )}
             <input
               type="text"
-              placeholder={`Search ${activeLocations.length > 0 ? activeLocations.length : '...'} ${showFuture ? 'future' : 'global'} locations...`}
+              placeholder={`City, airport, landmark — Enter to zoom (${activeLocations.length || '…'} ${showFuture ? 'future' : 'global'} stations)`}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-transparent border-none focus:ring-0 outline-none transition-all text-sm text-gray-700"
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleLocationSearch();
+                }
+              }}
+              aria-describedby="map-search-hint"
+              disabled={locating || loadingDb}
+              className="min-w-0 flex-1 border-none bg-transparent py-2 pl-9 pr-4 text-sm text-gray-700 outline-none transition-all focus:ring-0 disabled:opacity-60"
             />
           </div>
+          <p id="map-search-hint" className="sr-only">
+            Enter a city, airport, landmark, or address, then press Enter. The map zooms to that location and frames the two closest weather stations.
+          </p>
           <div
             className="inline-flex h-11 items-stretch rounded-full border border-gray-200 bg-gray-100 p-1 shadow-hard-sm gap-0.5 shrink-0"
             role="group"
@@ -551,7 +696,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
           <div className="flex flex-col gap-3">
             <button 
               onClick={loadSampleFuture}
-              className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-xl font-medium transition-colors text-sm border border-gray-200"
+              className="flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200"
             >
               <Info className="w-4 h-4" />
               Try with Sample Data
@@ -578,7 +723,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             />
             <button 
               onClick={() => zipInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl font-medium transition-colors text-sm shadow-hard-sm"
+              className="flex items-center justify-center gap-2 rounded-full bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-hard-sm transition-colors hover:bg-orange-700"
             >
               <Upload className="w-4 h-4" />
               Upload & Cache Dataset
@@ -592,13 +737,29 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
          typeof mapCenter[1] === 'number' && !isNaN(mapCenter[1]) && isFinite(mapCenter[1]) ? (
           <MapContainer center={mapCenter} zoom={mapZoom} className="h-full w-full" minZoom={2} zoomControl={false}>
             <LocationFlyer center={mapCenter} zoom={mapZoom} />
+            <FitBoundsController points={fitBoundsPoints} trigger={fitBoundsTrigger} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             />
             <MapBoundsListener locations={activeLocations} setVisibleLocations={setVisibleLocations} />
-            
-            {filteredLocations.map((loc) => {
+
+            {searchPin &&
+              Number.isFinite(searchPin.lat) &&
+              Number.isFinite(searchPin.lng) && (
+                <CircleMarker
+                  center={[searchPin.lat, searchPin.lng]}
+                  radius={11}
+                  pathOptions={{
+                    color: '#1d4ed8',
+                    fillColor: '#93c5fd',
+                    fillOpacity: 0.85,
+                    weight: 2,
+                  }}
+                />
+              )}
+
+            {visibleLocations.map((loc) => {
               if (typeof loc.lat !== 'number' || isNaN(loc.lat) || !isFinite(loc.lat) ||
                   typeof loc.lng !== 'number' || isNaN(loc.lng) || !isFinite(loc.lng)) {
                 return null;
