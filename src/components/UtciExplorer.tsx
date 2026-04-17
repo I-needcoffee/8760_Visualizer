@@ -6,7 +6,7 @@ import { EPWDataRow } from '../lib/epwParser';
 // @ts-ignore
 import tc from 'jsthermalcomfort';
 import { X, Settings2 } from 'lucide-react';
-import { InteractiveLegend, GradientDef } from './InteractiveLegend';
+import { InteractiveLegend, GradientDef, getLegendBarHeightPx } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareUtciSharedControls } from '../App';
 import { UnitSystem } from '../App';
@@ -72,16 +72,20 @@ function getUtciCategoryForValue(val: number): string {
   return 'extreme heat stress';
 }
 
-/** Matches `InteractiveLegend` metrics so all chart footers share the same footprint */
+/** Matches `InteractiveLegend` default `fontScale` so UTCI footer legends share the same footprint */
 const LEGEND_STRIP_SCALE = 0.72;
+
+/** Same as `DataExplorer` bar fill opacity on colored rects. */
+const LEGEND_FILL_OPACITY = 0.6;
 
 function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
   const pad = 3 * LEGEND_STRIP_SCALE;
   const gap = 2 * LEGEND_STRIP_SCALE;
-  const titlePx = 8 * LEGEND_STRIP_SCALE;
+  const titlePx = Math.round(9.5 * LEGEND_STRIP_SCALE);
   const tickPx = 7 * LEGEND_STRIP_SCALE;
-  const barH = 5 * LEGEND_STRIP_SCALE;
+  const barH = getLegendBarHeightPx(LEGEND_STRIP_SCALE);
   const cats = Object.keys(UTCI_COLORS);
+  const catColors = cats.map(k => UTCI_COLORS[k]);
   const comfortIdx = cats.indexOf('no thermal stress');
   const comfortCenterPct = ((comfortIdx + 0.5) / cats.length) * 100;
 
@@ -98,14 +102,19 @@ function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
           UTCI (categories)
         </span>
       </div>
-      <div className="flex w-full rounded-sm overflow-hidden" style={{ height: `${barH}px` }}>
-        {cats.map((cat) => (
-          <div
-            key={cat}
-            className="flex-1 h-full border-r border-black/10 last:border-r-0 dark:border-white/15"
-            style={{ backgroundColor: UTCI_COLORS[cat] }}
-          />
-        ))}
+      <div
+        className={`relative w-full overflow-hidden rounded-full border ${
+          theme === 'dark' ? 'border-gray-700 bg-[#111827]' : 'border-gray-200 bg-white'
+        }`}
+        style={{ height: `${barH}px` }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to right, ${catColors.join(', ')})`,
+            opacity: LEGEND_FILL_OPACITY,
+          }}
+        />
       </div>
       <div className="relative w-full" style={{ minHeight: `${Math.max(tickPx, 10)}px`, fontSize: `${tickPx}px` }}>
         <span
@@ -136,9 +145,23 @@ function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
 function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
   const pad = 3 * LEGEND_STRIP_SCALE;
   const gap = 2 * LEGEND_STRIP_SCALE;
-  const titlePx = 8 * LEGEND_STRIP_SCALE;
-  const tickPx = 7 * LEGEND_STRIP_SCALE;
-  const barH = 5 * LEGEND_STRIP_SCALE;
+  const titlePx = Math.round(9.5 * LEGEND_STRIP_SCALE);
+  const barH = getLegendBarHeightPx(LEGEND_STRIP_SCALE);
+  const labelBasePx = Math.max(7 * LEGEND_STRIP_SCALE, Math.floor(barH * 0.56));
+
+  const contrastText = (hex: string) => {
+    const c = d3.color(hex);
+    if (!c) return theme === 'dark' ? '#fff' : '#000';
+    const rgb = c.rgb();
+    const toLin = (v: number) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const L = 0.2126 * toLin(rgb.r) + 0.7152 * toLin(rgb.g) + 0.0722 * toLin(rgb.b);
+    return L < 0.5 ? '#fff' : '#111827';
+  };
+  const leftBg = theme === 'dark' ? '#1f2937' : '#ffffff';
+  const rightBg = '#22c55e';
 
   return (
     <div
@@ -154,7 +177,9 @@ function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
         </span>
       </div>
       <div
-        className={`w-full rounded-sm overflow-hidden ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}
+        className={`relative w-full overflow-hidden rounded-full border ${
+          theme === 'dark' ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-white'
+        }`}
         style={{
           height: `${barH}px`,
           background:
@@ -162,13 +187,33 @@ function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
               ? 'linear-gradient(to right, #1f2937, #22c55e)'
               : 'linear-gradient(to right, #ffffff, #22c55e)',
         }}
-      />
-      <div
-        className="flex justify-between font-medium tabular-nums leading-none"
-        style={{ minHeight: `${Math.max(tickPx, 10)}px`, fontSize: `${tickPx}px` }}
       >
-        <span className={theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}>0%</span>
-        <span className={theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}>100%</span>
+        {(['0%', '100%'] as const).map((label) => {
+          const len = Math.max(1, label.length);
+          const fitFactor = Math.min(1, 6 / len);
+          const labelPx = Math.max(6 * LEGEND_STRIP_SCALE, Math.floor(labelBasePx * fitFactor));
+          const isLeft = label === '0%';
+          const fg = contrastText(isLeft ? leftBg : rightBg);
+          const shadow =
+            fg === '#fff'
+              ? '0 1px 2px rgba(0,0,0,0.35)'
+              : '0 1px 2px rgba(255,255,255,0.35)';
+          return (
+            <span
+              key={label}
+              className="absolute top-1/2 -translate-y-1/2 tabular-nums font-normal leading-none"
+              style={{
+                left: isLeft ? 8 : undefined,
+                right: !isLeft ? 8 : undefined,
+                fontSize: `${labelPx}px`,
+                color: fg,
+                textShadow: shadow,
+              }}
+            >
+              {label}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -1235,6 +1280,7 @@ export function UtciExplorer({
               setGradientId={setGradientId} 
               gradients={gradients}
               theme={theme}
+              fontScale={LEGEND_STRIP_SCALE}
               isDifference={true}
             />
           ) : colorMode === 'categories' ? (
@@ -1246,6 +1292,7 @@ export function UtciExplorer({
               setGradientId={setGradientId} 
               gradients={gradients}
               theme={theme}
+              fontScale={LEGEND_STRIP_SCALE}
             />
           ) : (
             <UtciComfortTimeLegendStrip theme={theme} />
