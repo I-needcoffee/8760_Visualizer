@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
+import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
@@ -14,6 +15,18 @@ import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
+import { VariableChartSelect } from './VariableChartSelect';
+
+const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
+  id: 'dryBulbTemperature',
+  name: 'Dry bulb temperature',
+  unit: '°C',
+  min: 0,
+  max: 35,
+  category: 'Temperature',
+  fixedMin: -20,
+  fixedMax: 45,
+};
 
 interface SunPathProps {
   metadata: EPWMetadata;
@@ -38,6 +51,8 @@ interface SunPathProps {
   pairSuppressHeader?: boolean;
   pairModalHost?: boolean;
   sunpathShared?: CompareSunpathSharedControls;
+  tutorialLegendDomId?: string;
+  tutorialChromeAnchors?: boolean;
 }
 
 export function SunPath({
@@ -61,6 +76,8 @@ export function SunPath({
   pairSuppressHeader,
   pairModalHost,
   sunpathShared,
+  tutorialLegendDomId,
+  tutorialChromeAnchors,
 }: SunPathProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
@@ -71,6 +88,8 @@ export function SunPath({
     primary: { w: 400, h: 380 },
     compare: { w: 400, h: 380 },
   });
+  /** Match legend strip width to the chart slot (SVG) width. */
+  const [legendTrackPx, setLegendTrackPx] = useState<number | null>(null);
 
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -117,6 +136,17 @@ export function SunPath({
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
     };
   }, [stackedComparison, compareData, pairComparisonHorizontal]);
+
+  useEffect(() => {
+    const el = primaryChartSlotRef.current;
+    if (!el) return;
+    const read = () => setLegendTrackPx(Math.max(0, Math.round(el.getBoundingClientRect().width)));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stackedComparison, compareData, pairComparisonHorizontal, slotSize.primary.w, slotSize.primary.h]);
+
   const [iAgg, setIAgg] = useState<'hour' | 'day' | 'week' | 'month'>('week');
   const aggregation = sunpathShared?.aggregation ?? iAgg;
   const setAggregation = sunpathShared?.setAggregation ?? setIAgg;
@@ -153,6 +183,27 @@ export function SunPath({
 
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+  const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
+  /** Full header row (icon + controls): width drives dual pickers — inner column was collapsing to ~select width. */
+  const sunHeaderRowRef = useRef<HTMLDivElement>(null);
+  const [sunDualVarPickers, setSunDualVarPickers] = useState(false);
+
+  useEffect(() => {
+    const el = sunHeaderRowRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      setSunDualVarPickers(w >= 420);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const chartToolbarRevealClass = expandChromeStrip
+    ? 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-[56px] opacity-100 pointer-events-auto'
+    : 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto';
   // chart type switching handled by ChartTypeMenu
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempFilterType, setTempFilterType] = useState<'helpful' | 'harmful'>('helpful');
@@ -183,7 +234,7 @@ export function SunPath({
     return acc;
   }, {} as Record<string, EPWVariable[]>);
 
-  const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0];
+  const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0] || EMPTY_VARIABLES_FALLBACK;
 
   const convertValue = (val: number | null | undefined, unit: string, isDelta: boolean = false) => {
     if (val === null || val === undefined) return 0;
@@ -248,7 +299,7 @@ const filteredCompareData = (compareData || []).filter(d => {
   });
 
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
-    const def = variables.find(v => v.id === colorVar) || variables[0];
+    const def = variables.find(v => v.id === colorVar) || variables[0] || EMPTY_VARIABLES_FALLBACK;
     let min = def.fixedMin !== undefined ? convertValue(def.fixedMin, def.unit) : convertValue(def.min, def.unit);
     let max = def.fixedMax !== undefined ? convertValue(def.fixedMax, def.unit) : convertValue(def.max, def.unit);
     const unit = convertUnit(def.unit);
@@ -266,6 +317,21 @@ const filteredCompareData = (compareData || []).filter(d => {
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
+
+  const tutorialLive = useTutorialLiveOptional();
+  const tutorialReport = tutorialLive?.report;
+  const tutorialEnabled = tutorialLive?.enabled;
+  useEffect(() => {
+    if (!tutorialEnabled || !tutorialReport) return;
+    const cDef = variables.find(v => v.id === colorVar) || variables[0];
+    tutorialReport({
+      aggregation,
+      colorVarId: colorVar,
+      colorVarName: cDef?.name,
+      radiusVarId: radiusVar,
+      radiusVarName: radiusVarDef?.name,
+    });
+  }, [tutorialEnabled, tutorialReport, aggregation, colorVar, variables, radiusVar, radiusVarDef?.name]);
 
   const stats = (() => {
     if (showDifference && compareData) {
@@ -322,14 +388,14 @@ const filteredCompareData = (compareData || []).filter(d => {
     const rMaxPxPoints = Math.max(rMinPx + 0.25, rMaxUser * sizeScale);
 
     const rMaxPxLayout = Math.min(28 * sizeScale, Math.max(4 * sizeScale, rMaxUser * sizeScale));
-    const labelRim = 18 * sizeScale;
+    const labelRim = 15 * sizeScale;
     const titleReserve = title ? 22 * sizeScale : 0;
-    const sideReserve = 12 * sizeScale;
+    const sideReserve = 8 * sizeScale;
     const rawRadius = Math.min(
       width / 2 - sideReserve - labelRim - rMaxPxLayout * 0.35,
       height / 2 - labelRim - rMaxPxLayout * 0.35 - titleReserve / 2
     );
-    const maxRadius = Math.min(width, height) / 2 - 6 * sizeScale;
+    const maxRadius = Math.min(width, height) / 2 - 4 * sizeScale;
     const radius = Math.max(24 * sizeScale, Math.min(rawRadius, maxRadius));
 
     const svg = d3.select(svgEl);
@@ -438,7 +504,7 @@ const filteredCompareData = (compareData || []).filter(d => {
     }
 
     // Radius scale (data → px), px range scales with chart so circles stay proportional
-    const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0];
+    const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0] || EMPTY_VARIABLES_FALLBACK;
     const pointRadiusScale = d3.scaleLinear()
       .domain([radiusVarDef.min, radiusVarDef.max])
       .range([rMinPx, rMaxPxPoints])
@@ -663,7 +729,7 @@ const filteredCompareData = (compareData || []).filter(d => {
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-2`}>
+      } px-2 py-1`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
             <div className="flex items-start gap-2 min-w-0">
@@ -692,8 +758,8 @@ const filteredCompareData = (compareData || []).filter(d => {
             </div>
           ) : (
             <>
-              <div className="relative flex items-center w-full min-h-[28px] gap-1.5">
-                <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 flex-1 transition-[padding] duration-200 ease-out pr-0 group-hover:pr-9 focus-within:pr-9">
+              <div ref={sunHeaderRowRef} className="relative flex w-full min-h-[28px] items-center gap-1.5">
+                <div className="flex min-h-0 min-w-0 flex-1 items-center gap-1.5 self-stretch pr-0 transition-[padding] duration-200 ease-out group-hover:pr-9 focus-within:pr-9 sm:gap-2">
                   <ChartTypeMenu
                     value="sunpath"
                     label="Sun Path"
@@ -701,13 +767,66 @@ const filteredCompareData = (compareData || []).filter(d => {
                     theme={theme}
                     disabled={!onChangeType}
                     display="icon"
+                    tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
                   />
-                  <span
-                    className={`text-[10px] font-medium truncate min-w-0 flex-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-                    title={colorVarDef.name}
-                  >
-                    {colorVarDef.name}
-                  </span>
+                  <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col self-stretch">
+                    <div
+                      className={`flex min-h-0 w-full min-w-0 gap-2 ${sunDualVarPickers ? 'flex-row items-stretch' : 'flex-col'}`}
+                    >
+                      <div
+                        className={`flex min-w-0 flex-col items-start gap-0 text-left ${sunDualVarPickers ? 'min-w-0 flex-[1.35] basis-0' : 'w-full'}`}
+                      >
+                        <span className="block text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
+                          Color
+                        </span>
+                        <VariableChartSelect
+                          value={colorVar}
+                          onChange={setColorVar}
+                          selectedLabel={colorVarDef.name}
+                          theme={theme}
+                          fillRow={false}
+                          domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
+                        >
+                          {Object.entries(groupedVariables).map(([category, vars]) => (
+                            <optgroup key={category} label={category}>
+                              {vars.map(v => (
+                                <option key={v.id} value={v.id}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </VariableChartSelect>
+                      </div>
+                      {sunDualVarPickers ? (
+                        <div
+                          className="flex min-w-0 flex-1 basis-0 flex-col items-start gap-0 text-left"
+                          id={tutorialChromeAnchors ? 'tutorial-card-sunpath-radius' : undefined}
+                        >
+                          <span className="block text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
+                            Radius
+                          </span>
+                          <VariableChartSelect
+                            value={radiusVar}
+                            onChange={setRadiusVar}
+                            selectedLabel={radiusVarDef.name}
+                            theme={theme}
+                            fillRow={false}
+                          >
+                            {Object.entries(groupedVariables).map(([category, vars]) => (
+                              <optgroup key={category} label={category}>
+                                {vars.map(v => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </VariableChartSelect>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
                 {onRemove && (
                   <div className="absolute right-0 top-1/2 -translate-y-1/2 flex shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 ease-out group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
@@ -721,18 +840,18 @@ const filteredCompareData = (compareData || []).filter(d => {
                   </div>
                 )}
               </div>
-              <div
-                className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto"
-              >
+              <div className={chartToolbarRevealClass}>
                 <div className="pt-1.5">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}
                     theme={theme}
+                    tutorialPeriodIdPrefix={tutorialChromeAnchors ? 'tutorial-card-aggregation' : undefined}
                     trailing={
                     <>
                       <button
                         type="button"
+                        id={tutorialChromeAnchors ? 'tutorial-card-stats' : undefined}
                         onClick={() => setShowStats(!showStats)}
                         className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                           showStats
@@ -745,6 +864,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                       </button>
                       <button
                         type="button"
+                        id={tutorialChromeAnchors ? 'tutorial-card-settings' : undefined}
                         onClick={() => setShowSettings(!showSettings)}
                         className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                           showSettings
@@ -927,13 +1047,13 @@ const filteredCompareData = (compareData || []).filter(d => {
         </div>
       </CardModal>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-0 py-1">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 py-0.5">
         <div
           className={`flex min-h-0 flex-1 ${
             stackedComparison && compareData && pairComparisonHorizontal
               ? 'min-h-[160px] flex-row divide-x divide-gray-200 dark:divide-gray-700'
               : stackedComparison && compareData
-                ? 'min-h-[160px] flex-col gap-1'
+                ? 'min-h-[160px] flex-col gap-0.5'
                 : 'flex-col'
           }`}
         >
@@ -956,8 +1076,12 @@ const filteredCompareData = (compareData || []).filter(d => {
             </div>
           )}
         </div>
-        <div className="w-full shrink-0 border-t border-gray-200 px-0.5 pt-1 dark:border-gray-700">
+        <div
+          className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 px-1 pt-0.5 dark:border-gray-700"
+          style={legendTrackPx != null ? { width: legendTrackPx } : undefined}
+        >
           <InteractiveLegend
+            domId={tutorialLegendDomId}
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
             gradientId={gradientId}
             setGradientId={setGradientId}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
+import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
@@ -14,6 +15,15 @@ import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
 import { CardModal } from './CardModal';
+import {
+  EXPLORER_SVG_BASE_WIDTH,
+  EXPLORER_SVG_MARGIN,
+  EXPLORER_BAR_HEATMAP_GAP_PX,
+  explorerInnerWidth,
+  explorerBarChartHeightPx,
+  explorerHeatmapHeightPx,
+  explorerSvgHeightPx,
+} from '../lib/explorerChartSvgLayout';
 
 interface WindExplorerProps {
   data: EPWDataRow[];
@@ -35,6 +45,8 @@ interface WindExplorerProps {
   pairSuppressHeader?: boolean;
   pairModalHost?: boolean;
   windShared?: CompareWindSharedControls;
+  tutorialLegendDomId?: string;
+  tutorialChromeAnchors?: boolean;
 }
 
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -92,7 +104,7 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
 export function WindExplorer({ 
   data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode, comparePane, paneCity,
-  pairSuppressHeader, pairModalHost, windShared
+  pairSuppressHeader, pairModalHost, windShared, tutorialLegendDomId, tutorialChromeAnchors
 }: WindExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
@@ -118,6 +130,10 @@ export function WindExplorer({
 
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+  const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
+  const chartToolbarRevealClass = expandChromeStrip
+    ? 'pointer-events-auto max-h-[56px] overflow-visible opacity-100 pt-1.5 transition-[max-height,opacity] duration-200 ease-out'
+    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100';
   // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
@@ -233,6 +249,19 @@ export function WindExplorer({
     return acc;
   }, {} as Record<string, EPWVariable[]>);
 
+  const tutorialLive = useTutorialLiveOptional();
+  const tutorialReport = tutorialLive?.report;
+  const tutorialEnabled = tutorialLive?.enabled;
+  useEffect(() => {
+    if (!tutorialEnabled || !tutorialReport) return;
+    const v = variables.find(x => x.id === colorVar);
+    tutorialReport({
+      aggregation,
+      colorVarId: colorVar,
+      colorVarName: v?.name,
+    });
+  }, [tutorialEnabled, tutorialReport, aggregation, colorVar, variables]);
+
   // Calculate local stats for filtered data
   const filteredData = useMemo((): EPWDataRow[] => {
     return data.filter(d => {
@@ -297,16 +326,13 @@ export function WindExplorer({
     const rows: EPWDataRow[] = filteredData as EPWDataRow[];
 
     // --- Main Chart (1224 + Bar) ---
-    const BASE_WIDTH = 350;
-    const width = BASE_WIDTH;
-    const height = 420;
-    
-    const margin = { top: 15, right: 20, bottom: 25, left: 40 };
-    
-    const barChartHeight = Math.max(75, height * 0.25);
-    const heatmapHeight = height - margin.top - margin.bottom - barChartHeight - 20; // 20px gap
-    
-    const innerWidth = width - margin.left - margin.right;
+    const width = EXPLORER_SVG_BASE_WIDTH;
+    const margin = EXPLORER_SVG_MARGIN;
+    const innerWidth = explorerInnerWidth();
+    const barChartHeight = explorerBarChartHeightPx();
+    const heatmapBarGap = EXPLORER_BAR_HEATMAP_GAP_PX;
+    const heatmapHeight = explorerHeatmapHeightPx();
+    const height = explorerSvgHeightPx();
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -337,7 +363,7 @@ export function WindExplorer({
 
     // --- Heatmap ---
     const heatmapG = g.append("g")
-      .attr("transform", `translate(0, ${barChartHeight + 40})`);
+      .attr("transform", `translate(0, ${barChartHeight + heatmapBarGap})`);
 
     const yScaleHeatmap = d3.scaleLinear()
       .domain([0, 24])
@@ -432,6 +458,13 @@ export function WindExplorer({
     }
 
     const cellHeight = heatmapHeight / 24;
+    const minDayCellWidth = innerWidth / 366;
+    const overlayMinWidth = Math.max(12, minDayCellWidth * 1.1, cellHeight * 0.75);
+    const heatmapHourAxisPx = Math.max(5, Math.min(9, cellHeight * 0.33));
+    const heatmapMonthAxisPx = Math.max(7, Math.min(11, Math.min(innerWidth / 26, cellHeight * 0.45)));
+    const overlayFontMonthPx = Math.max(6, Math.min(12, Math.min(cellHeight * 0.4, innerWidth / 22)));
+    const overlayFontWeekPx = Math.max(5, Math.min(10, overlayFontMonthPx * 0.82));
+    const barAxisTickPx = Math.max(8, Math.min(11, barChartHeight * 0.1));
 
     const cells = heatmapG.selectAll(".heatmap-cell-group")
       .data(heatmapData)
@@ -459,11 +492,11 @@ export function WindExplorer({
         .attr("dy", "0.35em")
         .attr("text-anchor", "middle")
         .style("fill", heatmapTextColor)
-        .style("font-size", aggregation === 'month' ? "10px" : "8px")
+        .style("font-size", `${aggregation === 'month' ? overlayFontMonthPx : overlayFontWeekPx}px`)
         .style("font-weight", "500")
         .style("pointer-events", "none")
         .style("opacity", 1)
-        .text(d => (xScale(d.x1) - xScale(d.x0)) > 20 ? getCompassDirection(d.direction) : "");
+        .text(d => (xScale(d.x1) - xScale(d.x0)) > overlayMinWidth ? getCompassDirection(d.direction) : "");
     }
 
     // Add bounding box for the selected region
@@ -500,7 +533,7 @@ export function WindExplorer({
       .call(yAxisHeatmap)
       .call(g => g.select(".domain").style("stroke", "#4b5563").style("stroke-width", "2px"))
       .call(g => g.selectAll(".tick line").attr("x2", innerWidth).style("stroke", "#4b5563").style("stroke-width", "1.5px").attr("stroke-opacity", 0.2))
-      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", "8px"));
+      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `${heatmapHourAxisPx}px`));
 
     // --- Bar Chart ---
     const barChartG = g.append("g");
@@ -622,7 +655,7 @@ export function WindExplorer({
       .call(yAxisBar)
       .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
       .call(g => g.selectAll(".tick line").attr("x2", innerWidth).style("stroke", theme === 'dark' ? '#374151' : '#e5e7eb').style("stroke-width", '1.5px').attr("stroke-opacity", 0.5))
-      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `10px`));
+      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `${barAxisTickPx}px`));
 
     // --- Shared X Axis ---
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -637,7 +670,7 @@ export function WindExplorer({
       .call(xAxis)
       .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
       .call(g => g.selectAll(".tick line").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
-      .call(g => g.selectAll(".tick text").attr("x", (innerWidth / 12) / 2).attr("dy", "-0.5em").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `10px`));
+      .call(g => g.selectAll(".tick text").attr("x", (innerWidth / 12) / 2).attr("dy", "-0.5em").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `${heatmapMonthAxisPx}px`));
 
     heatmapG.append("g")
       .attr("transform", `translate(0, ${heatmapHeight})`)
@@ -716,16 +749,18 @@ export function WindExplorer({
               >
                 Comparison · {paneCity ?? '—'}
               </div>
-              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
+              <div className={chartToolbarRevealClass}>
                 <div className="pt-1.5">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}
                     theme={theme}
+                    tutorialPeriodIdPrefix={tutorialChromeAnchors ? 'tutorial-card-aggregation' : undefined}
                     trailing={
                       <>
                         <button
                           type="button"
+                          id={tutorialChromeAnchors ? 'tutorial-card-stats' : undefined}
                           onClick={() => setShowStats(!showStats)}
                           className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                             showStats
@@ -742,6 +777,7 @@ export function WindExplorer({
                         </button>
                         <button
                           type="button"
+                          id={tutorialChromeAnchors ? 'tutorial-card-settings' : undefined}
                           onClick={() => setShowSettings(!showSettings)}
                           className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                             showSettings
@@ -784,12 +820,14 @@ export function WindExplorer({
                     theme={theme}
                     disabled={!onChangeType}
                     display="icon"
+                    tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
                   />
                   <VariableChartSelect
                     value={colorVar}
                     onChange={setColorVar}
                     selectedLabel={colorVarDef.name}
                     theme={theme}
+                    domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                   >
                     {Object.entries(groupedVariables).map(([category, vars]) => (
                       <optgroup key={category} label={category}>
@@ -814,16 +852,18 @@ export function WindExplorer({
                   </div>
                 )}
               </div>
-              <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100">
+              <div className={chartToolbarRevealClass}>
                 <div className="pt-1.5">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}
                     theme={theme}
+                    tutorialPeriodIdPrefix={tutorialChromeAnchors ? 'tutorial-card-aggregation' : undefined}
                     trailing={
                       <>
                         <button
                           type="button"
+                          id={tutorialChromeAnchors ? 'tutorial-card-stats' : undefined}
                           onClick={() => setShowStats(!showStats)}
                           className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                             showStats
@@ -840,6 +880,7 @@ export function WindExplorer({
                         </button>
                         <button
                           type="button"
+                          id={tutorialChromeAnchors ? 'tutorial-card-settings' : undefined}
                           onClick={() => setShowSettings(!showSettings)}
                           className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                             showSettings
@@ -1024,20 +1065,25 @@ export function WindExplorer({
         </div>
       </CardModal>
 
-      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
-        <div 
-          className="w-full flex-1 min-h-0 min-w-0 relative" 
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden px-1 py-0.5">
+        <div
+          className="relative flex min-h-0 w-full flex-1 items-center justify-center"
           ref={containerRef}
         >
-          <svg ref={svgRef} className="w-full h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
+          <svg
+            ref={svgRef}
+            className="block h-full w-full max-h-full max-w-full"
+            preserveAspectRatio="xMidYMid meet"
+          />
         </div>
-        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
-          <InteractiveLegend 
-            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }} 
-            gradientId={gradientId} 
-            setGradientId={setGradientId} 
-            gradients={gradients} 
-            theme={theme} 
+        <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
+          <InteractiveLegend
+            domId={tutorialLegendDomId}
+            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
+            gradientId={gradientId}
+            setGradientId={setGradientId}
+            gradients={gradients}
+            theme={theme}
             isDifference={showDifference}
           />
         </div>

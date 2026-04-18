@@ -40,6 +40,8 @@ interface InteractiveLegendProps {
   gradients: GradientDef[];
   fontScale?: number;
   isDifference?: boolean;
+  /** Optional DOM id for onboarding / scroll targets (tutorial layout). */
+  domId?: string;
 }
 
 export function InteractiveLegend({ 
@@ -49,7 +51,8 @@ export function InteractiveLegend({
   gradients, 
   theme = 'light',
   fontScale = 0.72,
-  isDifference = false
+  isDifference = false,
+  domId,
 }: InteractiveLegendProps & { theme?: 'light' | 'dark' }) {
   const gradientDef = gradients.find(g => g.id === gradientId) || gradients[0];
   
@@ -107,6 +110,7 @@ export function InteractiveLegend({
 
   return (
     <div
+      id={domId}
       className={`flex w-full select-none flex-col ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
       style={{ padding: `${pad}px`, gap: `${gap}px` }}
     >

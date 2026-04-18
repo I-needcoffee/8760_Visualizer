@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
+import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
@@ -32,6 +33,8 @@ interface WindRoseProps {
   pairSuppressHeader?: boolean;
   pairModalHost?: boolean;
   windRoseShared?: CompareWindRoseSharedControls;
+  tutorialLegendDomId?: string;
+  tutorialChromeAnchors?: boolean;
 }
 
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -39,7 +42,7 @@ const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', '
 export function WindRose({ 
   data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode, comparePane, paneCity,
-  pairSuppressHeader, pairModalHost, windRoseShared
+  pairSuppressHeader, pairModalHost, windRoseShared, tutorialLegendDomId, tutorialChromeAnchors
 }: WindRoseProps) {
   const roseRef = useRef<SVGSVGElement>(null);
   const compareRoseRef = useRef<SVGSVGElement>(null);
@@ -167,6 +170,19 @@ export function WindRose({
   const filteredData = useMemo(() => getFilteredData(data), [data, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
   const filteredCompareData = useMemo(() => compareData ? getFilteredData(compareData) : [], [compareData, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
 
+  const tutorialLive = useTutorialLiveOptional();
+  const tutorialReport = tutorialLive?.report;
+  const tutorialEnabled = tutorialLive?.enabled;
+  useEffect(() => {
+    if (!tutorialEnabled || !tutorialReport) return;
+    const v = variables.find(x => x.id === colorVar);
+    tutorialReport({
+      colorVarId: colorVar,
+      colorVarName: v?.name,
+      windRoseBins: numBins,
+    });
+  }, [tutorialEnabled, tutorialReport, colorVar, variables, numBins]);
+
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
     const def = variables.find(v => v.id === colorVar) || variables.find(v => v.id === 'windSpeed') || variables[0];
     let min = def.fixedMin !== undefined ? convertValue(def.fixedMin, def.unit) : convertValue(def.min, def.unit);
@@ -206,8 +222,9 @@ export function WindRose({
     // --- Wind Rose ---
     const roseWidth = 350;
     const roseHeight = 420;
-    const roseMargin = 30;
-    const roseRadius = (Math.min(roseWidth, roseHeight - 80) / 2 - roseMargin);
+    const roseBottomReserve = 62;
+    const roseMargin = 20;
+    const roseRadius = (Math.min(roseWidth, roseHeight - roseBottomReserve) / 2 - roseMargin);
 
     const roseSvg = d3.select(roseRef.current);
     roseSvg.selectAll("*").remove();
@@ -215,7 +232,10 @@ export function WindRose({
     const roseG = roseSvg
       .attr("viewBox", `0 0 ${roseWidth} ${roseHeight}`)
       .append("g")
-      .attr("transform", `translate(${roseWidth / 2}, ${(roseHeight - 80) / 2 + 10})`);
+      .attr(
+        "transform",
+        `translate(${roseWidth / 2}, ${(roseHeight - roseBottomReserve) / 2 + 5})`
+      );
 
     // Group wind by direction
     const binSize = 360 / numBins;
@@ -361,7 +381,7 @@ export function WindRose({
     const legendItemWidth = 50;
     const totalLegendWidth = numBuckets * legendItemWidth;
     const legendG = roseSvg.append("g")
-      .attr("transform", `translate(${(roseWidth - totalLegendWidth) / 2}, ${roseHeight - 35})`);
+      .attr("transform", `translate(${(roseWidth - totalLegendWidth) / 2}, ${roseHeight - 28})`);
 
     const legendItems = d3.range(numBuckets);
     const itemHeight = 14;
@@ -413,7 +433,7 @@ export function WindRose({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-2`}>
+      } px-2 py-1`}>
         {exportMode ? (
           <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
             <ChartTypeMenu
@@ -490,8 +510,10 @@ export function WindRose({
                   theme={theme}
                   disabled={!onChangeType}
                   display="icon"
+                  tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
                 />
                 <span
+                  id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                   className={`min-w-0 flex-1 truncate text-[10px] font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
                   title="Wind Direction"
                 >
@@ -507,6 +529,7 @@ export function WindRose({
               >
                 <button
                   type="button"
+                  id={tutorialChromeAnchors ? 'tutorial-card-settings' : undefined}
                   onClick={() => setShowSettings(!showSettings)}
                   className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${
                     showSettings
@@ -681,7 +704,7 @@ export function WindRose({
         </div>
       </CardModal>
 
-      <div className="px-0 py-1 flex-1 min-h-0 flex flex-col gap-1 overflow-hidden min-w-0">
+      <div className="px-1 py-0.5 flex-1 min-h-0 flex flex-col gap-0 overflow-hidden min-w-0">
         <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">
           <svg ref={roseRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
@@ -690,20 +713,21 @@ export function WindRose({
           <svg ref={compareRoseRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         )}
-        <div className="mt-0 flex-shrink-0 px-0.5 pt-0 w-full min-w-0">
-          <InteractiveLegend 
-            variable={{ 
-              id: colorVar, 
-              name: colorVarDef.name, 
-              unit: colorVarDef.unit, 
-              min: cMin, 
-              max: cMax, 
-              category: colorVarDef.category 
-            }} 
-            gradientId={gradientId} 
-            setGradientId={setGradientId} 
-            gradients={gradients} 
-            theme={theme} 
+        <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
+          <InteractiveLegend
+            domId={tutorialLegendDomId}
+            variable={{
+              id: colorVar,
+              name: colorVarDef.name,
+              unit: colorVarDef.unit,
+              min: cMin,
+              max: cMax,
+              category: colorVarDef.category,
+            }}
+            gradientId={gradientId}
+            setGradientId={setGradientId}
+            gradients={gradients}
+            theme={theme}
             isDifference={showDifference}
           />
         </div>

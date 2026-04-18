@@ -24,6 +24,13 @@ export interface AggregationToolbarProps {
   trailing?: ReactNode;
   /** When the toolbar is narrower than this (px), use H/D/W/M labels */
   compactWidthThreshold?: number;
+  /** DOM id on the toolbar shell (legacy single target for guided hints). */
+  tutorialShellId?: string;
+  /**
+   * When set, each period button gets `id={`${prefix}-${period}`}` (e.g. tutorial-card-aggregation-hour).
+   * Prefer this over `tutorialShellId` so hovers can target individual toggles.
+   */
+  tutorialPeriodIdPrefix?: string;
 }
 
 export function AggregationToolbar({
@@ -32,6 +39,8 @@ export function AggregationToolbar({
   theme,
   trailing,
   compactWidthThreshold = 292,
+  tutorialShellId,
+  tutorialPeriodIdPrefix,
 }: AggregationToolbarProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
@@ -48,8 +57,10 @@ export function AggregationToolbar({
     return () => ro.disconnect();
   }, [compactWidthThreshold]);
 
+  const shellId = tutorialPeriodIdPrefix ? undefined : tutorialShellId;
   return (
     <div
+      id={shellId}
       ref={shellRef}
       className="flex flex-nowrap items-center justify-between gap-1 w-full min-w-0"
     >
@@ -61,6 +72,7 @@ export function AggregationToolbar({
         {(['hour', 'day', 'week', 'month'] as const).map((agg) => (
           <button
             key={agg}
+            id={tutorialPeriodIdPrefix ? `${tutorialPeriodIdPrefix}-${agg}` : undefined}
             type="button"
             title={FULL[agg]}
             onClick={() => onChange(agg)}

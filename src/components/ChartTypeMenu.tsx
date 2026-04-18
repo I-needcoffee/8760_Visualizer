@@ -29,6 +29,8 @@ export function ChartTypeMenu({
   display = 'label',
   /** Non-interactive icon only (e.g. PDF export); ignores open state and menu. */
   staticIcon = false,
+  /** DOM id for guided-layout callouts (toolbar icon row). */
+  tutorialAnchorId,
 }: {
   value: ChartType;
   label: string;
@@ -38,6 +40,7 @@ export function ChartTypeMenu({
   className?: string;
   display?: 'label' | 'icon';
   staticIcon?: boolean;
+  tutorialAnchorId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -82,7 +85,7 @@ export function ChartTypeMenu({
   }
 
   return (
-    <div className="relative min-w-0">
+    <div id={tutorialAnchorId} className="relative min-w-0">
       <button
         ref={btnRef}
         type="button"

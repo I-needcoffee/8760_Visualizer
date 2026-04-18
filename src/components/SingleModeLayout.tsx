@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { BarChart2, Compass, GripVertical, Sun, ThermometerSun, Wind } from 'lucide-react';
-import { ChartType, ChartConfig, LayoutMode } from '../App';
+import { ChartType, ChartConfig, LayoutMode, UnitSystem } from '../App';
+import type { EPWDataRow } from '../lib/epwParser';
+import type { GlobalFilterState } from './GlobalFilterPanel';
+import { TutorialCardChromeHints } from './tutorial/TutorialCardChromeHints';
+import { TutorialGuidePanel } from './tutorial/TutorialGuidePanel';
 
 const SLOT_DRAG_MIME = 'application/x-climate-slot-index';
 
@@ -14,9 +18,14 @@ interface SingleModeLayoutProps {
   exportMode: boolean;
   theme: 'light' | 'dark';
   reorderMode?: boolean;
+  /** Guided layout: EPW rows for the tutorial side panel quick stats. */
+  tutorialEpwRows?: EPWDataRow[];
+  tutorialFilter?: GlobalFilterState;
+  tutorialUnitSystem?: UnitSystem;
 }
 
 function getSlotsPerPage(mode: LayoutMode) {
+  if (mode === 'tutorial') return 1;
   if (mode === 'hero-left') return 7;
   if (mode === 'grid-4x2') return 8;
   if (mode === 'focus-deep') return 2;
@@ -31,8 +40,14 @@ export function SingleModeLayout({
   onSwapSlots,
   exportMode,
   theme,
-  reorderMode
+  reorderMode,
+  tutorialEpwRows,
+  tutorialFilter,
+  tutorialUnitSystem,
 }: SingleModeLayoutProps) {
+  const tutorialColRef = useRef<HTMLDivElement>(null);
+  /** Chart + guide grid only (excludes `TutorialCardChromeHints`) so ResizeObserver does not watch the hints strip. */
+  const tutorialChromeObserveRef = useRef<HTMLDivElement>(null);
   const slotsPerPage = getSlotsPerPage(layoutMode);
   const pages = [];
   const [dragSource, setDragSource] = useState<number | null>(null);
@@ -73,9 +88,14 @@ export function SingleModeLayout({
     onDragEnd();
   };
 
-  let allSlots = [...slots];
-  while (allSlots.length % slotsPerPage !== 0 || allSlots.length === 0) {
-    allSlots.push({ id: `empty-${allSlots.length}`, type: 'empty' });
+  let allSlots: ChartConfig[];
+  if (layoutMode === 'tutorial') {
+    allSlots = [slots[0] ?? { id: 'empty-0', type: 'empty' }];
+  } else {
+    allSlots = [...slots];
+    while (allSlots.length % slotsPerPage !== 0 || allSlots.length === 0) {
+      allSlots.push({ id: `empty-${allSlots.length}`, type: 'empty' });
+    }
   }
 
   for (let i = 0; i < allSlots.length; i += slotsPerPage) {
@@ -151,8 +171,46 @@ export function SingleModeLayout({
           key={pageIndex}
           className={`w-full relative flex flex-col ${pages.length === 1 ? 'flex-1 min-h-0' : ''}`}
         >
+          {layoutMode === 'tutorial' && (
+            <div ref={tutorialColRef} className="flex w-full flex-1 min-h-0 flex-col gap-2 md:min-h-0 md:overflow-hidden">
+              <TutorialCardChromeHints
+                theme={theme}
+                chartType={pageSlots[0]?.type ?? 'empty'}
+                measureRootRef={tutorialChromeObserveRef}
+              />
+              <div
+                ref={tutorialChromeObserveRef}
+                className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-4 md:overflow-hidden"
+              >
+                {(() => {
+                  const slot = pageSlots[0];
+                  let className =
+                    'flex h-full min-h-[46vh] w-full flex-col overflow-hidden md:min-h-0 md:min-h-0 ';
+                  if (!exportMode) {
+                    className += `rounded-xl border shadow-hard-lg ${
+                      theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+                    }`;
+                  }
+                  return (
+                    <>
+                      {renderSlotShell(slot, 0, pageIndex, pageSlots, className)}
+                      <TutorialGuidePanel
+                        theme={theme}
+                        slot={slot}
+                        epwRows={tutorialEpwRows}
+                        filter={tutorialFilter ?? { startMonth: 1, endMonth: 12, startHour: 0, endHour: 23 }}
+                        unitSystem={tutorialUnitSystem ?? 'metric'}
+                      />
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {layoutMode === 'hero-left' && (
-            <div className="grid w-full gap-2 flex-1 min-h-0 grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] md:[grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] md:overflow-hidden">
+            // Primary column share must match tutorial mode (2fr chart + 3fr guide → 2/5) so the hero card width is unchanged when switching layouts.
+            <div className="grid w-full gap-2 flex-1 min-h-0 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] md:[grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] md:overflow-hidden">
               {pageSlots.map((slot, idx) => {
                 const isHero = idx === 0;
                 let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden ';
@@ -211,7 +269,7 @@ const EMPTY_SLOT_CHOICES: { type: ChartType; label: string; Icon: LucideIcon }[]
 
 function EmptySlot({ onSelectType, theme }: { onSelectType: (t: ChartType) => void; theme: 'light' | 'dark' }) {
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col p-2 sm:p-3">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col px-2 py-1.5 sm:px-2.5 sm:py-2">
       <div
         className={`flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 py-5 sm:px-4 sm:py-6 ${
           theme === 'dark'

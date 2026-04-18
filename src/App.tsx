@@ -17,8 +17,11 @@ import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { SingleModeLayout } from './components/SingleModeLayout';
 import { ComparisonModeLayout } from './components/ComparisonModeLayout';
+import { TutorialLiveProvider } from './context/TutorialLiveContext';
+import { TutorialHeaderHints } from './components/tutorial/TutorialHeaderHints';
 import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Activity, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, ArrowLeftRight } from 'lucide-react';
 import { GRADIENTS } from './lib/constants';
+import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
 import { EPWDataRow, ParsedEPW } from './lib/epwParser';
 
@@ -125,8 +128,19 @@ function LayoutIconFocusDeep({ className }: { className?: string }) {
   );
 }
 
+/** Guided single-card layout: large tile with companion text column. */
+function LayoutIconTutorial({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 40 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect x="2" y="5" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M22 8h14M22 12h14M22 16h10" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+      <path d="M22 20h12" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" opacity="0.55" />
+    </svg>
+  );
+}
+
 export type ChartType = 'sunpath' | 'explorer' | 'wind' | 'windrose' | 'utci' | 'empty';
-export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep';
+export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep' | 'tutorial';
 
 export interface ChartConfig {
   id: string;
@@ -351,7 +365,9 @@ export default function App() {
         }
       } else {
         setSelectedFiles(newFiles);
-        if (newFiles.length > 1) {
+        if (newFiles.length === 1) {
+          setLayoutMode('tutorial');
+        } else if (newFiles.length > 1) {
           setViewMode('comparison');
           setShowDifference(true);
           setShowDiffTable(true);
@@ -414,7 +430,9 @@ export default function App() {
     compareFileData?: ParsedEPW,
     isDiffMode: boolean = false,
     isStacked: boolean = false,
-    compareOpts?: CompareChartOpts
+    compareOpts?: CompareChartOpts,
+    tutorialLegendDomId?: string,
+    tutorialChromeAnchors?: boolean
   ) => {
     const isDiffExplorer = chart.id === 'diff-explorer';
     const onRemoveHandler = isDiffExplorer
@@ -459,6 +477,8 @@ export default function App() {
             pairSuppressHeader={pairSuppressHeader}
             pairModalHost={pairModalHost}
             sunpathShared={sunpathShared}
+            tutorialLegendDomId={tutorialLegendDomId}
+            tutorialChromeAnchors={tutorialChromeAnchors}
           />
         );
       case 'explorer':
@@ -485,6 +505,8 @@ export default function App() {
             pairModalHost={pairModalHost}
             explorerShared={explorerShared}
             diffFillColumn={diffFillColumn}
+            tutorialLegendDomId={tutorialLegendDomId}
+            tutorialChromeAnchors={tutorialChromeAnchors}
           />
         );
       case 'wind':
@@ -509,6 +531,8 @@ export default function App() {
             pairSuppressHeader={pairSuppressHeader}
             pairModalHost={pairModalHost}
             windShared={windShared}
+            tutorialLegendDomId={tutorialLegendDomId}
+            tutorialChromeAnchors={tutorialChromeAnchors}
           />
         );
       case 'windrose':
@@ -533,6 +557,8 @@ export default function App() {
             pairSuppressHeader={pairSuppressHeader}
             pairModalHost={pairModalHost}
             windRoseShared={windRoseShared}
+            tutorialLegendDomId={tutorialLegendDomId}
+            tutorialChromeAnchors={tutorialChromeAnchors}
           />
         );
       case 'utci':
@@ -556,6 +582,8 @@ export default function App() {
             pairSuppressHeader={pairSuppressHeader}
             pairModalHost={pairModalHost}
             utciShared={utciShared}
+            tutorialLegendDomId={tutorialLegendDomId}
+            tutorialChromeAnchors={tutorialChromeAnchors}
           />
         );
       case 'empty':
@@ -588,10 +616,15 @@ export default function App() {
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col font-sans transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
+      <div id="tutorial-header-dock" className="relative z-20 flex shrink-0 flex-col">
       {/* Top Navigation Bar */}
-      <div className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-2 sm:px-4 py-2 flex items-center justify-between gap-2 z-20 flex-shrink-0 shadow-sm transition-colors duration-300`}>
+      <div
+        id="tutorial-nav-bar"
+        className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-2 sm:px-4 py-2 flex items-center justify-between gap-2 shadow-sm transition-colors duration-300`}
+      >
         <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
           <button 
+            id="tutorial-nav-back"
             onClick={() => {
               setSelectedFiles([]);
               setShowDifference(false);
@@ -602,7 +635,10 @@ export default function App() {
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 overflow-x-auto hide-scrollbar py-1">
+          <div
+            id="tutorial-nav-files"
+            className="flex items-center gap-1.5 sm:gap-2 min-w-0 overflow-x-auto hide-scrollbar py-1"
+          >
             {selectedFiles.map((file, index) => (
               <div 
                 key={index} 
@@ -646,6 +682,7 @@ export default function App() {
               </div>
             ))}
             <button
+              id="tutorial-nav-add"
               onClick={() => setIsSelectingFile(true)}
               className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-dashed text-xs sm:text-sm font-medium transition-colors shrink-0 ${theme === 'dark' ? 'border-gray-600 text-gray-400 hover:text-gray-200 hover:border-gray-400' : 'border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400'}`}
             >
@@ -656,7 +693,10 @@ export default function App() {
 
         <div className="flex items-center gap-1 sm:gap-2 shrink min-w-0">
           {selectedFiles.length > 1 && (
-            <div className={`flex shrink min-w-0 items-center rounded-full border p-0.5 sm:p-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-hard-sm'}`}>
+            <div
+              id="tutorial-nav-viewmode"
+              className={`flex shrink min-w-0 items-center rounded-full border p-0.5 sm:p-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-hard-sm'}`}
+            >
               <button
                 onClick={() => {
                   setViewMode('single');
@@ -688,6 +728,7 @@ export default function App() {
 
           {viewMode === 'single' && (
             <div
+              id="tutorial-nav-layouts"
               className={`inline-flex h-9 shrink-0 items-stretch gap-0.5 rounded-full border p-0.5 sm:h-10 ${
                 theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100 shadow-hard-sm'
               }`}
@@ -745,6 +786,23 @@ export default function App() {
               >
                 <LayoutIconFocusDeep className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
               </button>
+              <button
+                type="button"
+                onClick={() => setLayoutMode('tutorial')}
+                aria-label="Guided layout — one large card with explanations"
+                title="Guided — one card + tutorial panel"
+                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
+                  layoutMode === 'tutorial'
+                    ? theme === 'dark'
+                      ? 'bg-gray-600 text-gray-100 shadow-sm'
+                      : 'bg-white text-gray-900 shadow-sm'
+                    : theme === 'dark'
+                      ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
+                      : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
+                }`}
+              >
+                <LayoutIconTutorial className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
+              </button>
             </div>
           )}
 
@@ -752,6 +810,7 @@ export default function App() {
 
           {!exportMode && (
             <button
+              id="tutorial-nav-reorder"
               type="button"
               onClick={() => setReorderMode(v => !v)}
               className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${
@@ -809,7 +868,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              <div className="relative" ref={summaryStatsRef}>
+              <div className="relative" id="tutorial-nav-summary" ref={summaryStatsRef}>
                 <button
                   type="button"
                   onClick={() => setShowSummaryStats(!showSummaryStats)}
@@ -953,6 +1012,7 @@ export default function App() {
                 )}
               </div>
               <button
+                id="tutorial-nav-export"
                 type="button"
                 onClick={() => setExportMode(true)}
                 className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
@@ -964,6 +1024,7 @@ export default function App() {
           )}
 
           <button
+            id="tutorial-nav-settings"
             type="button"
             onClick={() => setShowSettingsModal(true)}
             className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
@@ -973,6 +1034,11 @@ export default function App() {
           </button>
 
         </div>
+      </div>
+
+      {viewMode === 'single' && layoutMode === 'tutorial' && !exportMode ? (
+        <TutorialHeaderHints theme={theme} showCompareToggle={selectedFiles.length > 1} />
+      ) : null}
       </div>
 
       {/* Gradient Creator Modal */}
@@ -1099,23 +1165,44 @@ export default function App() {
               />
             </div>
           ) : (
-            <SingleModeLayout
-              slots={slots}
-              layoutMode={layoutMode}
-              exportMode={exportMode}
-              theme={theme}
-              reorderMode={reorderMode}
-              renderChart={(config) => renderChartForFile(config, selectedFiles[activeFileIndex])}
-              onSelectSlotType={(idx, type) => {
-                setSlots(prev => {
-                   const next = [...prev];
-                   while (next.length <= idx) next.push({ id: `slot-${Date.now()}-${next.length}`, type: 'empty' });
-                   next[idx].type = type;
-                   return next;
-                });
-              }}
-              onSwapSlots={swapSlotsByIndex}
-            />
+            <TutorialLiveProvider enabled={layoutMode === 'tutorial'}>
+              <SingleModeLayout
+                slots={slots}
+                layoutMode={layoutMode}
+                exportMode={exportMode}
+                theme={theme}
+                reorderMode={reorderMode}
+                tutorialEpwRows={selectedFiles[activeFileIndex]?.data}
+                tutorialFilter={globalFilter}
+                tutorialUnitSystem={unitSystem}
+                renderChart={config => {
+                  const tutSlot =
+                    viewMode === 'single' &&
+                    layoutMode === 'tutorial' &&
+                    config.id === slots[0]?.id &&
+                    config.type !== 'empty';
+                  return renderChartForFile(
+                    config,
+                    selectedFiles[activeFileIndex],
+                    undefined,
+                    false,
+                    false,
+                    undefined,
+                    tutSlot ? TUTORIAL_LEGEND_DOM_ID : undefined,
+                    tutSlot
+                  );
+                }}
+                onSelectSlotType={(idx, type) => {
+                  setSlots(prev => {
+                    const next = [...prev];
+                    while (next.length <= idx) next.push({ id: `slot-${Date.now()}-${next.length}`, type: 'empty' });
+                    next[idx].type = type;
+                    return next;
+                  });
+                }}
+                onSwapSlots={swapSlotsByIndex}
+              />
+            </TutorialLiveProvider>
           )}
 
           </div>
