@@ -30,7 +30,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
         style={{ padding: '8px 16px' }}
       >
         <div className={`flex items-center gap-2 font-semibold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`} style={{ fontSize: '14px' }}>
-          <Filter className="w-4 h-4 text-blue-500" style={{ width: '16px', height: '16px' }} />
+          <Filter className="w-4 h-4 text-gray-900 dark:text-gray-100" style={{ width: '16px', height: '16px' }} />
           <span>Global Time Filters</span>
           <span className={`font-normal ml-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} style={{ fontSize: '12px' }}>
             {filter.startMonth <= filter.endMonth 
@@ -49,7 +49,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
             <div className="flex flex-col gap-3 flex-1" style={{ gap: '12px' }}>
               <div className={`flex items-center justify-between font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-500" style={{ width: '16px', height: '16px' }} />
+                  <Calendar className="w-4 h-4 text-gray-900 dark:text-gray-100" style={{ width: '16px', height: '16px' }} />
                   <span className="font-semibold" style={{ fontSize: '14px' }}>Months</span>
                 </div>
                 <span className={`font-mono px-2 py-0.5 rounded-full font-medium border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-500'}`} style={{ fontSize: '12px' }}>
@@ -69,10 +69,26 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                       onChange({ ...filter, startMonth: val[0], endMonth: val[1] });
                     }
                   }}
-                  trackStyle={[{ backgroundColor: '#3b82f6', height: '4px' }]}
+                  trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                   handleStyle={[
-                    { borderColor: '#3b82f6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' },
-                    { borderColor: '#3b82f6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
                   ]}
                   railStyle={{ backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6', height: '4px' }}
                 />
@@ -90,7 +106,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                     onClick={() => onChange({ ...filter, startMonth: preset.range[0], endMonth: preset.range[1] })}
                     className={`font-medium rounded-full transition-colors border shadow-hard-sm ${
                       filter.startMonth === preset.range[0] && filter.endMonth === preset.range[1]
-                        ? (theme === 'dark' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200')
+                        ? (theme === 'dark' ? 'bg-gray-600 text-gray-100 border-gray-500' : 'bg-gray-200 text-gray-900 border-gray-400')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
                     }`}
                     style={{ fontSize: '12px', padding: '6px 12px' }}
@@ -107,7 +123,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
             <div className="flex flex-col gap-3 flex-1" style={{ gap: '12px' }}>
               <div className={`flex items-center justify-between font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-amber-500" style={{ width: '16px', height: '16px' }} />
+                  <Clock className="w-4 h-4 text-gray-900 dark:text-gray-100" style={{ width: '16px', height: '16px' }} />
                   <span className="font-semibold" style={{ fontSize: '14px' }}>Hours</span>
                 </div>
                 <span className={`font-mono px-2 py-0.5 rounded-full font-medium border ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-50 border-gray-100 text-gray-500'}`} style={{ fontSize: '12px' }}>
@@ -125,10 +141,26 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                       onChange({ ...filter, startHour: val[0], endHour: val[1] });
                     }
                   }}
-                  trackStyle={[{ backgroundColor: '#f59e0b', height: '4px' }]}
+                  trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                   handleStyle={[
-                    { borderColor: '#f59e0b', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' },
-                    { borderColor: '#f59e0b', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
                   ]}
                   railStyle={{ backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6', height: '4px' }}
                 />
@@ -146,7 +178,7 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
                     onClick={() => onChange({ ...filter, startHour: preset.range[0], endHour: preset.range[1] })}
                     className={`font-medium rounded-full transition-colors border shadow-hard-sm ${
                       filter.startHour === preset.range[0] && filter.endHour === preset.range[1]
-                        ? (theme === 'dark' ? 'bg-amber-900/50 text-amber-300 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200')
+                        ? (theme === 'dark' ? 'bg-gray-600 text-gray-100 border-gray-500' : 'bg-gray-200 text-gray-900 border-gray-400')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
                     }`}
                     style={{ fontSize: '12px', padding: '6px 12px' }}

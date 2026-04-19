@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { Search, Upload, ExternalLink, Database, CloudLightning, Info, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import { parseEPW, ParsedEPW, attachParsedEpwSource } from '../lib/epwParser';
+import { CARTO_LIGHT_ALL_WATER_HEX } from '../lib/constants';
 import JSZip from 'jszip';
 import { get, set } from 'idb-keyval';
 
@@ -914,7 +915,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
   };
 
   return (
-    <div className="h-full w-full relative bg-gray-50">
+    <div className="h-full w-full relative" style={{ backgroundColor: CARTO_LIGHT_ALL_WATER_HEX }}>
       {loading && (
         <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-[2000] flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
@@ -1089,7 +1090,14 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       <div className="h-full w-full z-0">
         {typeof mapCenter[0] === 'number' && !isNaN(mapCenter[0]) && isFinite(mapCenter[0]) &&
          typeof mapCenter[1] === 'number' && !isNaN(mapCenter[1]) && isFinite(mapCenter[1]) ? (
-          <MapContainer center={mapCenter} zoom={mapZoom} className="h-full w-full" minZoom={2} zoomControl={false}>
+          <MapContainer
+            center={mapCenter}
+            zoom={mapZoom}
+            className="h-full w-full"
+            minZoom={2}
+            zoomControl={false}
+            style={{ background: CARTO_LIGHT_ALL_WATER_HEX }}
+          >
             <LocationFlyer center={mapCenter} zoom={mapZoom} />
             <FitBoundsController points={fitBoundsPoints} trigger={fitBoundsTrigger} />
             <TileLayer
@@ -1188,7 +1196,10 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             })}
           </MapContainer>
         ) : (
-          <div className="h-full w-full flex items-center justify-center bg-gray-100">
+          <div
+            className="h-full w-full flex items-center justify-center"
+            style={{ backgroundColor: CARTO_LIGHT_ALL_WATER_HEX }}
+          >
             <p className="text-gray-500">Initializing map...</p>
           </div>
         )}

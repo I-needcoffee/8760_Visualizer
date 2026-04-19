@@ -52,7 +52,7 @@ export function SettingsModal({
       <div className={`rounded-xl shadow-xl max-w-md w-full max-h-[min(90vh,560px)] overflow-y-auto border ${theme === 'dark' ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-200'}`}>
         <div className={`flex items-center justify-between p-2 border-b sticky top-0 z-10 ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
           <div className="flex items-center gap-2 text-sm font-semibold">
-            <Settings className="w-4 h-4 text-blue-500" />
+            <Settings className="w-4 h-4 text-gray-900 dark:text-gray-100" />
             <span>Settings</span>
           </div>
           <button type="button" onClick={onClose} className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full p-0 transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
@@ -85,7 +85,7 @@ export function SettingsModal({
           {/* Time Filters */}
           <div className="space-y-4">
             <h3 className="font-semibold text-xs border-b pb-1.5 flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-blue-500" />
+              <Filter className="w-3.5 h-3.5 text-gray-900 dark:text-gray-100" />
               Global time filters
             </h3>
             
@@ -93,7 +93,7 @@ export function SettingsModal({
             <div className="space-y-3">
               <div className="flex items-center justify-between font-medium text-sm">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-500" />
+                  <Calendar className="w-4 h-4 text-gray-900 dark:text-gray-100" />
                   <span>Months</span>
                 </div>
                 <span className={`rounded-full border px-2 py-0.5 font-mono text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
@@ -113,10 +113,26 @@ export function SettingsModal({
                       onChangeFilter({ ...filter, startMonth: val[0], endMonth: val[1] });
                     }
                   }}
-                  trackStyle={[{ backgroundColor: '#3b82f6', height: '4px' }]}
+                  trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                   handleStyle={[
-                    { borderColor: '#3b82f6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' },
-                    { borderColor: '#3b82f6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
                   ]}
                   railStyle={{ backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6', height: '4px' }}
                 />
@@ -134,7 +150,7 @@ export function SettingsModal({
                     onClick={() => onChangeFilter({ ...filter, startMonth: preset.range[0], endMonth: preset.range[1] })}
                     className={`text-xs font-medium rounded-full transition-colors border px-3 py-1.5 ${
                       filter.startMonth === preset.range[0] && filter.endMonth === preset.range[1]
-                        ? (theme === 'dark' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200')
+                        ? (theme === 'dark' ? 'bg-gray-600 text-gray-100 border-gray-500' : 'bg-gray-200 text-gray-900 border-gray-400')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
                     }`}
                   >
@@ -148,7 +164,7 @@ export function SettingsModal({
             <div className="space-y-3">
               <div className="flex items-center justify-between font-medium text-sm">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-amber-500" />
+                  <Clock className="w-4 h-4 text-gray-900 dark:text-gray-100" />
                   <span>Hours</span>
                 </div>
                 <span className={`rounded-full border px-2 py-0.5 font-mono text-xs ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
@@ -166,10 +182,26 @@ export function SettingsModal({
                       onChangeFilter({ ...filter, startHour: val[0], endHour: val[1] });
                     }
                   }}
-                  trackStyle={[{ backgroundColor: '#f59e0b', height: '4px' }]}
+                  trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                   handleStyle={[
-                    { borderColor: '#f59e0b', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' },
-                    { borderColor: '#f59e0b', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
+                    {
+                      borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                      backgroundColor: 'white',
+                      opacity: 1,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      width: '14px',
+                      height: '14px',
+                      marginTop: '-5px',
+                    },
                   ]}
                   railStyle={{ backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6', height: '4px' }}
                 />
@@ -187,7 +219,7 @@ export function SettingsModal({
                     onClick={() => onChangeFilter({ ...filter, startHour: preset.range[0], endHour: preset.range[1] })}
                     className={`text-xs font-medium rounded-full transition-colors border px-3 py-1.5 ${
                       filter.startHour === preset.range[0] && filter.endHour === preset.range[1]
-                        ? (theme === 'dark' ? 'bg-amber-900/50 text-amber-300 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200')
+                        ? (theme === 'dark' ? 'bg-gray-600 text-gray-100 border-gray-500' : 'bg-gray-200 text-gray-900 border-gray-400')
                         : (theme === 'dark' ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')
                     }`}
                   >
@@ -201,7 +233,7 @@ export function SettingsModal({
           {/* Graphics Adjustments */}
           <div className="space-y-4">
             <h3 className="font-semibold text-xs border-b pb-1.5 flex items-center gap-2">
-              <Palette className="w-3.5 h-3.5 text-purple-500" />
+              <Palette className="w-3.5 h-3.5 text-gray-900 dark:text-gray-100" />
               Graphics adjustments
             </h3>
             
@@ -215,7 +247,7 @@ export function SettingsModal({
                       setTheme('light');
                       setHeatmapTextColor('#000000');
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'light' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'light' ? 'bg-gray-200 text-gray-900 border-gray-400 shadow-sm' : 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'}`}
                   >
                     <Sun className="w-4 h-4" />
                     Light
@@ -225,7 +257,7 @@ export function SettingsModal({
                       setTheme('dark');
                       setHeatmapTextColor('#ffffff');
                     }}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-indigo-900/50 text-indigo-300 border-indigo-700' : 'bg-transparent text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-100 border-gray-500 shadow-sm' : 'bg-transparent text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                   >
                     <Moon className="w-4 h-4" />
                     Dark
@@ -259,9 +291,17 @@ export function SettingsModal({
                           setGrayscaleValue(val);
                         }
                       }}
-                      trackStyle={[{ backgroundColor: '#8b5cf6', height: '4px' }]}
+                      trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                       handleStyle={[
-                        { borderColor: '#8b5cf6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                        {
+                          borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                          backgroundColor: 'white',
+                          opacity: 1,
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                          width: '14px',
+                          height: '14px',
+                          marginTop: '-5px',
+                        },
                       ]}
                       railStyle={{ background: 'linear-gradient(to right, #000, #fff)', height: '4px' }}
                     />
@@ -278,7 +318,7 @@ export function SettingsModal({
                     onClose();
                     setShowGradientModal(true);
                   }}
-                  className={`flex items-center justify-center gap-1.5 w-full rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border-purple-800' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-100'}`}
+                  className={`flex items-center justify-center gap-1.5 w-full rounded-full font-medium transition-colors border text-sm p-2 ${theme === 'dark' ? 'border-gray-600 bg-gray-700 text-gray-100 hover:bg-gray-600' : 'border-gray-300 bg-gray-100 text-gray-900 hover:bg-gray-200'}`}
                 >
                   <Palette className="w-4 h-4" />
                   Create New Gradient

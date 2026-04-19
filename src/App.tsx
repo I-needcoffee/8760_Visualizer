@@ -19,7 +19,7 @@ import { ComparisonModeLayout } from './components/ComparisonModeLayout';
 import { TutorialLiveProvider } from './context/TutorialLiveContext';
 import { TutorialHeaderHints } from './components/tutorial/TutorialHeaderHints';
 import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, ArrowLeftRight, Sparkles } from 'lucide-react';
-import { GRADIENTS } from './lib/constants';
+import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
 import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
 import { ParsedEPW } from './lib/epwParser';
@@ -666,7 +666,10 @@ export default function App() {
 
   if (selectedFiles.length === 0 || isSelectingFile) {
     return (
-      <div className="h-screen w-screen overflow-hidden font-sans bg-gray-50 relative">
+      <div
+        className="h-screen w-screen overflow-hidden font-sans relative"
+        style={{ backgroundColor: CARTO_LIGHT_ALL_WATER_HEX }}
+      >
         {isSelectingFile && selectedFiles.length > 0 && (
           <button 
             onClick={() => setIsSelectingFile(false)}
@@ -1070,7 +1073,9 @@ export default function App() {
             ? 'overflow-hidden'
             : 'overflow-y-auto'
         } ${exportMode ? 'bg-white' : ''}`}
-        style={{ backgroundColor: exportMode ? '#ffffff' : (theme === 'dark' ? '#121211' : '#f9f8f6') }}
+        style={{
+          backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : CARTO_LIGHT_ALL_WATER_HEX,
+        }}
       >
         <div className={`max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-4 flex-1 min-h-0 flex flex-col w-full ${exportMode ? 'bg-white' : ''}`}>
           {exportMode && selectedFiles.length > 0 ? (

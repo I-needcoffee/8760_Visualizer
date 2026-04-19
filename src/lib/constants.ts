@@ -1,3 +1,10 @@
+/**
+ * Water fill aligned with Carto light basemaps (Positron vector `water` layer uses `#d4dadc`;
+ * `light_all` PNG tiles match this cool grey‑blue). Used behind the map, map shell, and
+ * light‑theme dashboard canvas so empty areas match ocean on the opening screen.
+ */
+export const CARTO_LIGHT_ALL_WATER_HEX = '#d4dadc';
+
 export const GRADIENTS = [
   { id: 'turbo', name: 'Turbo', colors: ['#30123B', '#4686FB', '#1AE4B6', '#A4FC3C', '#FABA39', '#E4460A', '#7A0403'] },
   { id: 'magma', name: 'Magma', colors: ['#000004', '#3B0F70', '#8C2981', '#DE4968', '#FE9F6D', '#FCFDBF'] },

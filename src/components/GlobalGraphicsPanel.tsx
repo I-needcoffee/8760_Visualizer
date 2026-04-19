@@ -42,7 +42,7 @@ export function GlobalGraphicsPanel({
         onClick={() => setIsCollapsed(!isCollapsed)}
       >
         <div className={`flex items-center gap-2 font-semibold text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
-          <Settings2 className="w-4 h-4 text-purple-500" />
+          <Settings2 className="w-4 h-4 text-gray-900 dark:text-gray-100" />
           <span>Global Graphics Adjustments</span>
           <span className={`font-normal ml-2 text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
             Text Color: {heatmapTextColor.toUpperCase()} | Theme: {theme === 'dark' ? 'Dark' : 'Light'}
@@ -80,9 +80,17 @@ export function GlobalGraphicsPanel({
                         setGrayscaleValue(val);
                       }
                     }}
-                    trackStyle={[{ backgroundColor: '#8b5cf6', height: '4px' }]}
+                    trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                     handleStyle={[
-                      { borderColor: '#8b5cf6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                      {
+                        borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                        backgroundColor: 'white',
+                        opacity: 1,
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        width: '14px',
+                        height: '14px',
+                        marginTop: '-5px',
+                      },
                     ]}
                     railStyle={{ background: 'linear-gradient(to right, #000, #fff)', height: '4px' }}
                   />
@@ -104,7 +112,7 @@ export function GlobalGraphicsPanel({
                     setTheme('light');
                     setHeatmapTextColor('#000000');
                   }}
-                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors border text-sm p-2 shadow-hard-md ${theme === 'light' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'}`}
+                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors border text-sm p-2 shadow-hard-md ${theme === 'light' ? 'border-gray-400 bg-gray-200 text-gray-900 shadow-sm' : 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'}`}
                 >
                   <Sun className="w-4 h-4" />
                   Light
@@ -114,7 +122,7 @@ export function GlobalGraphicsPanel({
                     setTheme('dark');
                     setHeatmapTextColor('#ffffff');
                   }}
-                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors border text-sm p-2 shadow-hard-md ${theme === 'dark' ? 'bg-indigo-900/50 text-indigo-300 border-indigo-700' : 'bg-transparent text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg font-medium transition-colors border text-sm p-2 shadow-hard-md ${theme === 'dark' ? 'border-gray-500 bg-gray-600 text-gray-100 shadow-sm' : 'bg-transparent text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                 >
                   <Moon className="w-4 h-4" />
                   Dark
@@ -145,9 +153,17 @@ export function GlobalGraphicsPanel({
                         setFontScale(val);
                       }
                     }}
-                    trackStyle={[{ backgroundColor: '#3b82f6', height: '4px' }]}
+                    trackStyle={[{ backgroundColor: theme === 'dark' ? '#9ca3af' : '#525252', height: '4px' }]}
                     handleStyle={[
-                      { borderColor: '#3b82f6', backgroundColor: 'white', opacity: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '14px', height: '14px', marginTop: '-5px' }
+                      {
+                        borderColor: theme === 'dark' ? '#9ca3af' : '#525252',
+                        backgroundColor: 'white',
+                        opacity: 1,
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        width: '14px',
+                        height: '14px',
+                        marginTop: '-5px',
+                      },
                     ]}
                     railStyle={{ backgroundColor: theme === 'dark' ? '#374151' : '#e5e7eb', height: '4px' }}
                   />
@@ -166,7 +182,7 @@ export function GlobalGraphicsPanel({
               <div className="flex items-center px-2 py-2">
                 <button
                   onClick={() => setShowGradientModal(true)}
-                  className={`flex items-center justify-center gap-1.5 w-full rounded-lg font-medium transition-colors border text-sm p-2 shadow-hard-md ${theme === 'dark' ? 'bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 border-purple-800' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-100'}`}
+                  className={`flex items-center justify-center gap-1.5 w-full rounded-lg font-medium transition-colors border text-sm p-2 shadow-hard-md ${theme === 'dark' ? 'border-gray-600 bg-gray-700 text-gray-100 hover:bg-gray-600' : 'border-gray-300 bg-gray-100 text-gray-900 hover:bg-gray-200'}`}
                 >
                   <Palette className="w-4 h-4" />
                   Create New Gradient
