@@ -1,21 +1,18 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-/** Visual width reserved for the custom chevron (12px icon + inset from right edge). */
-const CHEVRON_SLOT_PX = 14;
-
-const PILL_PAD_EXTRA = 30;
+/** Room after the two-space gap: chevron (12px) + `right-0.5` inset + buffer. */
+const CHEVRON_SLOT_PX = 22;
 
 /**
- * Default variant: `appearance-none`, width = label + (two-space gap) + chevron slot, Lucide chevron (no native overlap).
- * Pill variant: compact bordered control, native sizing math only.
+ * Ghost control: measured width = label + two spaces + chevron slot; `appearance-none` + Lucide chevron.
+ * Use `fillRow={false}` in tight toolbars so the control is not squeezed by `flex-1 basis-0`.
  */
 export function VariableChartSelect({
   value,
   onChange,
   selectedLabel,
   theme,
-  variant = 'default',
   children,
   domId,
   fillRow = true,
@@ -24,7 +21,6 @@ export function VariableChartSelect({
   onChange: (next: string) => void;
   selectedLabel: string;
   theme: 'light' | 'dark';
-  variant?: 'default' | 'pill';
   children: React.ReactNode;
   domId?: string;
   fillRow?: boolean;
@@ -36,8 +32,7 @@ export function VariableChartSelect({
   const [paddingRightPx, setPaddingRightPx] = useState(22);
   const [isTruncated, setIsTruncated] = useState(false);
   const dark = theme === 'dark';
-  const pill = variant === 'pill';
-  const minSelectW = pill ? 96 : 56;
+  const minSelectW = 56;
 
   const recalc = useCallback(() => {
     const span = measureRef.current;
@@ -75,15 +70,6 @@ export function VariableChartSelect({
 
     if (!Number.isFinite(cap) || cap <= 0) cap = Math.max(minSelectW, 200);
 
-    if (pill) {
-      const desired = Math.ceil(textW + PILL_PAD_EXTRA);
-      const resolved = Math.max(minSelectW, Math.min(desired, cap));
-      const truncated = resolved + 0.5 < desired;
-      setIsTruncated(prev => (prev === truncated ? prev : truncated));
-      setWidthPx(prev => (prev === resolved ? prev : resolved));
-      return;
-    }
-
     let gapW = 8;
     const g = gapMeasureRef.current;
     if (g) gapW = g.getBoundingClientRect().width;
@@ -96,7 +82,7 @@ export function VariableChartSelect({
     const truncated = resolved + 0.5 < desired;
     setIsTruncated(prev => (prev === truncated ? prev : truncated));
     setWidthPx(prev => (prev === resolved ? prev : resolved));
-  }, [selectedLabel, minSelectW, pill]);
+  }, [selectedLabel, minSelectW]);
 
   useLayoutEffect(() => {
     recalc();
@@ -112,46 +98,11 @@ export function VariableChartSelect({
     return () => ro.disconnect();
   }, [recalc]);
 
-  const measureClass = pill
-    ? `text-xs font-semibold ${dark ? 'text-gray-200' : 'text-gray-800'}`
-    : `text-[10px] font-medium ${dark ? 'text-gray-400' : 'text-gray-600'}`;
+  const measureClass = `text-[10px] font-medium ${dark ? 'text-gray-400' : 'text-gray-600'}`;
 
   const truncateClass = isTruncated ? 'truncate' : 'whitespace-nowrap';
 
-  if (pill) {
-    const selectClass = `min-w-0 max-w-full cursor-pointer ${truncateClass} rounded-full border px-3 py-1.5 pr-8 text-left text-xs font-semibold shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-0 ${
-      dark
-        ? 'border-gray-600 bg-gray-700/90 text-gray-100 hover:bg-gray-700 hover:border-gray-500'
-        : 'border-gray-300 bg-gray-100 text-gray-900 hover:bg-gray-200/90 hover:border-gray-400'
-    }`;
-    const wrapClass = `relative inline-flex min-w-0 max-w-full flex-shrink items-center ${fillRow ? 'flex-1' : ''}`;
-    return (
-      <div id={domId} ref={wrapRef} className={wrapClass}>
-        <span
-          ref={measureRef}
-          className={`pointer-events-none absolute left-0 top-0 -z-10 whitespace-nowrap opacity-0 ${measureClass}`}
-          aria-hidden
-        >
-          {selectedLabel}
-        </span>
-        <select
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          title={selectedLabel}
-          style={
-            widthPx != null
-              ? { width: `${widthPx}px`, maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }
-              : { width: 'auto', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }
-          }
-          className={`${selectClass} cursor-pointer transition-colors focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0`}
-        >
-          {children}
-        </select>
-      </div>
-    );
-  }
-
-  const selectClass = `box-border min-w-0 max-w-full cursor-pointer appearance-none border-none bg-transparent py-0 pl-0 text-left text-[10px] font-medium leading-snug focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0 ${truncateClass} ${
+  const selectClass = `box-border min-w-0 max-w-full cursor-pointer appearance-none border-none bg-transparent py-0 pl-0 pr-0 text-left text-[10px] font-medium leading-snug focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0 ${truncateClass} ${
     dark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
   }`;
 

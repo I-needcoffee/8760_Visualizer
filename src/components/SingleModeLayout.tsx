@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart2, Compass, GripVertical, Sun, ThermometerSun, Wind } from 'lucide-react';
+import { BarChart2, GripVertical, Sun, ThermometerSun, Wind } from 'lucide-react';
+import { WindRoseGlyph } from './WindRoseGlyph';
 import { ChartType, ChartConfig, LayoutMode, UnitSystem } from '../App';
 import type { EPWDataRow } from '../lib/epwParser';
 import type { GlobalFilterState } from './GlobalFilterPanel';
@@ -22,6 +23,8 @@ interface SingleModeLayoutProps {
   tutorialEpwRows?: EPWDataRow[];
   tutorialFilter?: GlobalFilterState;
   tutorialUnitSystem?: UnitSystem;
+  /** When false, guided layout omits hover “tutorial” popovers on chart chrome. */
+  tutorialHoverHints?: boolean;
 }
 
 function getSlotsPerPage(mode: LayoutMode) {
@@ -44,6 +47,7 @@ export function SingleModeLayout({
   tutorialEpwRows,
   tutorialFilter,
   tutorialUnitSystem,
+  tutorialHoverHints = true,
 }: SingleModeLayoutProps) {
   const tutorialColRef = useRef<HTMLDivElement>(null);
   /** Chart + guide grid only (excludes `TutorialCardChromeHints`) so ResizeObserver does not watch the hints strip. */
@@ -173,11 +177,13 @@ export function SingleModeLayout({
         >
           {layoutMode === 'tutorial' && (
             <div ref={tutorialColRef} className="flex w-full flex-1 min-h-0 flex-col gap-2 md:min-h-0 md:overflow-hidden">
-              <TutorialCardChromeHints
-                theme={theme}
-                chartType={pageSlots[0]?.type ?? 'empty'}
-                measureRootRef={tutorialChromeObserveRef}
-              />
+              {tutorialHoverHints && (
+                <TutorialCardChromeHints
+                  theme={theme}
+                  chartType={pageSlots[0]?.type ?? 'empty'}
+                  measureRootRef={tutorialChromeObserveRef}
+                />
+              )}
               <div
                 ref={tutorialChromeObserveRef}
                 className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-4 md:overflow-hidden"
@@ -228,15 +234,19 @@ export function SingleModeLayout({
 
           {layoutMode === 'grid-4x2' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 w-full flex-1 min-h-0 md:[grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] md:overflow-hidden">
-              {pageSlots.map((slot, idx) => {
-                let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden col-span-1 ';
-                if (!exportMode) {
-                  className += `rounded-xl border shadow-hard-lg ${
-                    theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
-                  }`;
+              {(pageSlots.length >= 8 ? GRID_4X2_DISPLAY_ORDER : pageSlots.map((_, i) => i)).map(
+                originalIdx => {
+                  const slot = pageSlots[originalIdx];
+                  if (!slot) return null;
+                  let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden col-span-1 ';
+                  if (!exportMode) {
+                    className += `rounded-xl border shadow-hard-lg ${
+                      theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+                    }`;
+                  }
+                  return renderSlotShell(slot, originalIdx, pageIndex, pageSlots, className);
                 }
-                return renderSlotShell(slot, idx, pageIndex, pageSlots, className);
-              })}
+              )}
             </div>
           )}
 
@@ -259,12 +269,20 @@ export function SingleModeLayout({
   );
 }
 
-const EMPTY_SLOT_CHOICES: { type: ChartType; label: string; Icon: LucideIcon }[] = [
+/**
+ * Grid 4×2 default ends with wind rose then padded empty — swap display order so the rose
+ * occupies the bottom-right column (empty sits to its left).
+ */
+const GRID_4X2_DISPLAY_ORDER: readonly number[] = [0, 1, 2, 3, 4, 5, 7, 6];
+
+type EmptySlotIcon = LucideIcon | typeof WindRoseGlyph;
+
+const EMPTY_SLOT_CHOICES: { type: ChartType; label: string; Icon: EmptySlotIcon }[] = [
   { type: 'sunpath', label: 'Sun Path', Icon: Sun },
   { type: 'explorer', label: 'Data Explorer', Icon: BarChart2 },
   { type: 'utci', label: 'UTCI Comfort', Icon: ThermometerSun },
   { type: 'wind', label: 'Wind Explorer', Icon: Wind },
-  { type: 'windrose', label: 'Wind Rose', Icon: Compass },
+  { type: 'windrose', label: 'Wind Rose', Icon: WindRoseGlyph },
 ];
 
 function EmptySlot({ onSelectType, theme }: { onSelectType: (t: ChartType) => void; theme: 'light' | 'dark' }) {
@@ -277,6 +295,13 @@ function EmptySlot({ onSelectType, theme }: { onSelectType: (t: ChartType) => vo
             : 'border-gray-300 bg-gray-50/40'
         }`}
       >
+        <p
+          className={`mb-3 w-full shrink-0 text-center text-xs font-medium leading-snug sm:mb-4 ${
+            theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+          }`}
+        >
+          Select chart type
+        </p>
         <div className="flex max-w-full flex-wrap items-center justify-center gap-3 sm:gap-4">
           {EMPTY_SLOT_CHOICES.map(({ type, label, Icon }) => (
             <button

@@ -398,6 +398,13 @@ const filteredCompareData = (compareData || []).filter(d => {
     const maxRadius = Math.min(width, height) / 2 - 4 * sizeScale;
     const radius = Math.max(24 * sizeScale, Math.min(rawRadius, maxRadius));
 
+    /** Rim labels scale with the plotted disk (`radius`), not only slot min-edge / refChartDim — avoids oversized type on compact cards. */
+    const azimuthLabelCompassPx = Math.max(6.5, Math.min(13, radius * 0.072));
+    const azimuthLabelDegPx = Math.max(6, Math.min(10.5, radius * 0.056));
+    const altitudeLabelPx = Math.max(6, Math.min(10, radius * 0.048));
+    const pathKeyLabelPx = Math.max(6, Math.min(9.5, radius * 0.045));
+    const chartTitlePx = Math.max(9, Math.min(12.5, Math.min(width, height) * 0.032));
+
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
 
@@ -576,7 +583,7 @@ const filteredCompareData = (compareData || []).filter(d => {
       .attr("dy", "0.35em")
       .attr("text-anchor", "middle")
       .style("fill", heatmapTextColor)
-      .style("font-size", `10px`)
+      .style("font-size", `${altitudeLabelPx}px`)
       .style("font-weight", "500")
       .text(d => `${d}°`);
 
@@ -594,17 +601,20 @@ const filteredCompareData = (compareData || []).filter(d => {
 
     // Azimuth labels
     const compass = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+    const azimuthLabelOutset = Math.max(4, Math.min(13, radius * 0.058));
     g.selectAll(".azimuth-label")
       .data(azimuths)
       .join("text")
       .attr("class", "azimuth-label")
-      .attr("x", d => (rScale(0) + 10) * Math.sin(aScale(d)))
-      .attr("y", d => -(rScale(0) + 10) * Math.cos(aScale(d)))
+      .attr("x", d => (rScale(0) + azimuthLabelOutset) * Math.sin(aScale(d)))
+      .attr("y", d => -(rScale(0) + azimuthLabelOutset) * Math.cos(aScale(d)))
       .attr("dy", "0.35em")
       .attr("text-anchor", "middle")
       .style("fill", heatmapTextColor)
-      .style("font-weight", "bold")
-      .style("font-size", d => compass[d as keyof typeof compass] ? `16px` : `12px`)
+      .style("font-weight", d => (compass[d as keyof typeof compass] ? "600" : "500"))
+      .style("font-size", d =>
+        compass[d as keyof typeof compass] ? `${azimuthLabelCompassPx}px` : `${azimuthLabelDegPx}px`
+      )
       .text(d => compass[d as keyof typeof compass] || `${d}°`);
 
     // 3. Draw Sun Path Lines (Solstices and Equinoxes)
@@ -651,10 +661,14 @@ const filteredCompareData = (compareData || []).filter(d => {
         if (highestPoint.altitude > 0) {
           g.append("text")
             .attr("x", rScale(highestPoint.altitude) * Math.sin(aScale(highestPoint.azimuth)))
-            .attr("y", -rScale(highestPoint.altitude) * Math.cos(aScale(highestPoint.azimuth)) - 10)
+            .attr(
+              "y",
+              -rScale(highestPoint.altitude) * Math.cos(aScale(highestPoint.azimuth)) -
+                Math.max(5, radius * 0.052)
+            )
             .attr("text-anchor", "middle")
             .style("fill", heatmapTextColor)
-            .style("font-size", `9px`)
+            .style("font-size", `${pathKeyLabelPx}px`)
             .style("font-weight", "bold")
             .style("pointer-events", "none")
             .text(kd.name);
@@ -696,11 +710,11 @@ const filteredCompareData = (compareData || []).filter(d => {
 
     
     if (title) {
-         const titleMargin = 12;
+         const titleMargin = 12 * sizeScale;
          g.append("text")
           .attr("x", -titleMargin + 4)
-          .attr("y", -height/2 + 16)
-          .style("font-size", "12px")
+          .attr("y", -height / 2 + 14 * sizeScale)
+          .style("font-size", `${chartTitlePx}px`)
           .style("font-weight", "bold")
           .style("fill", heatmapTextColor)
           .text(title);

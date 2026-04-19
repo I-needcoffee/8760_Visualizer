@@ -35,6 +35,7 @@ interface WindRoseProps {
   windRoseShared?: CompareWindRoseSharedControls;
   tutorialLegendDomId?: string;
   tutorialChromeAnchors?: boolean;
+  pairSuppressFooterLegend?: boolean;
 }
 
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -42,7 +43,12 @@ const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', '
 export function WindRose({ 
   data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode, comparePane, paneCity,
-  pairSuppressHeader, pairModalHost, windRoseShared, tutorialLegendDomId, tutorialChromeAnchors
+  pairSuppressHeader,
+  pairModalHost,
+  windRoseShared,
+  tutorialLegendDomId,
+  tutorialChromeAnchors,
+  pairSuppressFooterLegend,
 }: WindRoseProps) {
   const roseRef = useRef<SVGSVGElement>(null);
   const compareRoseRef = useRef<SVGSVGElement>(null);
@@ -367,15 +373,6 @@ export function WindRose({
       .style("stroke-width", "0.5px")
       .append("title")
       .text(d => `Direction: ${Math.round(d.angle)}°\nRange: ${d.extent[0].toFixed(1)} - ${d.extent[1].toFixed(1)} ${cUnit}\nCount: ${d.count} hours`);
-
-    // Wind Rose Title
-    roseG.append("text")
-      .attr("y", -roseRadius - 25)
-      .attr("text-anchor", "middle")
-      .style("font-size", `10px`)
-      .style("font-weight", "bold")
-      .style("fill", heatmapTextColor)
-      .text("Wind Rose (Frequency & Speed)");
 
     // --- Wind Rose Legend ---
     const legendItemWidth = 50;
@@ -705,32 +702,34 @@ export function WindRose({
       </CardModal>
 
       <div className="px-1 py-0.5 flex-1 min-h-0 flex flex-col gap-0 overflow-hidden min-w-0">
-        <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">
-          <svg ref={roseRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
+        <div className="relative flex min-h-0 min-w-0 w-full flex-1 items-center justify-center overflow-hidden">
+          <svg ref={roseRef} className="h-full w-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         {stackedComparison && compareData && (
-        <div className="w-full flex-1 min-h-0 min-w-0 flex items-center justify-center relative">
-          <svg ref={compareRoseRef} className="w-full h-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
+        <div className="relative flex min-h-0 min-w-0 w-full flex-1 items-center justify-center overflow-hidden">
+          <svg ref={compareRoseRef} className="h-full w-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         )}
-        <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
-          <InteractiveLegend
-            domId={tutorialLegendDomId}
-            variable={{
-              id: colorVar,
-              name: colorVarDef.name,
-              unit: colorVarDef.unit,
-              min: cMin,
-              max: cMax,
-              category: colorVarDef.category,
-            }}
-            gradientId={gradientId}
-            setGradientId={setGradientId}
-            gradients={gradients}
-            theme={theme}
-            isDifference={showDifference}
-          />
-        </div>
+        {!pairSuppressFooterLegend && (
+          <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
+            <InteractiveLegend
+              domId={tutorialLegendDomId}
+              variable={{
+                id: colorVar,
+                name: colorVarDef.name,
+                unit: colorVarDef.unit,
+                min: cMin,
+                max: cMax,
+                category: colorVarDef.category,
+              }}
+              gradientId={gradientId}
+              setGradientId={setGradientId}
+              gradients={gradients}
+              theme={theme}
+              isDifference={showDifference}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

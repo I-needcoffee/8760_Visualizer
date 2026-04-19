@@ -30,12 +30,24 @@ export function TutorialHeaderHints({
       {
         id: 'tutorial-nav-layouts',
         title: 'Layouts',
-        body: 'Change how many cards you see. The right-most icon is this guided, one-card view.',
+        body: 'Only the active layout shows until you move the pointer over this control; then the other layouts slide out on the left so you can switch.',
       },
-      { id: 'tutorial-nav-reorder', title: 'Reorder', body: 'Drag cards to new positions, then turn reorder off when you are done.' },
-      { id: 'tutorial-nav-summary', title: 'Summary', body: 'Open overall averages for the filtered months and hours.' },
-      { id: 'tutorial-nav-export', title: 'Export', body: 'Capture the dashboard as PDF or JPEG for reports.' },
-      { id: 'tutorial-nav-settings', title: 'Settings', body: 'Global filters, units, theme, and custom color ramps.' },
+      {
+        id: 'tutorial-nav-hover-hints',
+        title: 'Tips',
+        body: 'Activate or deactivate hover tool tips for this layout.',
+      },
+      {
+        id: 'tutorial-nav-reorder',
+        title: 'Reorder',
+        body: 'Move the pointer over Settings to reveal Reorder here. Drag cards to new positions, then turn reorder off when you are done.',
+      },
+      { id: 'tutorial-nav-export', title: 'Export', body: 'Move the pointer over Settings to reveal Export here. Capture the dashboard as PDF or JPEG for reports.' },
+      {
+        id: 'tutorial-nav-settings',
+        title: 'Settings',
+        body: 'Move the pointer here to slide out Reorder and Export on the left. Click for global filters, units, theme, and custom color ramps.',
+      },
     ],
     [showCompareToggle]
   );

@@ -66,6 +66,22 @@ export interface ParsedEPW {
   metadata: EPWMetadata;
   data: EPWDataRow[];
   variables: EPWVariable[];
+  /** Original basename when known (e.g. USA_OR_…_TMY3.epw or path inside a ZIP). */
+  sourceFilename?: string;
+  /** Short dataset label (TMY3, TMYx …) derived from the filename when available. */
+  sourceFileLabel?: string;
+}
+
+/** Attach catalog/upload identity after `parseEPW` (mutates `parsed`). */
+export function attachParsedEpwSource(
+  parsed: ParsedEPW,
+  sourceFilename: string,
+  sourceFileLabel?: string
+): void {
+  parsed.sourceFilename = sourceFilename;
+  if (sourceFileLabel !== undefined && sourceFileLabel.trim() !== '') {
+    parsed.sourceFileLabel = sourceFileLabel.trim();
+  }
 }
 
 export function parseEPW(csvString: string): ParsedEPW {

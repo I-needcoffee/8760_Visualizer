@@ -19,10 +19,17 @@ import { CardModal } from './CardModal';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
-  EXPLORER_BAR_HEATMAP_GAP_PX,
+  EXPLORER_MONTH_AXIS_BAND_PX,
+  EXPLORER_MONTH_LABELS_SHORT,
+  explorerBarGridStroke,
+  explorerHeatmapRowLayout,
   explorerInnerWidth,
   explorerBarChartHeightPx,
+  explorerHeatmapCellXPx,
   explorerHeatmapHeightPx,
+  explorerHeatmapSpanXPx,
+  explorerHeatmapXOfDay,
+  explorerMonthLabelCenterDays,
   explorerSvgHeightPx,
 } from '../lib/explorerChartSvgLayout';
 
@@ -72,6 +79,8 @@ interface DataExplorerProps {
   tutorialLegendDomId?: string;
   /** Show chart-header anchors and keep the aggregation strip visible for guided callouts. */
   tutorialChromeAnchors?: boolean;
+  /** Compare pair row: parent renders a single shared legend below both panes. */
+  pairSuppressFooterLegend?: boolean;
 }
 
 export function DataExplorer({ 
@@ -86,6 +95,7 @@ export function DataExplorer({
   diffFillColumn,
   tutorialLegendDomId,
   tutorialChromeAnchors,
+  pairSuppressFooterLegend,
 }: DataExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
@@ -215,8 +225,8 @@ export function DataExplorer({
     const margin = EXPLORER_SVG_MARGIN;
     const innerWidth = explorerInnerWidth();
     const barChartHeight = explorerBarChartHeightPx();
-    const heatmapBarGap = EXPLORER_BAR_HEATMAP_GAP_PX;
-    const heatmapHeight = explorerHeatmapHeightPx();
+    const monthAxisBand = EXPLORER_MONTH_AXIS_BAND_PX;
+    const heatmapBodyHeight = explorerHeatmapHeightPx();
     const height = explorerSvgHeightPx();
 
     const svg = d3.select(svgRef.current);
@@ -251,13 +261,10 @@ export function DataExplorer({
       .domain([1, 366])
       .range([0, innerWidth]);
 
-    // --- Heatmap ---
-    const heatmapG = g.append("g")
-      .attr("transform", `translate(0, ${barChartHeight + heatmapBarGap})`);
+    const barChartG = g.append("g");
 
-    const yScaleHeatmap = d3.scaleLinear()
-      .domain([0, 24])
-      .range([0, heatmapHeight]);
+    // --- Heatmap ---
+    const heatmapG = g.append("g").attr("transform", `translate(0, ${barChartHeight})`);
 
     // Aggregate data for heatmap
     let heatmapData: any[] = [];
@@ -349,24 +356,31 @@ export function DataExplorer({
       });
     }
 
-    const cellHeight = heatmapHeight / 24;
+    const { cellGapPx, cellInnerHeightPx, rowInnerHeight, hourRowTop, hourRowCenter } =
+      explorerHeatmapRowLayout(heatmapBodyHeight);
     const minDayCellWidth = innerWidth / 366;
-    const overlayMinWidth = Math.max(12, minDayCellWidth * 1.1, cellHeight * 0.75);
-    const heatmapHourAxisPx = Math.max(5, Math.min(9, cellHeight * 0.33));
-    const heatmapMonthAxisPx = Math.max(7, Math.min(11, Math.min(innerWidth / 26, cellHeight * 0.45)));
-    const overlayFontMonthPx = Math.max(6, Math.min(12, Math.min(cellHeight * 0.4, innerWidth / 22)));
+    const overlayMinWidth = Math.max(12, minDayCellWidth * 1.1, cellInnerHeightPx * 0.75);
+    const heatmapHourAxisPx = Math.max(5, Math.min(9, cellInnerHeightPx * 0.33));
+    const heatmapMonthAxisPx = Math.max(7, Math.min(11, Math.min(innerWidth / 26, cellInnerHeightPx * 0.45)));
+    const overlayFontMonthPx = Math.max(6, Math.min(12, Math.min(cellInnerHeightPx * 0.4, innerWidth / 22)));
     const overlayFontWeekPx = Math.max(5, Math.min(10, overlayFontMonthPx * 0.82));
-    const barAxisTickPx = Math.max(8, Math.min(11, barChartHeight * 0.1));
 
-    const cells = heatmapG.selectAll(".heatmap-cell-group")
+    const heatmapCellsG = heatmapG.append("g").attr("transform", `translate(0, ${monthAxisBand})`);
+
+    const cells = heatmapCellsG.selectAll(".heatmap-cell-group")
       .data(heatmapData)
       .join("g")
       .attr("class", "heatmap-cell-group")
-      .attr("transform", d => `translate(${xScale(d.x0)}, ${yScaleHeatmap(d.y)})`);
+      .attr("transform", d => {
+        const xp = explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1);
+        return `translate(${xp.x}, ${hourRowTop(d.y)})`;
+      });
 
     cells.append("rect")
-      .attr("width", d => Math.max(1, xScale(d.x1) - xScale(d.x0) - 1)) // -1 for gap
-      .attr("height", cellHeight - 1) // -1 for gap
+      .attr("width", d =>
+        explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width
+      )
+      .attr("height", d => rowInnerHeight(d.y))
       .attr("rx", 2) // Smaller corner radius
       .attr("ry", 2)
       .style("fill", d => colorScale(d.value))
@@ -386,8 +400,8 @@ export function DataExplorer({
     // Overlay text for month and week aggregations if cells are large enough
     if (aggregation === 'month' || aggregation === 'week') {
       cells.append("text")
-        .attr("x", d => (xScale(d.x1) - xScale(d.x0)) / 2 - 0.5)
-        .attr("y", cellHeight / 2 - 0.5)
+        .attr("x", d => explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width / 2 - 0.5)
+        .attr("y", d => rowInnerHeight(d.y) / 2 - 0.5)
         .attr("dy", "0.35em")
         .attr("text-anchor", "middle")
         .style("fill", heatmapTextColor)
@@ -401,7 +415,11 @@ export function DataExplorer({
           const isHourMatch = d.y >= filter.startHour && d.y <= filter.endHour;
           return (isMonthMatch && isHourMatch) ? 1 : 0.2;
         })
-        .text(d => (xScale(d.x1) - xScale(d.x0)) > overlayMinWidth ? Math.round(d.value) : "");
+        .text(d =>
+          explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width > overlayMinWidth
+            ? Math.round(d.value)
+            : ""
+        );
     }
 
     // Add bounding box for the selected region
@@ -411,38 +429,42 @@ export function DataExplorer({
       const endDayData = [...data].reverse().find(d => d.month === filter.endMonth);
       const endDay = endDayData ? endDayData.dayOfYear + 1 : 366;
 
-      heatmapG.append("rect")
-        .attr("x", xScale(startDay))
-        .attr("y", yScaleHeatmap(filter.startHour))
-        .attr("width", xScale(endDay) - xScale(startDay))
-        .attr("height", yScaleHeatmap(filter.endHour + 1) - yScaleHeatmap(filter.startHour))
+      {
+        const span = explorerHeatmapSpanXPx(innerWidth, startDay, endDay);
+        heatmapCellsG.append("rect")
+        .attr("x", span.x)
+        .attr("y", hourRowTop(filter.startHour))
+        .attr("width", span.width)
+        .attr("height", hourRowTop(filter.endHour + 1) - hourRowTop(filter.startHour))
         .attr("fill", "none")
         .attr("stroke", "#1f2937") // Dark grey
         .attr("stroke-width", 3)
         .attr("rx", 2)
         .attr("ry", 2)
         .style("pointer-events", "none");
+      }
     }
 
-    // Heatmap Y Axis (Hours)
-    const formatHour = (h: number) => {
-      if (h === 0 || h === 24) return "12 AM";
+    const formatHourRow = (h: number) => {
+      if (h === 0) return "12 AM";
       if (h === 12) return "12 PM";
-      return h < 12 ? `${h} AM` : `${h - 12} PM`;
+      if (h < 12) return `${h} AM`;
+      return `${h - 12} PM`;
     };
-
-    const yAxisHeatmap = d3.axisLeft(yScaleHeatmap)
-      .tickValues(d3.range(0, 25, 1))
-      .tickFormat(d => formatHour(d as number));
-    
-    heatmapG.append("g")
-      .call(yAxisHeatmap)
-      .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", `2px`))
-      .call(g => g.selectAll(".tick line").attr("x2", innerWidth).style("stroke", theme === 'dark' ? '#374151' : '#e5e7eb').style("stroke-width", `1.5px`).attr("stroke-opacity", 0.5))
-      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `${heatmapHourAxisPx}px`));
-
-    // --- Bar/Line Chart ---
-    const barChartG = g.append("g");
+    heatmapCellsG.append("g")
+      .attr("class", "heatmap-hour-labels")
+      .attr("pointer-events", "none")
+      .selectAll("text")
+      .data(d3.range(0, 24))
+      .join("text")
+      .attr("x", -4)
+      .attr("y", h => hourRowCenter(h))
+      .attr("dominant-baseline", "middle")
+      .attr("text-anchor", "end")
+      .style("fill", heatmapTextColor)
+      .style("font-weight", "500")
+      .style("font-size", `${heatmapHourAxisPx}px`)
+      .text(h => formatHourRow(h));
 
     const isSelected = (d: any) => {
       const isMonthMatch = filter.startMonth <= filter.endMonth
@@ -531,6 +553,19 @@ export function DataExplorer({
     const pairLineData = aggregatedData.filter(
       d => d.valueSelected !== null && d.compareValueSelected !== null
     );
+
+    barChartG.append("g")
+      .attr("class", "explorer-bar-grid")
+      .attr("pointer-events", "none")
+      .selectAll("line")
+      .data(yScaleBar.ticks(5))
+      .join("line")
+      .attr("x1", 0)
+      .attr("x2", innerWidth)
+      .attr("y1", d => yScaleBar(d))
+      .attr("y2", d => yScaleBar(d))
+      .attr("stroke", explorerBarGridStroke(theme))
+      .attr("stroke-width", 1);
 
     if (showDifference && compareData) {
       // Draw Line Chart connecting dots
@@ -656,30 +691,30 @@ export function DataExplorer({
     const yAxisBar = d3.axisLeft(yScaleBar).ticks(5);
     barChartG.append("g")
       .call(yAxisBar)
-      .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
-      .call(g => g.selectAll(".tick line").attr("x2", innerWidth).style("stroke", theme === 'dark' ? '#374151' : '#e5e7eb').style("stroke-width", '1.5px').attr("stroke-opacity", 0.5))
-      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `${barAxisTickPx}px`));
+      .call(g => g.select(".domain").remove())
+      .call(g => g.selectAll(".tick line").remove())
+      .call(g => g.selectAll(".tick text").style("fill", heatmapTextColor).style("font-weight", "500").style("font-size", `${heatmapMonthAxisPx}px`));
 
-    // --- Shared X Axis ---
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const monthDays = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
-
-    const xAxis = d3.axisTop(xScale)
-      .tickValues(monthDays)
-      .tickFormat((_, i) => months[i]);
-
+    const monthCenters = explorerMonthLabelCenterDays();
     heatmapG.append("g")
-      .attr("transform", `translate(0, 0)`)
-      .call(xAxis)
-      .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
-      .call(g => g.selectAll(".tick line").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
-      .call(g => g.selectAll(".tick text").attr("x", (innerWidth / 12) / 2).attr("dy", "-0.5em").style("fill", heatmapTextColor).style("font-weight", "bold").style("font-size", `${heatmapMonthAxisPx}px`));
-
-    heatmapG.append("g")
-      .attr("transform", `translate(0, ${heatmapHeight})`)
-      .call(d3.axisBottom(xScale).tickValues(monthDays).tickFormat(() => ""))
-      .call(g => g.select(".domain").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'))
-      .call(g => g.selectAll(".tick line").style("stroke", theme === 'dark' ? '#6b7280' : '#4b5563').style("stroke-width", '2px'));
+      .attr("class", "explorer-month-labels")
+      .attr("pointer-events", "none")
+      .selectAll("text")
+      .data(
+        EXPLORER_MONTH_LABELS_SHORT.map((label, i) => ({
+          label,
+          cx: monthCenters[i]!,
+        }))
+      )
+      .join("text")
+      .attr("x", d => explorerHeatmapXOfDay(innerWidth, d.cx))
+      .attr("y", monthAxisBand / 2)
+      .attr("dominant-baseline", "middle")
+      .attr("text-anchor", "middle")
+      .style("fill", heatmapTextColor)
+      .style("font-weight", "500")
+      .style("font-size", `${heatmapMonthAxisPx}px`)
+      .text(d => d.label);
 
   }, [data, compareData, showDifference, variables, colorVar, gradientId, aggregation, gradients, filter, unitSystem, heatmapTextColor, theme, dimensions.width]);
 
@@ -768,6 +803,7 @@ export function DataExplorer({
                     onChange={setColorVar}
                     selectedLabel={colorVarDef.name}
                     theme={theme}
+                    fillRow={false}
                     domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                   >
                     {Object.entries(groupedVariables).map(([category, vars]) => (
@@ -860,7 +896,7 @@ export function DataExplorer({
                     onChange={setColorVar}
                     selectedLabel={colorVarDef.name}
                     theme={theme}
-                    variant={showDifference && diffFillColumn ? 'pill' : 'default'}
+                    fillRow={false}
                     domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                   >
                     {Object.entries(groupedVariables).map(([category, vars]) => (
@@ -1050,33 +1086,35 @@ export function DataExplorer({
           diffFillColumn ? 'py-0' : 'py-0.5'
         }`}
       >
-        <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+        <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
           <svg
             ref={svgRef}
             className="block h-full w-full max-h-full max-w-full"
-            preserveAspectRatio="xMidYMid meet"
+            preserveAspectRatio={pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'}
           />
         </div>
         {stackedComparison && compareData && (
-        <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+        <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
           <svg
             ref={compareSvgRef}
             className="block h-full w-full max-h-full max-w-full"
-            preserveAspectRatio="xMidYMid meet"
+            preserveAspectRatio={pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'}
           />
         </div>
         )}
-        <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
-          <InteractiveLegend
-            domId={tutorialLegendDomId}
-            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
-            gradientId={gradientId}
-            setGradientId={setGradientId}
-            gradients={gradients}
-            theme={theme}
-            isDifference={showDifference}
-          />
-        </div>
+        {!pairSuppressFooterLegend && (
+          <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
+            <InteractiveLegend
+              domId={tutorialLegendDomId}
+              variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
+              gradientId={gradientId}
+              setGradientId={setGradientId}
+              gradients={gradients}
+              theme={theme}
+              isDifference={showDifference}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

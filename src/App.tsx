@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { MapSelector } from './components/MapSelector';
 import { SunPath } from './components/SunPath';
 import { DataExplorer } from './components/DataExplorer';
@@ -12,59 +12,33 @@ import { WindRose } from './components/WindRose';
 import { UtciExplorer } from './components/UtciExplorer';
 import { GlobalFilterState } from './components/GlobalFilterPanel';
 import { SettingsModal } from './components/SettingsModal';
-import { SummaryStats } from './components/SummaryStats';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { SingleModeLayout } from './components/SingleModeLayout';
 import { ComparisonModeLayout } from './components/ComparisonModeLayout';
 import { TutorialLiveProvider } from './context/TutorialLiveContext';
 import { TutorialHeaderHints } from './components/tutorial/TutorialHeaderHints';
-import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Activity, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, ArrowLeftRight } from 'lucide-react';
+import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, ArrowLeftRight, Sparkles } from 'lucide-react';
 import { GRADIENTS } from './lib/constants';
 import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
-import { EPWDataRow, ParsedEPW } from './lib/epwParser';
+import { ParsedEPW } from './lib/epwParser';
+import {
+  exportFilenameLine,
+  weatherFileTypeLine,
+  weatherLocationTypeCaption,
+  weatherPlaceLine,
+} from './lib/weatherCaption';
 
-const SUMMARY_MONTH_LABELS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-] as const;
+const TUTORIAL_HOVER_HINTS_KEY = 'climate-compare-tutorial-hover-hints';
 
-function formatSummaryFilterMonths(f: GlobalFilterState): string {
-  const wrap = f.startMonth > f.endMonth;
-  return `${SUMMARY_MONTH_LABELS[f.startMonth - 1]} → ${SUMMARY_MONTH_LABELS[f.endMonth - 1]}${
-    wrap ? ' (wraps calendar year)' : ''
-  }`;
-}
-
-function formatSummaryFilterHours(f: GlobalFilterState): string {
-  return `${String(f.startHour).padStart(2, '0')}:00 → ${String(f.endHour).padStart(2, '0')}:59`;
-}
-
-function formatLocationLine(meta: ParsedEPW['metadata']): string {
-  const parts = [meta.city, meta.state, meta.country].filter(Boolean);
-  let s = parts.join(', ');
-  if (meta.wmo) s += `${s ? ' · ' : ''}WMO ${meta.wmo}`;
-  return s || '—';
-}
-
-function formatEpwTimestampSpan(data: EPWDataRow[] | undefined): string | null {
-  if (!data?.length) return null;
-  const a = data[0]?.date;
-  const b = data[data.length - 1]?.date;
-  if (!(a instanceof Date) || !(b instanceof Date)) return null;
-  const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
-  return `${a.toLocaleDateString(undefined, opts)} — ${b.toLocaleDateString(undefined, opts)}`;
+function readTutorialHoverHintsEnabled(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(TUTORIAL_HOVER_HINTS_KEY) !== 'false';
+  } catch {
+    return true;
+  }
 }
 
 /** Toolbar pictograms for single-mode dashboard layouts (stroke-only, rounded rects). */
@@ -141,6 +115,38 @@ function LayoutIconTutorial({ className }: { className?: string }) {
 
 export type ChartType = 'sunpath' | 'explorer' | 'wind' | 'windrose' | 'utci' | 'empty';
 export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep' | 'tutorial';
+
+const LAYOUT_PICKER: readonly {
+  mode: LayoutMode;
+  ariaLabel: string;
+  title: string;
+  Icon: typeof LayoutIconHeroLeft;
+}[] = [
+  {
+    mode: 'hero-left',
+    ariaLabel: 'Default layout — hero tile with supporting grid',
+    title: 'Default — hero with supporting tiles',
+    Icon: LayoutIconHeroLeft,
+  },
+  {
+    mode: 'grid-4x2',
+    ariaLabel: 'Grid layout — four by two tiles',
+    title: 'Grid — 4×2 tiles',
+    Icon: LayoutIconGrid4x2,
+  },
+  {
+    mode: 'focus-deep',
+    ariaLabel: 'Detail layout — two large tiles',
+    title: 'Detail — two large tiles',
+    Icon: LayoutIconFocusDeep,
+  },
+  {
+    mode: 'tutorial',
+    ariaLabel: 'Guided layout — one large card with explanations',
+    title: 'Guided — one card + tutorial panel',
+    Icon: LayoutIconTutorial,
+  },
+];
 
 export interface ChartConfig {
   id: string;
@@ -244,6 +250,8 @@ export interface CompareChartOpts {
   sunpathShared?: CompareSunpathSharedControls;
   /** Difference card: tighter padding / fill column */
   diffFillColumn?: boolean;
+  /** Compare pair row: omit per-pane footer legend (parent renders one shared strip). */
+  pairSuppressFooterLegend?: boolean;
 }
 
 export type UnitSystem = 'metric' | 'imperial';
@@ -265,8 +273,6 @@ export default function App() {
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [heatmapTextColor, setHeatmapTextColor] = useState<string>('#000000');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [showSummaryStats, setShowSummaryStats] = useState(false);
-  const summaryStatsRef = useRef<HTMLDivElement>(null);
   
   const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>({
     startMonth: 1,
@@ -287,7 +293,21 @@ export default function App() {
   const allGradients = useMemo(() => [...GRADIENTS, ...customGradients], [customGradients]);
 
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('hero-left');
+  const activeLayoutPick = useMemo(
+    () => LAYOUT_PICKER.find(o => o.mode === layoutMode) ?? LAYOUT_PICKER[0],
+    [layoutMode]
+  );
+  const ActiveLayoutIcon = activeLayoutPick.Icon;
+  const [tutorialHoverHints, setTutorialHoverHints] = useState(readTutorialHoverHintsEnabled);
   const [reorderMode, setReorderMode] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TUTORIAL_HOVER_HINTS_KEY, tutorialHoverHints ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
+  }, [tutorialHoverHints]);
   const [slots, setSlots] = useState<ChartConfig[]>([
     { id: 'sunpath-1', type: 'sunpath' },
     { id: 'explorer-1', type: 'explorer' },
@@ -324,16 +344,6 @@ export default function App() {
       next[b] = tmp;
       return next;
     });
-  }, []);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (summaryStatsRef.current && !summaryStatsRef.current.contains(event.target as Node)) {
-        setShowSummaryStats(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleAddGradient = () => {
@@ -452,6 +462,7 @@ export default function App() {
     const windRoseShared = compareOpts?.windRoseShared;
     const sunpathShared = compareOpts?.sunpathShared;
     const diffFillColumn = compareOpts?.diffFillColumn;
+    const pairSuppressFooterLegend = compareOpts?.pairSuppressFooterLegend;
 
     switch (chart.type) {
       case 'sunpath':
@@ -507,6 +518,7 @@ export default function App() {
             diffFillColumn={diffFillColumn}
             tutorialLegendDomId={tutorialLegendDomId}
             tutorialChromeAnchors={tutorialChromeAnchors}
+            pairSuppressFooterLegend={pairSuppressFooterLegend}
           />
         );
       case 'wind':
@@ -533,6 +545,7 @@ export default function App() {
             windShared={windShared}
             tutorialLegendDomId={tutorialLegendDomId}
             tutorialChromeAnchors={tutorialChromeAnchors}
+            pairSuppressFooterLegend={pairSuppressFooterLegend}
           />
         );
       case 'windrose':
@@ -559,6 +572,7 @@ export default function App() {
             windRoseShared={windRoseShared}
             tutorialLegendDomId={tutorialLegendDomId}
             tutorialChromeAnchors={tutorialChromeAnchors}
+            pairSuppressFooterLegend={pairSuppressFooterLegend}
           />
         );
       case 'utci':
@@ -584,6 +598,7 @@ export default function App() {
             utciShared={utciShared}
             tutorialLegendDomId={tutorialLegendDomId}
             tutorialChromeAnchors={tutorialChromeAnchors}
+            pairSuppressFooterLegend={pairSuppressFooterLegend}
           />
         );
       case 'empty':
@@ -620,9 +635,9 @@ export default function App() {
       {/* Top Navigation Bar */}
       <div
         id="tutorial-nav-bar"
-        className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-2 sm:px-4 py-2 flex items-center justify-between gap-2 shadow-sm transition-colors duration-300`}
+        className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-2 sm:px-4 py-1.5 flex items-center justify-between gap-2 shadow-sm transition-colors duration-300`}
       >
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <button 
             id="tutorial-nav-back"
             onClick={() => {
@@ -637,12 +652,14 @@ export default function App() {
           
           <div
             id="tutorial-nav-files"
-            className="flex items-center gap-1.5 sm:gap-2 min-w-0 overflow-x-auto hide-scrollbar py-1"
+            className="flex min-w-0 items-center gap-1.5 overflow-x-auto hide-scrollbar py-0.5 sm:gap-2"
           >
-            {selectedFiles.map((file, index) => (
+            {selectedFiles.map((file, index) => {
+              const fileTypeNote = weatherFileTypeLine(file);
+              return (
               <div 
                 key={index} 
-                className={`group flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border transition-all cursor-pointer shrink-0 ${
+                className={`group flex shrink-0 items-center gap-1 px-1.5 py-0.5 sm:gap-1.5 sm:px-2.5 sm:py-1 rounded-full border transition-all cursor-pointer ${
                   viewMode === 'single' && activeFileIndex === index 
                     ? (theme === 'dark'
                       ? 'bg-gray-600 border-gray-500 text-gray-100 shadow-sm z-10'
@@ -654,11 +671,34 @@ export default function App() {
                     setActiveFileIndex(index);
                   }
                 }}
+                title={
+                  [weatherLocationTypeCaption(file), file.sourceFilename].filter(Boolean).join('\n') ||
+                  undefined
+                }
               >
-                <MapPin className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${viewMode === 'single' && activeFileIndex === index ? (theme === 'dark' ? 'text-gray-200' : 'text-gray-600') : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')}`} />
-                <span className="text-xs sm:text-sm font-medium truncate max-w-[80px] sm:max-w-[150px]">
-                  {file.metadata.city}
-                </span>
+                <MapPin
+                  className={`h-2.5 w-2.5 shrink-0 sm:h-3 sm:w-3 ${viewMode === 'single' && activeFileIndex === index ? (theme === 'dark' ? 'text-gray-200' : 'text-gray-600') : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')}`}
+                />
+                <div className="flex max-w-[11rem] min-w-0 flex-col gap-0.5 text-left leading-none sm:max-w-[15rem]">
+                  <span className="truncate text-[10px] font-semibold leading-none sm:text-[11px]">
+                    {weatherPlaceLine(file) || file.metadata.city}
+                  </span>
+                  {fileTypeNote ? (
+                    <span
+                      className={`truncate text-[9px] font-medium leading-none tracking-wide sm:text-[10px] ${
+                        viewMode === 'single' && activeFileIndex === index
+                          ? theme === 'dark'
+                            ? 'text-gray-300'
+                            : 'text-gray-600'
+                          : theme === 'dark'
+                            ? 'text-gray-400'
+                            : 'text-gray-500'
+                      }`}
+                    >
+                      {fileTypeNote}
+                    </span>
+                  ) : null}
+                </div>
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -674,24 +714,25 @@ export default function App() {
                     setDifferenceBaselineIndex(0);
                     setDifferenceCompareIndex(1);
                   }}
-                  className={`ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-red-500/10 hover:text-red-500 ${viewMode === 'single' && activeFileIndex === index ? (theme === 'dark' ? 'text-gray-300' : 'text-gray-500') : 'text-gray-400'}`}
+                  className={`ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-red-500/10 hover:text-red-500 ${viewMode === 'single' && activeFileIndex === index ? (theme === 'dark' ? 'text-gray-300' : 'text-gray-500') : 'text-gray-400'}`}
                   title="Remove file"
                 >
-                  <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                  <X className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
                 </button>
               </div>
-            ))}
+              );
+            })}
             <button
               id="tutorial-nav-add"
               onClick={() => setIsSelectingFile(true)}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-dashed text-xs sm:text-sm font-medium transition-colors shrink-0 ${theme === 'dark' ? 'border-gray-600 text-gray-400 hover:text-gray-200 hover:border-gray-400' : 'border-gray-300 text-gray-500 hover:text-gray-700 hover:border-gray-400'}`}
+              className={`flex shrink-0 items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[11px] ${theme === 'dark' ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200' : 'border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700'}`}
             >
-              <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Add
+              <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Add
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink min-w-0">
+        <div className="flex shrink min-w-0 items-center justify-end gap-1 sm:gap-2">
           {selectedFiles.length > 1 && (
             <div
               id="tutorial-nav-viewmode"
@@ -726,103 +767,71 @@ export default function App() {
             </div>
           )}
 
+          {viewMode === 'single' && layoutMode === 'tutorial' && (
+            <button
+              type="button"
+              id="tutorial-nav-hover-hints"
+              role="switch"
+              aria-checked={tutorialHoverHints}
+              aria-label={tutorialHoverHints ? 'Deactivate tool tips' : 'Activate tool tips'}
+              onClick={() => setTutorialHoverHints(v => !v)}
+              title={tutorialHoverHints ? 'Deactivate tool tips' : 'Activate tool tips'}
+              className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:gap-1.5 sm:px-2.5 ${
+                tutorialHoverHints
+                  ? theme === 'dark'
+                    ? 'border-sky-700/70 bg-sky-950/40 text-sky-200 hover:bg-sky-900/35'
+                    : 'border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100'
+                  : theme === 'dark'
+                    ? 'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    : 'border-gray-200 bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />
+              <span className="hidden min-[380px]:inline">Tips</span>
+            </button>
+          )}
+
           {viewMode === 'single' && (
             <div
               id="tutorial-nav-layouts"
-              className={`inline-flex h-9 shrink-0 items-stretch gap-0.5 rounded-full border p-0.5 sm:h-10 ${
+              className={`group/layout-pick inline-flex h-9 shrink-0 items-stretch rounded-full border p-0.5 sm:h-10 ${
                 theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100 shadow-hard-sm'
               }`}
               role="group"
               aria-label="Dashboard layout"
             >
-              <button
-                type="button"
-                onClick={() => setLayoutMode('hero-left')}
-                aria-label="Default layout — hero tile with supporting grid"
-                title="Default — hero with supporting tiles"
-                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
-                  layoutMode === 'hero-left'
-                    ? theme === 'dark'
-                      ? 'bg-gray-600 text-gray-100 shadow-sm'
-                      : 'bg-white text-gray-900 shadow-sm'
-                    : theme === 'dark'
-                      ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
-                      : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
+              <div className="flex shrink-0 gap-0.5 overflow-hidden transition-[max-width] duration-300 ease-out motion-reduce:transition-none max-w-0 opacity-0 pointer-events-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[11rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[11rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[12rem] sm:group-focus-within/layout-pick:max-w-[12rem]">
+                {LAYOUT_PICKER.filter(o => o.mode !== layoutMode).map(({ mode, ariaLabel, title, Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setLayoutMode(mode)}
+                    aria-label={ariaLabel}
+                    title={title}
+                    className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
+                      theme === 'dark'
+                        ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
+                        : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
+                    }`}
+                  >
+                    <Icon className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
+                  </button>
+                ))}
+              </div>
+              <div
+                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 sm:min-w-10 sm:px-2.5 ${
+                  theme === 'dark' ? 'bg-gray-600 text-gray-100 shadow-sm' : 'bg-white text-gray-900 shadow-sm'
                 }`}
+                title={activeLayoutPick.title}
+                aria-current="true"
+                aria-label={activeLayoutPick.ariaLabel}
               >
-                <LayoutIconHeroLeft className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayoutMode('grid-4x2')}
-                aria-label="Grid layout — four by two tiles"
-                title="Grid — 4×2 tiles"
-                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
-                  layoutMode === 'grid-4x2'
-                    ? theme === 'dark'
-                      ? 'bg-gray-600 text-gray-100 shadow-sm'
-                      : 'bg-white text-gray-900 shadow-sm'
-                    : theme === 'dark'
-                      ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
-                      : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
-                }`}
-              >
-                <LayoutIconGrid4x2 className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayoutMode('focus-deep')}
-                aria-label="Detail layout — two large tiles"
-                title="Detail — two large tiles"
-                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
-                  layoutMode === 'focus-deep'
-                    ? theme === 'dark'
-                      ? 'bg-gray-600 text-gray-100 shadow-sm'
-                      : 'bg-white text-gray-900 shadow-sm'
-                    : theme === 'dark'
-                      ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
-                      : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
-                }`}
-              >
-                <LayoutIconFocusDeep className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayoutMode('tutorial')}
-                aria-label="Guided layout — one large card with explanations"
-                title="Guided — one card + tutorial panel"
-                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
-                  layoutMode === 'tutorial'
-                    ? theme === 'dark'
-                      ? 'bg-gray-600 text-gray-100 shadow-sm'
-                      : 'bg-white text-gray-900 shadow-sm'
-                    : theme === 'dark'
-                      ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
-                      : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
-                }`}
-              >
-                <LayoutIconTutorial className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
-              </button>
+                <ActiveLayoutIcon className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
+              </div>
             </div>
           )}
 
           <div className={`h-5 sm:h-6 w-px mx-0.5 sm:mx-1 hidden xs:block shrink-0 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
-
-          {!exportMode && (
-            <button
-              id="tutorial-nav-reorder"
-              type="button"
-              onClick={() => setReorderMode(v => !v)}
-              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${
-                reorderMode
-                  ? (theme === 'dark' ? 'bg-blue-900/40 border-blue-900/50 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-700')
-                  : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')
-              }`}
-              title="Reorder cards"
-            >
-              <ArrowLeftRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          )}
 
           {exportMode ? (
             <div
@@ -866,172 +875,47 @@ export default function App() {
                 <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
-          ) : (
-            <>
-              <div className="relative" id="tutorial-nav-summary" ref={summaryStatsRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowSummaryStats(!showSummaryStats)}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
-                  title="Overall averages"
-                >
-                  <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-                {showSummaryStats && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4" onClick={() => setShowSummaryStats(false)}>
-                    <div
-                      className={`w-full max-w-[min(96vw,1120px)] max-h-[min(90vh,720px)] overflow-y-auto rounded-xl border p-4 shadow-hard-xl sm:p-5 ${
-                        theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
-                      }`}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div className="mb-4 flex items-start justify-between gap-3">
-                        <h3 className={`text-base font-semibold sm:text-lg ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          Overall averages
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={() => setShowSummaryStats(false)}
-                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full p-0 ${theme === 'dark' ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
+          ) : null}
 
-                      <div
-                        className={`mb-5 space-y-4 rounded-lg border p-3 sm:p-4 ${
-                          theme === 'dark' ? 'border-gray-600 bg-gray-900/50' : 'border-gray-200 bg-gray-50'
-                        }`}
-                      >
-                        <div>
-                          <div
-                            className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-                          >
-                            {selectedFiles.length > 1 && showDifference ? 'Baseline location' : 'Location'}
-                          </div>
-                          <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {formatLocationLine(selectedFiles[0].metadata)}
-                          </div>
-                          {selectedFiles[0].metadata.source ? (
-                            <div
-                              className={`mt-1 break-all text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}
-                              title={selectedFiles[0].metadata.source}
-                            >
-                              Source: {selectedFiles[0].metadata.source}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        {selectedFiles.length > 1 && showDifference && selectedFiles[1] ? (
-                          <div>
-                            <div
-                              className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-orange-300' : 'text-orange-700'}`}
-                            >
-                              Comparison location
-                            </div>
-                            <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>
-                              {formatLocationLine(selectedFiles[1].metadata)}
-                            </div>
-                            {selectedFiles[1].metadata.source ? (
-                              <div
-                                className={`mt-1 break-all text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}
-                                title={selectedFiles[1].metadata.source}
-                              >
-                                Source: {selectedFiles[1].metadata.source}
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        <div
-                          className={`grid gap-4 border-t border-dashed pt-3 sm:grid-cols-2 ${
-                            theme === 'dark' ? 'border-gray-600' : 'border-gray-300'
-                          }`}
-                        >
-                          <div>
-                            <div
-                              className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-                            >
-                              Months in filter
-                            </div>
-                            <div className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
-                              {formatSummaryFilterMonths(globalFilter)}
-                            </div>
-                          </div>
-                          <div>
-                            <div
-                              className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-                            >
-                              Hours of day
-                            </div>
-                            <div className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
-                              {formatSummaryFilterHours(globalFilter)}
-                            </div>
-                          </div>
-                          {formatEpwTimestampSpan(selectedFiles[0].data) ? (
-                            <div className="sm:col-span-2">
-                              <div
-                                className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-                              >
-                                EPW calendar span (file)
-                              </div>
-                              <div className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
-                                {formatEpwTimestampSpan(selectedFiles[0].data)}
-                              </div>
-                            </div>
-                          ) : null}
-                          <div className="sm:col-span-2">
-                            <div
-                              className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-                            >
-                              Dashboard mode
-                            </div>
-                            <div className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
-                              {viewMode === 'comparison'
-                                ? showDifference
-                                  ? 'Comparison · averages use baseline with difference overlay where applicable'
-                                  : 'Comparison'
-                                : 'Single file'}
-                              {unitSystem === 'imperial' ? ' · Units: imperial' : ' · Units: metric'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <SummaryStats
-                        data={selectedFiles[0].data}
-                        compareData={showDifference ? selectedFiles[1]?.data : undefined}
-                        showDifference={showDifference}
-                        variables={selectedFiles[0].variables}
-                        filter={globalFilter}
-                        unitSystem={unitSystem}
-                        theme={theme}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <button
-                id="tutorial-nav-export"
-                type="button"
-                onClick={() => setExportMode(true)}
-                className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
-                title="Export layout"
-              >
-                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            </>
-          )}
-
-          <button
-            id="tutorial-nav-settings"
-            type="button"
-            onClick={() => setShowSettingsModal(true)}
-            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
-            title="Global settings"
+          <div
+            className={`inline-flex shrink-0 flex-row-reverse items-center gap-1 ${!exportMode ? 'group/nav-more' : ''}`}
           >
-            <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
-          </button>
+            <button
+              id="tutorial-nav-settings"
+              type="button"
+              onClick={() => setShowSettingsModal(true)}
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+              title="Global settings"
+            >
+              <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
+            </button>
+            {!exportMode && (
+              <div className="flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 transition-[max-width] duration-300 ease-out motion-reduce:transition-none pointer-events-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem]">
+                <button
+                  id="tutorial-nav-reorder"
+                  type="button"
+                  onClick={() => setReorderMode(v => !v)}
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${
+                    reorderMode
+                      ? (theme === 'dark' ? 'bg-blue-900/40 border-blue-900/50 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-700')
+                      : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')
+                  }`}
+                  title="Reorder cards"
+                >
+                  <ArrowLeftRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                  id="tutorial-nav-export"
+                  type="button"
+                  onClick={() => setExportMode(true)}
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                  title="Export layout"
+                >
+                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </div>
+            )}
+          </div>
 
         </div>
       </div>
@@ -1133,6 +1017,24 @@ export default function App() {
         style={{ backgroundColor: exportMode ? '#ffffff' : (theme === 'dark' ? '#121211' : '#f9f8f6') }}
       >
         <div className={`max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-4 flex-1 min-h-0 flex flex-col w-full ${exportMode ? 'bg-white' : ''}`}>
+          {exportMode && selectedFiles.length > 0 ? (
+            <header className="mb-4 w-full shrink-0 border-b border-gray-200 pb-4">
+              <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                Weather data files
+              </h2>
+              <div className="flex flex-col gap-2">
+                {selectedFiles.map((f, i) => (
+                  <p
+                    key={i}
+                    className="break-all font-mono text-[11px] leading-snug text-gray-900"
+                  >
+                    {exportFilenameLine(f)}
+                  </p>
+                ))}
+              </div>
+            </header>
+          ) : null}
+
           {showSettingsModal && (
             <SettingsModal
               isOpen={showSettingsModal}
@@ -1159,6 +1061,8 @@ export default function App() {
                 onCompareIndex={setDifferenceCompareIndex}
                 exportMode={exportMode}
                 theme={theme}
+                unitSystem={unitSystem}
+                gradients={allGradients}
                 renderChart={(config, baseline, compare, showDiff, stacked, opts) =>
                   renderChartForFile(config, baseline, compare, showDiff, stacked, opts)
                 }
@@ -1172,6 +1076,7 @@ export default function App() {
                 exportMode={exportMode}
                 theme={theme}
                 reorderMode={reorderMode}
+                tutorialHoverHints={tutorialHoverHints}
                 tutorialEpwRows={selectedFiles[activeFileIndex]?.data}
                 tutorialFilter={globalFilter}
                 tutorialUnitSystem={unitSystem}

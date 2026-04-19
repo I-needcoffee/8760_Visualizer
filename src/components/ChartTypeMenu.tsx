@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { ChartType } from '../App';
-import { Sun, BarChart3, ThermometerSun, Wind, Radar } from 'lucide-react';
+import { Sun, BarChart3, ThermometerSun, Wind } from 'lucide-react';
+import { WindRoseGlyph } from './WindRoseGlyph';
 
 const LABELS: Record<ChartType, string> = {
   sunpath: 'Sun Path',
@@ -15,7 +16,7 @@ const ICON: Record<ChartType, React.ComponentType<{ className?: string }>> = {
   explorer: BarChart3,
   utci: ThermometerSun,
   wind: Wind,
-  windrose: Radar,
+  windrose: WindRoseGlyph,
   empty: BarChart3,
 };
 

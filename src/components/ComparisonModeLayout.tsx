@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { EPWVariable, ParsedEPW } from '../lib/epwParser';
+import { weatherLocationTypeCaption } from '../lib/weatherCaption';
 import type {
   ChartConfig,
   ChartType,
@@ -10,8 +11,17 @@ import type {
   CompareUtciSharedControls,
   CompareWindSharedControls,
   CompareWindRoseSharedControls,
+  UnitSystem,
 } from '../App';
+import { variableLegendDomain } from '../lib/variableLegendDomain';
 import { GRADIENTS } from '../lib/constants';
+import type { GradientDef } from './InteractiveLegend';
+import { InteractiveLegend } from './InteractiveLegend';
+import {
+  UtciCategoryLegendStrip,
+  UtciComfortTimeLegendStrip,
+  UTCI_LEGEND_FONT_SCALE,
+} from './UtciExplorer';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { AggregationToolbar } from './AggregationToolbar';
 import { VariableChartSelect } from './VariableChartSelect';
@@ -32,6 +42,24 @@ interface ComparisonModeLayoutProps {
     stacked: boolean,
     opts?: CompareChartOpts
   ) => React.ReactNode;
+  unitSystem: UnitSystem;
+  gradients: GradientDef[];
+}
+
+/** Same pattern as `SunPath`: measure the left chart pane and size/center the footer legend strip. */
+function useLegendTrackWidthFromLeftPane() {
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  const [legendTrackPx, setLegendTrackPx] = useState<number | null>(null);
+  useEffect(() => {
+    const el = leftPaneRef.current;
+    if (!el) return;
+    const read = () => setLegendTrackPx(Math.max(0, Math.round(el.getBoundingClientRect().width)));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { leftPaneRef, legendTrackPx };
 }
 
 function PillSelect({
@@ -102,8 +130,8 @@ function PillSelect({
         >
           {options.map((f, i) => (
             <option key={i} value={i} className="bg-white text-gray-900">
-              {f.metadata.city}
-              {f.metadata.state ? `, ${f.metadata.state}` : ''}
+              {weatherLocationTypeCaption(f) ||
+                `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}`}
             </option>
           ))}
         </select>
@@ -183,6 +211,8 @@ export function ComparisonModeLayout({
   exportMode,
   theme,
   renderChart,
+  unitSystem,
+  gradients,
 }: ComparisonModeLayoutProps) {
   const baseline = files[baselineIndex];
   const compare = files[compareIndex];
@@ -313,7 +343,32 @@ export function ComparisonModeLayout({
   const windColorDef = baseline.variables.find(v => v.id === windVar) || baseline.variables[0];
   const roseColorDef = baseline.variables.find(v => v.id === roseVar) || baseline.variables[0];
 
+  const explorerPairLegend = useMemo(
+    () =>
+      variableLegendDomain(baseline.variables, expVar, unitSystem, false, baseline.data, undefined),
+    [baseline.variables, baseline.data, expVar, unitSystem]
+  );
+  const windPairLegend = useMemo(
+    () =>
+      variableLegendDomain(baseline.variables, windVar, unitSystem, false, baseline.data, undefined),
+    [baseline.variables, baseline.data, windVar, unitSystem]
+  );
+  const rosePairLegend = useMemo(
+    () =>
+      variableLegendDomain(baseline.variables, roseVar, unitSystem, false, baseline.data, undefined),
+    [baseline.variables, baseline.data, roseVar, unitSystem]
+  );
+
+  const utciPairUnit = unitSystem === 'imperial' ? '°F' : '°C';
+  const utciPairGradMin = unitSystem === 'imperial' ? -40 * (9 / 5) + 32 : -40;
+  const utciPairGradMax = unitSystem === 'imperial' ? 50 * (9 / 5) + 32 : 50;
+
   const noopType = (_t: ChartType) => {};
+
+  const explorerLegendTrack = useLegendTrackWidthFromLeftPane();
+  const utciLegendTrack = useLegendTrackWidthFromLeftPane();
+  const windLegendTrack = useLegendTrackWidthFromLeftPane();
+  const roseLegendTrack = useLegendTrackWidthFromLeftPane();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4">
@@ -378,6 +433,7 @@ export function ComparisonModeLayout({
                 onChange={setSunColorVar}
                 selectedLabel={sunColorDef.name}
                 theme={theme}
+                fillRow={false}
               >
                 {(Object.entries(baselineGrouped) as [string, EPWVariable[]][]).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -394,6 +450,7 @@ export function ComparisonModeLayout({
                 onChange={setSunRadiusVar}
                 selectedLabel={sunRadiusDef.name}
                 theme={theme}
+                fillRow={false}
               >
                 {(Object.entries(baselineGrouped) as [string, EPWVariable[]][]).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -464,7 +521,7 @@ export function ComparisonModeLayout({
           )}
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -485,6 +542,7 @@ export function ComparisonModeLayout({
                 onChange={setExpVar}
                 selectedLabel={expColorDef.name}
                 theme={theme}
+                fillRow={false}
               >
                 {(Object.entries(baselineGrouped) as [string, EPWVariable[]][]).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -540,43 +598,71 @@ export function ComparisonModeLayout({
               </div>
             </div>
           </PairSharedToolbar>
-          <div className="flex flex-1 min-h-0 flex-col divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart(
-                { id: 'cmp-explorer-l', type: 'explorer', variable: 'dryBulbTemperature' },
-                baseline,
-                undefined,
-                false,
-                false,
-                {
-                  comparePane: 'primary',
-                  paneCity: baseline.metadata.city,
-                  pairSuppressHeader: true,
-                  pairModalHost: true,
-                  explorerShared,
-                }
-              )}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+              <div
+                ref={explorerLegendTrack.leftPaneRef}
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
+              >
+                {renderChart(
+                  { id: 'cmp-explorer-l', type: 'explorer', variable: 'dryBulbTemperature' },
+                  baseline,
+                  undefined,
+                  false,
+                  false,
+                  {
+                    comparePane: 'primary',
+                    paneCity: baseline.metadata.city,
+                    pairSuppressHeader: true,
+                    pairModalHost: true,
+                    pairSuppressFooterLegend: true,
+                    explorerShared,
+                  }
+                )}
+              </div>
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]">
+                {renderChart(
+                  { id: 'cmp-explorer-r', type: 'explorer', variable: 'dryBulbTemperature' },
+                  compare,
+                  undefined,
+                  false,
+                  false,
+                  {
+                    comparePane: 'secondary',
+                    paneCity: compare.metadata.city,
+                    pairSuppressHeader: true,
+                    pairModalHost: false,
+                    pairSuppressFooterLegend: true,
+                    explorerShared,
+                  }
+                )}
+              </div>
             </div>
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart(
-                { id: 'cmp-explorer-r', type: 'explorer', variable: 'dryBulbTemperature' },
-                compare,
-                undefined,
-                false,
-                false,
-                {
-                  comparePane: 'secondary',
-                  paneCity: compare.metadata.city,
-                  pairSuppressHeader: true,
-                  pairModalHost: false,
-                  explorerShared,
-                }
-              )}
+            <div
+              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              style={
+                explorerLegendTrack.legendTrackPx != null
+                  ? { width: explorerLegendTrack.legendTrackPx }
+                  : undefined
+              }
+            >
+              <InteractiveLegend
+                variable={{
+                  ...explorerPairLegend.colorVarDef,
+                  min: explorerPairLegend.cMin,
+                  max: explorerPairLegend.cMax,
+                  unit: explorerPairLegend.cUnit,
+                }}
+                gradientId={expGrad}
+                setGradientId={setExpGrad}
+                gradients={gradients}
+                theme={theme}
+              />
             </div>
           </div>
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -636,29 +722,64 @@ export function ComparisonModeLayout({
               </div>
             </div>
           </PairSharedToolbar>
-          <div className="flex flex-1 min-h-0 flex-col divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart({ id: 'cmp-utci-l', type: 'utci' }, baseline, undefined, false, false, {
-                comparePane: 'primary',
-                paneCity: baseline.metadata.city,
-                pairSuppressHeader: true,
-                pairModalHost: true,
-                utciShared,
-              })}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+              <div
+                ref={utciLegendTrack.leftPaneRef}
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
+              >
+                {renderChart({ id: 'cmp-utci-l', type: 'utci' }, baseline, undefined, false, false, {
+                  comparePane: 'primary',
+                  paneCity: baseline.metadata.city,
+                  pairSuppressHeader: true,
+                  pairModalHost: true,
+                  pairSuppressFooterLegend: true,
+                  utciShared,
+                })}
+              </div>
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]">
+                {renderChart({ id: 'cmp-utci-r', type: 'utci' }, compare, undefined, false, false, {
+                  comparePane: 'secondary',
+                  paneCity: compare.metadata.city,
+                  pairSuppressHeader: true,
+                  pairModalHost: false,
+                  pairSuppressFooterLegend: true,
+                  utciShared,
+                })}
+              </div>
             </div>
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart({ id: 'cmp-utci-r', type: 'utci' }, compare, undefined, false, false, {
-                comparePane: 'secondary',
-                paneCity: compare.metadata.city,
-                pairSuppressHeader: true,
-                pairModalHost: false,
-                utciShared,
-              })}
+            <div
+              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              style={
+                utciLegendTrack.legendTrackPx != null ? { width: utciLegendTrack.legendTrackPx } : undefined
+              }
+            >
+              {utciColorMode === 'categories' ? (
+                <UtciCategoryLegendStrip theme={theme} />
+              ) : utciColorMode === 'gradient' ? (
+                <InteractiveLegend
+                  variable={{
+                    id: 'utci',
+                    name: 'UTCI',
+                    unit: utciPairUnit,
+                    min: utciPairGradMin,
+                    max: utciPairGradMax,
+                    category: 'Comfort',
+                  }}
+                  gradientId={utciGrad}
+                  setGradientId={setUtciGrad}
+                  gradients={gradients}
+                  theme={theme}
+                  fontScale={UTCI_LEGEND_FONT_SCALE}
+                />
+              ) : (
+                <UtciComfortTimeLegendStrip theme={theme} />
+              )}
             </div>
           </div>
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -679,6 +800,7 @@ export function ComparisonModeLayout({
                 onChange={setWindVar}
                 selectedLabel={windColorDef.name}
                 theme={theme}
+                fillRow={false}
               >
                 {(Object.entries(baselineGrouped) as [string, EPWVariable[]][]).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -734,29 +856,55 @@ export function ComparisonModeLayout({
               </div>
             </div>
           </PairSharedToolbar>
-          <div className="flex flex-1 min-h-0 flex-col divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart({ id: 'cmp-wind-l', type: 'wind' }, baseline, undefined, false, false, {
-                comparePane: 'primary',
-                paneCity: baseline.metadata.city,
-                pairSuppressHeader: true,
-                pairModalHost: true,
-                windShared,
-              })}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+              <div
+                ref={windLegendTrack.leftPaneRef}
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
+              >
+                {renderChart({ id: 'cmp-wind-l', type: 'wind' }, baseline, undefined, false, false, {
+                  comparePane: 'primary',
+                  paneCity: baseline.metadata.city,
+                  pairSuppressHeader: true,
+                  pairModalHost: true,
+                  pairSuppressFooterLegend: true,
+                  windShared,
+                })}
+              </div>
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]">
+                {renderChart({ id: 'cmp-wind-r', type: 'wind' }, compare, undefined, false, false, {
+                  comparePane: 'secondary',
+                  paneCity: compare.metadata.city,
+                  pairSuppressHeader: true,
+                  pairModalHost: false,
+                  pairSuppressFooterLegend: true,
+                  windShared,
+                })}
+              </div>
             </div>
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart({ id: 'cmp-wind-r', type: 'wind' }, compare, undefined, false, false, {
-                comparePane: 'secondary',
-                paneCity: compare.metadata.city,
-                pairSuppressHeader: true,
-                pairModalHost: false,
-                windShared,
-              })}
+            <div
+              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              style={
+                windLegendTrack.legendTrackPx != null ? { width: windLegendTrack.legendTrackPx } : undefined
+              }
+            >
+              <InteractiveLegend
+                variable={{
+                  ...windPairLegend.colorVarDef,
+                  min: windPairLegend.cMin,
+                  max: windPairLegend.cMax,
+                  unit: windPairLegend.cUnit,
+                }}
+                gradientId={windGrad}
+                setGradientId={setWindGrad}
+                gradients={gradients}
+                theme={theme}
+              />
             </div>
           </div>
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -777,6 +925,7 @@ export function ComparisonModeLayout({
                 onChange={setRoseVar}
                 selectedLabel={roseColorDef.name}
                 theme={theme}
+                fillRow={false}
               >
                 {(Object.entries(baselineGrouped) as [string, EPWVariable[]][]).map(([category, vars]) => (
                   <optgroup key={category} label={category}>
@@ -823,24 +972,50 @@ export function ComparisonModeLayout({
               </button>
             </div>
           </PairSharedToolbar>
-          <div className="flex flex-1 min-h-0 flex-col divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart({ id: 'cmp-rose-l', type: 'windrose' }, baseline, undefined, false, false, {
-                comparePane: 'primary',
-                paneCity: baseline.metadata.city,
-                pairSuppressHeader: true,
-                pairModalHost: true,
-                windRoseShared,
-              })}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+              <div
+                ref={roseLegendTrack.leftPaneRef}
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
+              >
+                {renderChart({ id: 'cmp-rose-l', type: 'windrose' }, baseline, undefined, false, false, {
+                  comparePane: 'primary',
+                  paneCity: baseline.metadata.city,
+                  pairSuppressHeader: true,
+                  pairModalHost: true,
+                  pairSuppressFooterLegend: true,
+                  windRoseShared,
+                })}
+              </div>
+              <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]">
+                {renderChart({ id: 'cmp-rose-r', type: 'windrose' }, compare, undefined, false, false, {
+                  comparePane: 'secondary',
+                  paneCity: compare.metadata.city,
+                  pairSuppressHeader: true,
+                  pairModalHost: false,
+                  pairSuppressFooterLegend: true,
+                  windRoseShared,
+                })}
+              </div>
             </div>
-            <div className="min-h-[220px] min-w-0 flex-1 md:min-h-[260px]">
-              {renderChart({ id: 'cmp-rose-r', type: 'windrose' }, compare, undefined, false, false, {
-                comparePane: 'secondary',
-                paneCity: compare.metadata.city,
-                pairSuppressHeader: true,
-                pairModalHost: false,
-                windRoseShared,
-              })}
+            <div
+              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              style={
+                roseLegendTrack.legendTrackPx != null ? { width: roseLegendTrack.legendTrackPx } : undefined
+              }
+            >
+              <InteractiveLegend
+                variable={{
+                  ...rosePairLegend.colorVarDef,
+                  min: rosePairLegend.cMin,
+                  max: rosePairLegend.cMax,
+                  unit: rosePairLegend.cUnit,
+                }}
+                gradientId={roseGrad}
+                setGradientId={setRoseGrad}
+                gradients={gradients}
+                theme={theme}
+              />
             </div>
           </div>
         </CompareCardShell>

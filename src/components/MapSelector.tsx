@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMar
 import 'leaflet/dist/leaflet.css';
 import { Search, Upload, ExternalLink, Database, CloudLightning, Info, Loader2 } from 'lucide-react';
 import L from 'leaflet';
-import { parseEPW, ParsedEPW } from '../lib/epwParser';
+import { parseEPW, ParsedEPW, attachParsedEpwSource } from '../lib/epwParser';
 import JSZip from 'jszip';
 import { get, set } from 'idb-keyval';
 
@@ -47,11 +47,292 @@ interface EPWLocation {
   filename?: string;
 }
 
+/** One downloadable EPW at a map pin (e.g. TMY3 vs TMY2 for the same airport). */
+interface EPWFileVariant {
+  id: string;
+  url?: string;
+  epwData?: string;
+  filename: string;
+  /** Short label for buttons: TMY3, TMY2, TMYX2011, … */
+  label: string;
+  /** Relative to OneBuilding USA index (state folder + zip name). Loaded via zip extract. */
+  oneBuildingZipPath?: string;
+}
+
+/** Stations merged when multiple catalog rows describe the same site (WMO/WBAN id or same coordinates). */
+interface EPWMapGroup {
+  id: string;
+  lat: number;
+  lng: number;
+  /** Human-readable place title for the popup header */
+  displayName: string;
+  variants: EPWFileVariant[];
+  isFuture?: boolean;
+  /** `USA_OR_….AP.726980` — matches OneBuilding zip naming for extra datasets. */
+  catalogStationKey?: string;
+}
+
+const ONE_BUILDING_USA_INDEX =
+  'https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/index.html';
+
+const ONE_BUILDING_USA_ZIP_PREFIX =
+  'https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/';
+
+interface OneBuildingZipEntry {
+  relPath: string;
+  label: string;
+  suffix: string;
+}
+
 function epwBasenameFromUrl(url?: string): string {
   if (!url) return '';
   const path = url.split('?')[0];
   const seg = path.split('/').pop();
   return seg || '';
+}
+
+const FILE_TYPE_SUFFIX_RE =
+  /_(TMYX\d{4}|TMYX|TMYx\.\d{4}-\d{4}|TMYx|TMY3|TMY2|TMY|IWEC|WYEC2|WYEC|TRY|US\.Normals\.\d{4}-\d{4})$/i;
+
+/** Extracts TMY3 / TMY2 / TMYX2011 / … from an EnergyPlus-style basename. */
+function fileTypeLabelFromBasename(basename: string): string {
+  const base = basename.replace(/\.epw$/i, '');
+  const m = base.match(FILE_TYPE_SUFFIX_RE);
+  if (m) {
+    const s = m[1];
+    if (/^TMYx\.\d{4}-\d{4}$/i.test(s)) return `TMYx ${s.slice(5)}`;
+    if (/^US\.Normals\./i.test(s)) return s.replace(/^US\.Normals\./i, 'Normals ');
+    return s.toUpperCase();
+  }
+  const tail = base.split('_').pop();
+  if (tail && tail.length <= 14 && !/^\d{6}$/.test(tail)) return tail.toUpperCase();
+  return 'EPW';
+}
+
+function roundCoord(n: number, places = 6): number {
+  const f = 10 ** places;
+  return Math.round(n * f) / f;
+}
+
+/** Prefer "City, ST" from USA_XX_City… or CAN_XX_… basename; else shorten title. */
+function displayNameFromGroup(arr: EPWLocation[]): string {
+  const first = arr[0];
+  const basename = first.filename || epwBasenameFromUrl(first.url) || '';
+  if (basename) {
+    let s = basename.replace(/\.epw$/i, '');
+    s = s.replace(FILE_TYPE_SUFFIX_RE, '');
+    const us = s.match(/^USA_([A-Z]{2})_(.+)$/i);
+    if (us) {
+      const city = us[2]
+        .replace(/\./g, ' ')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return `${city}, ${us[1].toUpperCase()}`;
+    }
+    const ca = s.match(/^CAN_([A-Z]{2})_(.+)$/i);
+    if (ca) {
+      const city = ca[2]
+        .replace(/\./g, ' ')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return `${city}, ${ca[1].toUpperCase()}`;
+    }
+  }
+  const t = first.name?.trim() || 'Weather station';
+  if (t.length > 56) return `${t.slice(0, 54)}…`;
+  return t;
+}
+
+function locationToVariant(loc: EPWLocation): EPWFileVariant {
+  const filename = loc.filename || epwBasenameFromUrl(loc.url) || 'unknown.epw';
+  return {
+    id: loc.id,
+    url: loc.url,
+    epwData: loc.epwData,
+    filename,
+    label: fileTypeLabelFromBasename(filename),
+  };
+}
+
+/** Station id line in `USA_ST_City…AP.726980` form — matches OneBuilding zip basenames. */
+function catalogStationKeyFromBasename(basename: string): string | null {
+  const b = basename.replace(/\.(epw|zip)$/i, '');
+  if (!/^USA_/i.test(b)) return null;
+  const m = b.match(/^(.+\.\d{6})_/);
+  return m?.[1] ?? null;
+}
+
+function humanizeObSuffix(suffix: string): string {
+  if (suffix === 'TMY3') return 'TMY3';
+  if (suffix === 'TMY2') return 'TMY2';
+  if (suffix === 'TMY') return 'TMY';
+  if (suffix === 'TMYx') return 'TMYx (full)';
+  if (suffix.startsWith('TMYx.')) return `TMYx ${suffix.slice(5)}`;
+  if (suffix.startsWith('US.Normals.')) return suffix.replace(/^US\.Normals\./, 'Normals ');
+  return suffix;
+}
+
+/** Parses the monolithic OneBuilding USA index HTML for `STATE/USA_….zip` links. */
+function parseOneBuildingUsaIndexHtml(html: string): Map<string, OneBuildingZipEntry[]> {
+  const map = new Map<string, OneBuildingZipEntry[]>();
+  const re = /href="([^"]+\.zip)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const rel = m[1].replace(/&amp;/g, '&');
+    const file = rel.split('/').pop() || '';
+    if (!file.startsWith('USA_')) continue;
+    const base = file.replace(/\.zip$/i, '');
+    const sm = base.match(/^(.+\.\d{6})_(.+)$/);
+    if (!sm) continue;
+    const stationKey = sm[1];
+    const suffix = sm[2];
+    const label = humanizeObSuffix(suffix);
+    const arr = map.get(stationKey) ?? [];
+    arr.push({ relPath: rel, label, suffix });
+    map.set(stationKey, arr);
+  }
+  for (const [k, arr] of map) {
+    const byPath = new Map(arr.map(x => [x.relPath, x]));
+    map.set(
+      k,
+      [...byPath.values()].sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+      )
+    );
+  }
+  return map;
+}
+
+function mergeOneBuildingIntoGroup(
+  group: EPWMapGroup,
+  obMap: Map<string, OneBuildingZipEntry[]> | null
+): EPWMapGroup {
+  if (group.isFuture || !obMap || !group.catalogStationKey) return group;
+  const obList = obMap.get(group.catalogStationKey);
+  if (!obList?.length) return group;
+  const byLabel = new Map<string, EPWFileVariant>();
+  for (const ob of obList) {
+    byLabel.set(ob.label, {
+      id: `ob-${group.catalogStationKey}-${ob.suffix}`,
+      filename: ob.relPath.split('/').pop()!,
+      label: ob.label,
+      oneBuildingZipPath: ob.relPath,
+    });
+  }
+  for (const v of group.variants) {
+    if (!byLabel.has(v.label)) byLabel.set(v.label, v);
+  }
+  const variants = [...byLabel.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+  );
+  return { ...group, variants };
+}
+
+/** Lower tier = preferred default when opening a pin (TMY3 → TMY2 → TMY → …). */
+function variantDefaultTier(v: EPWFileVariant): number {
+  const base = (v.filename || '').replace(/\.(epw|zip)$/i, '');
+  const m = base.match(FILE_TYPE_SUFFIX_RE);
+  const sufRaw = m?.[1] ?? '';
+  const sufU = sufRaw.toUpperCase();
+  const lab = v.label.trim().toUpperCase();
+
+  if (sufU === 'TMY3' || lab === 'TMY3') return 0;
+  if (sufU === 'TMY2' || lab === 'TMY2') return 1;
+  if (
+    (sufU === 'TMY' || lab === 'TMY') &&
+    !/^TMYX/i.test(sufU) &&
+    !lab.startsWith('TMYX')
+  )
+    return 2;
+  if (/^IWEC$/i.test(sufRaw) || lab === 'IWEC') return 3;
+  if (/^WYEC2?$/i.test(sufRaw) || /^WYEC/.test(lab)) return 3;
+  if (/TMYX|TMYx/i.test(sufRaw) || /TMYx|TMYX/i.test(v.label)) return 4;
+  if (/NORMALS|US\.NORMALS/i.test(sufRaw) || /NORMALS/i.test(lab)) return 5;
+  if (sufU === 'TRY' || lab === 'TRY') return 6;
+  return 7;
+}
+
+function pickDefaultVariant(variants: EPWFileVariant[]): EPWFileVariant {
+  const first = variants[0];
+  if (!first) throw new Error('pickDefaultVariant: empty variants');
+  if (variants.length === 1) return first;
+  return [...variants].sort((a, b) => {
+    const da = variantDefaultTier(a);
+    const db = variantDefaultTier(b);
+    if (da !== db) return da - db;
+    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+  })[0]!;
+}
+
+function otherVariantsSorted(defaultV: EPWFileVariant, variants: EPWFileVariant[]): EPWFileVariant[] {
+  return variants
+    .filter(v => v.id !== defaultV.id)
+    .sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+    );
+}
+
+/**
+ * USA-style EPW names embed `…_727930_TMY3` before the extension — same id groups TMY2/TMY3 rows even when
+ * GeoJSON coordinates differ slightly between files. Otherwise fall back to rounded lat/lng.
+ */
+function extractStationIdFromBasename(basename: string): string | null {
+  const base = basename.replace(/\.epw$/i, '');
+  const m = base.match(
+    /[._](\d{6})_(?:TMYX\d{4}|TMYX|TMYx\.\d{4}-\d{4}|TMYx|TMY3|TMY2|TMY|IWEC|WYEC2|WYEC|TRY)$/i
+  );
+  return m?.[1] ?? null;
+}
+
+function groupingKeyForLocation(loc: EPWLocation): string | null {
+  const basename = loc.filename || epwBasenameFromUrl(loc.url) || '';
+  const sid = basename ? extractStationIdFromBasename(basename) : null;
+  if (sid) return `sid:${sid}`;
+  if (typeof loc.lat !== 'number' || !Number.isFinite(loc.lat)) return null;
+  if (typeof loc.lng !== 'number' || !Number.isFinite(loc.lng)) return null;
+  return `ll:${roundCoord(loc.lat)},${roundCoord(loc.lng)}`;
+}
+
+/** Merges catalog rows for the same station (id in filename preferred; else coordinates). */
+function groupLocationsByCoordinates(locs: EPWLocation[]): EPWMapGroup[] {
+  const map = new Map<string, EPWLocation[]>();
+  for (const loc of locs) {
+    const key = groupingKeyForLocation(loc);
+    if (!key) continue;
+    const bucket = map.get(key) ?? [];
+    bucket.push(loc);
+    map.set(key, bucket);
+  }
+
+  const groups: EPWMapGroup[] = [];
+  for (const [mergeKey, arr] of map) {
+    const byUrl = new Map<string, EPWFileVariant>();
+    for (const loc of arr) {
+      const v = locationToVariant(loc);
+      const dedupeKey = v.url || v.epwData || v.id;
+      if (!byUrl.has(dedupeKey)) byUrl.set(dedupeKey, v);
+    }
+    const variants = [...byUrl.values()].sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+    );
+    if (variants.length === 0) continue;
+    const lat = arr[0].lat;
+    const lng = arr[0].lng;
+    const primaryBasename =
+      variants[0]?.filename || epwBasenameFromUrl(arr[0].url || '') || '';
+    groups.push({
+      id: `grp-${mergeKey.replace(/:/g, '-')}`,
+      lat,
+      lng,
+      displayName: displayNameFromGroup(arr),
+      variants,
+      isFuture: arr.some(l => l.isFuture),
+      catalogStationKey: catalogStationKeyFromBasename(primaryBasename) || undefined,
+    });
+  }
+  return groups;
 }
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -66,20 +347,20 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
-function nearestStationsFromPoint(
-  locations: EPWLocation[],
+function nearestGroupsFromPoint(
+  groups: EPWMapGroup[],
   lat: number,
   lng: number,
   count: number
-): EPWLocation[] {
-  const valid = locations.filter(
-    l =>
-      typeof l.lat === 'number' &&
-      !isNaN(l.lat) &&
-      isFinite(l.lat) &&
-      typeof l.lng === 'number' &&
-      !isNaN(l.lng) &&
-      isFinite(l.lng)
+): EPWMapGroup[] {
+  const valid = groups.filter(
+    g =>
+      typeof g.lat === 'number' &&
+      !isNaN(g.lat) &&
+      isFinite(g.lat) &&
+      typeof g.lng === 'number' &&
+      !isNaN(g.lng) &&
+      isFinite(g.lng)
   );
   return [...valid]
     .sort(
@@ -97,12 +378,12 @@ interface MapSelectorProps {
 }
 
 // Component to handle bounding box filtering
-function MapBoundsListener({ 
-  locations, 
-  setVisibleLocations 
-}: { 
-  locations: EPWLocation[], 
-  setVisibleLocations: (locs: EPWLocation[]) => void 
+function MapBoundsListener({
+  groups,
+  setVisibleGroups,
+}: {
+  groups: EPWMapGroup[];
+  setVisibleGroups: (g: EPWMapGroup[]) => void;
 }) {
   const map = useMapEvents({
     moveend: () => {
@@ -121,16 +402,16 @@ function MapBoundsListener({
       // Add a small buffer to the bounds
       const paddedBounds = bounds.pad(0.1);
       
-      const visible = locations.filter(loc => {
+      const visible = groups.filter(loc => {
         if (typeof loc.lat !== 'number' || isNaN(loc.lat) || !isFinite(loc.lat) ||
             typeof loc.lng !== 'number' || isNaN(loc.lng) || !isFinite(loc.lng)) {
           return false;
         }
         return paddedBounds.contains([loc.lat, loc.lng]);
       });
-      
+
       // Limit to 500 markers to prevent browser freeze
-      setVisibleLocations(visible.slice(0, 500));
+      setVisibleGroups(visible.slice(0, 500));
     } catch (e) {
       console.warn("Error updating visible locations:", e);
     }
@@ -139,7 +420,7 @@ function MapBoundsListener({
   // Initial update
   useEffect(() => {
     updateVisible();
-  }, [locations]);
+  }, [groups]);
 
   return null;
 }
@@ -222,7 +503,12 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
   const [locations, setLocations] = useState<EPWLocation[]>([]);
   const [futureLocations, setFutureLocations] = useState<EPWLocation[]>([]);
   const [showFuture, setShowFuture] = useState(false);
-  const [visibleLocations, setVisibleLocations] = useState<EPWLocation[]>([]);
+  const [visibleGroups, setVisibleGroups] = useState<EPWMapGroup[]>([]);
+  /** Parsed OneBuilding USA index — many `.zip` datasets per US station (TMYx windows, normals, …). */
+  const [usaObZipByStation, setUsaObZipByStation] = useState<Map<
+    string,
+    OneBuildingZipEntry[]
+  > | null>(null);
   const [loadingDb, setLoadingDb] = useState(true);
   const [searchPin, setSearchPin] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -439,12 +725,44 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     return showFuture ? futureLocations : locations;
   }, [showFuture, futureLocations, locations]);
 
+  const activeGroups = useMemo(
+    () => groupLocationsByCoordinates(activeLocations),
+    [activeLocations]
+  );
+
+  const activeGroupsWithOneBuilding = useMemo(
+    () => activeGroups.map(g => mergeOneBuildingIntoGroup(g, usaObZipByStation)),
+    [activeGroups, usaObZipByStation]
+  );
+
+  useEffect(() => {
+    if (showFuture) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/proxy-epw?url=${encodeURIComponent(ONE_BUILDING_USA_INDEX)}`
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        if (cancelled) return;
+        setUsaObZipByStation(parseOneBuildingUsaIndexHtml(html));
+      } catch (e) {
+        console.warn('Could not load Climate.OneBuilding USA file listing:', e);
+        if (!cancelled) setUsaObZipByStation(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showFuture]);
+
   const handleLocationSearch = async () => {
     const q = search.trim();
     if (!q) return;
     setErrorMsg(null);
 
-    if (activeLocations.length === 0) {
+    if (activeGroupsWithOneBuilding.length === 0) {
       setErrorMsg(
         showFuture
           ? 'Add a future-weather ZIP (or sample), or switch to Historical to search the global catalog.'
@@ -468,7 +786,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
         setErrorMsg('Unexpected geocoding response.');
         return;
       }
-      const nearest = nearestStationsFromPoint(activeLocations, lat, lon, 2);
+      const nearest = nearestGroupsFromPoint(activeGroupsWithOneBuilding, lat, lon, 2);
       if (nearest.length === 0) {
         setErrorMsg('No stations found near that place in the current dataset.');
         return;
@@ -493,45 +811,80 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     }
   };
 
-  const handleSampleSelect = async (loc: EPWLocation) => {
+  const handleVariantSelect = async (group: EPWMapGroup, variant: EPWFileVariant) => {
+    const loc: EPWLocation = {
+      id: variant.id,
+      name: group.displayName,
+      lat: group.lat,
+      lng: group.lng,
+      url: variant.url,
+      epwData: variant.epwData,
+      isFuture: group.isFuture,
+      filename: variant.filename,
+    };
     setLoading(true);
     setErrorMsg(null);
     try {
       if (loc.epwData) {
         const parsed = parseEPW(loc.epwData);
-        
+        attachParsedEpwSource(
+          parsed,
+          loc.filename || 'weather.epw',
+          variant.label
+        );
+
         // If this is a future location and we are NOT selecting a comparison yet,
         // try to find a baseline (e.g. 2020 or historical) in the same dataset to default the comparison
         if (!isSelectingCompare && loc.filename) {
-          // Extract base name (e.g. city/state part)
           const baseName = loc.name.split('(')[0].trim();
-          const otherYears = futureLocations.filter(f => 
-            f.id !== loc.id && 
-            f.name.startsWith(baseName)
+          const otherYears = futureLocations.filter(
+            f => f.id !== loc.id && f.name.startsWith(baseName)
           );
-          
+
           if (otherYears.length > 0) {
-            // Prefer 2020 or historical if available
-            const baseline = otherYears.find(f => f.filename?.includes('2020') || f.filename?.includes('2005')) || otherYears[0];
+            const baseline =
+              otherYears.find(f => f.filename?.includes('2020') || f.filename?.includes('2005')) ||
+              otherYears[0];
             if (baseline.epwData) {
               const parsedBaseline = parseEPW(baseline.epwData);
+              attachParsedEpwSource(
+                parsedBaseline,
+                baseline.filename || 'baseline.epw',
+                fileTypeLabelFromBasename(baseline.filename || '')
+              );
               onSelect(parsed, parsedBaseline);
               return;
             }
           }
         }
-        
+
+        onSelect(parsed);
+      } else if (variant.oneBuildingZipPath) {
+        const fullUrl = `${ONE_BUILDING_USA_ZIP_PREFIX}${variant.oneBuildingZipPath}`;
+        const response = await fetch(`/api/proxy-binary?url=${encodeURIComponent(fullUrl)}`);
+        if (!response.ok) throw new Error('Failed to download weather archive');
+        const buf = await response.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        const epwEntry = Object.entries(zip.files).find(
+          ([name, f]) => !f.dir && name.toLowerCase().endsWith('.epw')
+        );
+        if (!epwEntry) throw new Error('No EPW file found in zip archive');
+        const text = await epwEntry[1].async('string');
+        const parsed = parseEPW(text);
+        const innerBase = epwEntry[0].split('/').pop() || variant.filename;
+        attachParsedEpwSource(parsed, innerBase, variant.label);
         onSelect(parsed);
       } else if (loc.url) {
         const response = await fetch(`/api/proxy-epw?url=${encodeURIComponent(loc.url)}`);
-        if (!response.ok) throw new Error("Failed to fetch EPW file");
+        if (!response.ok) throw new Error('Failed to fetch EPW file');
         const text = await response.text();
         const parsed = parseEPW(text);
+        attachParsedEpwSource(parsed, variant.filename || epwBasenameFromUrl(loc.url), variant.label);
         onSelect(parsed);
       }
     } catch (error) {
       console.error(error);
-      setErrorMsg("Failed to load weather file. The file might be unavailable.");
+      setErrorMsg('Failed to load weather file. The file might be unavailable.');
     } finally {
       setLoading(false);
     }
@@ -548,6 +901,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       try {
         const text = event.target?.result as string;
         const parsed = parseEPW(text);
+        attachParsedEpwSource(parsed, file.name, fileTypeLabelFromBasename(file.name));
         onSelect(parsed);
       } catch (error) {
         console.error(error);
@@ -602,7 +956,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             )}
             <input
               type="text"
-              placeholder={`City, airport, landmark — Enter to zoom (${activeLocations.length || '…'} ${showFuture ? 'future' : 'global'} stations)`}
+              placeholder={`City, airport, landmark — Enter to zoom (${activeGroupsWithOneBuilding.length || '…'} ${showFuture ? 'future' : 'global'} stations)`}
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => {
@@ -742,7 +1096,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             />
-            <MapBoundsListener locations={activeLocations} setVisibleLocations={setVisibleLocations} />
+            <MapBoundsListener groups={activeGroupsWithOneBuilding} setVisibleGroups={setVisibleGroups} />
 
             {searchPin &&
               Number.isFinite(searchPin.lat) &&
@@ -759,29 +1113,74 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
                 />
               )}
 
-            {visibleLocations.map((loc) => {
-              if (typeof loc.lat !== 'number' || isNaN(loc.lat) || !isFinite(loc.lat) ||
-                  typeof loc.lng !== 'number' || isNaN(loc.lng) || !isFinite(loc.lng)) {
+            {visibleGroups.map(group => {
+              if (typeof group.lat !== 'number' || isNaN(group.lat) || !isFinite(group.lat) ||
+                  typeof group.lng !== 'number' || isNaN(group.lng) || !isFinite(group.lng)) {
                 return null;
               }
+              const defaultVariant = pickDefaultVariant(group.variants);
+              const alternateVariants = otherVariantsSorted(defaultVariant, group.variants);
+              const hasAlternates = alternateVariants.length > 0;
+              const btnBase =
+                'rounded-full text-xs font-semibold transition-colors shadow-hard-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
+              const btnHistorical = `${btnBase} bg-[#3388ff] text-white hover:bg-[#2d7de0] focus-visible:ring-[#3388ff]`;
+              const btnFuture = `${btnBase} bg-orange-600 text-white hover:bg-orange-700 focus-visible:ring-orange-400`;
+              const btnClass = group.isFuture ? btnFuture : btnHistorical;
+              const selectBase =
+                'max-w-[min(11rem,calc(85vw-8rem))] rounded-full border border-gray-200 bg-white py-2 pl-2.5 pr-7 text-xs font-semibold text-gray-800 shadow-hard-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
+                (group.isFuture
+                  ? 'focus-visible:ring-orange-400 border-orange-100'
+                  : 'focus-visible:ring-[#3388ff]');
               return (
-                <Marker key={loc.id} position={[loc.lat, loc.lng]} icon={loc.isFuture ? futureIcon : smallIcon}>
+                <Marker key={group.id} position={[group.lat, group.lng]} icon={group.isFuture ? futureIcon : smallIcon}>
                   <Popup className="rounded-2xl">
-                    <div className="p-2 text-center max-w-[200px]">
-                      <h3 className="font-semibold text-gray-900 break-words">{loc.name}</h3>
-                      <p className="text-xs text-gray-500 mb-3 mt-1">
-                        {loc.isFuture ? 'Future Weather Projection' : 'EnergyPlus Weather Database'}
+                    <div
+                      className={`p-2 text-center ${hasAlternates ? 'max-w-[min(280px,85vw)]' : 'max-w-[220px]'}`}
+                    >
+                      <h3 className="font-semibold leading-snug text-gray-900 line-clamp-3">
+                        {group.displayName}
+                      </h3>
+                      <p className="mb-2 mt-1 text-[11px] text-gray-500">
+                        {group.isFuture ? 'Future weather projection' : 'EnergyPlus weather database'}
                       </p>
-                      <button
-                        onClick={() => handleSampleSelect(loc)}
-                        className={`${
-                          loc.isFuture
-                            ? 'bg-orange-600 hover:bg-orange-700'
-                            : 'bg-[#3388ff] hover:bg-[#2d7de0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3388ff] focus-visible:ring-offset-2'
-                        } text-white px-4 py-2 rounded-full text-sm font-medium transition-colors w-full shadow-hard-sm`}
-                      >
-                        Load Data
-                      </button>
+                      {!group.isFuture && group.variants.some(v => !!v.oneBuildingZipPath) ? (
+                        <p className="mb-2 text-[10px] leading-snug text-slate-500">
+                          Extra formats from{' '}
+                          <span className="whitespace-nowrap">climate.onebuilding.org</span> via Load other….
+                        </p>
+                      ) : null}
+                      <div className="flex flex-nowrap items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void handleVariantSelect(group, defaultVariant)}
+                          className={`${btnClass} shrink-0 px-3 py-2 text-sm font-medium`}
+                          title={defaultVariant.filename}
+                        >
+                          Load {defaultVariant.label}
+                        </button>
+                        {hasAlternates ? (
+                          <select
+                            className={`${selectBase} min-w-0 shrink`}
+                            aria-label="Load other weather file formats"
+                            defaultValue=""
+                            onChange={e => {
+                              const id = e.target.value;
+                              const el = e.currentTarget;
+                              if (!id) return;
+                              const v = group.variants.find(x => x.id === id);
+                              if (v) void handleVariantSelect(group, v);
+                              el.value = '';
+                            }}
+                          >
+                            <option value="">Load other…</option>
+                            {alternateVariants.map(v => (
+                              <option key={v.id} value={v.id}>
+                                {v.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </div>
                     </div>
                   </Popup>
                 </Marker>
