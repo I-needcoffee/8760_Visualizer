@@ -133,7 +133,7 @@ export function SingleModeLayout({
 
     return (
       <div
-        key={slot.id || idx}
+        key={`${layoutMode}-${slot.id || `slot-${globalIndex}`}`}
         className={`${baseClass} relative ${dragRing} ${slot.type === 'empty' ? '!overflow-visible' : ''}`}
         style={{ contain: 'layout style' }}
         onDragOver={e => onDragOver(e, globalIndex)}

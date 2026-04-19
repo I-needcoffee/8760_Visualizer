@@ -155,6 +155,54 @@ export interface ChartConfig {
   variable?: string;
 }
 
+/** Default slot line-up per dashboard layout; ids are layout-prefixed so React charts do not reuse state across layouts. */
+function defaultSlotsForLayout(mode: LayoutMode): ChartConfig[] {
+  const ex = (suffix: string, variable?: string): ChartConfig =>
+    variable
+      ? { id: `ex-${mode}-${suffix}`, type: 'explorer', variable }
+      : { id: `ex-${mode}-${suffix}`, type: 'explorer' };
+
+  switch (mode) {
+    case 'tutorial':
+      return [{ id: `sp-${mode}-0`, type: 'sunpath' }];
+    case 'focus-deep':
+      return [
+        { id: `sp-${mode}-0`, type: 'sunpath' },
+        { id: `ex-${mode}-dn`, type: 'explorer', variable: 'directNormalRadiation' },
+      ];
+    case 'grid-4x2':
+      return [
+        { id: `sp-${mode}-0`, type: 'sunpath' },
+        ex('a'),
+        { id: `ut-${mode}-0`, type: 'utci' },
+        { id: `wd-${mode}-0`, type: 'wind' },
+        ex('b', 'directNormalRadiation'),
+        ex('c', 'relativeHumidity'),
+        { id: `wr-${mode}-0`, type: 'windrose' },
+        { id: `em-${mode}-0`, type: 'empty' },
+      ];
+    case 'hero-left':
+      return [
+        { id: `sp-${mode}-0`, type: 'sunpath' },
+        ex('a'),
+        { id: `ut-${mode}-0`, type: 'utci' },
+        { id: `wd-${mode}-0`, type: 'wind' },
+        ex('b', 'directNormalRadiation'),
+        ex('c', 'relativeHumidity'),
+        { id: `wr-${mode}-0`, type: 'windrose' },
+      ];
+  }
+}
+
+function initialSlotsByLayout(): Record<LayoutMode, ChartConfig[]> {
+  return {
+    'hero-left': defaultSlotsForLayout('hero-left'),
+    'grid-4x2': defaultSlotsForLayout('grid-4x2'),
+    'focus-deep': defaultSlotsForLayout('focus-deep'),
+    tutorial: defaultSlotsForLayout('tutorial'),
+  };
+}
+
 export type CompareAggregation = 'hour' | 'day' | 'week' | 'month';
 
 /** Shared explorer controls lifted to compare layout (one header, two panes). */
@@ -308,43 +356,51 @@ export default function App() {
       /* ignore */
     }
   }, [tutorialHoverHints]);
-  const [slots, setSlots] = useState<ChartConfig[]>([
-    { id: 'sunpath-1', type: 'sunpath' },
-    { id: 'explorer-1', type: 'explorer' },
-    { id: 'utci-1', type: 'utci' },
-    { id: 'wind-1', type: 'wind' },
-    { id: 'explorer-2', type: 'explorer', variable: 'directNormalRadiation' },
-    { id: 'explorer-3', type: 'explorer', variable: 'relativeHumidity' },
-    { id: 'windrose-1', type: 'windrose' }
-  ]);
-  const handleChangeType = useCallback((id: string, newType: ChartType) => {
-    setSlots(prev => prev.map(s => s.id === id ? { ...s, type: newType } : s));
-  }, []);
+  const [slotsByLayout, setSlotsByLayout] = useState<Record<LayoutMode, ChartConfig[]>>(initialSlotsByLayout);
+  const slots = slotsByLayout[layoutMode];
 
-  const handleRemoveChart = useCallback((id: string) => {
-    setSlots(prev => {
-      const i = prev.findIndex(s => s.id === id);
-      if (i === -1) return prev;
-      const next = [...prev];
-      next[i] = { id: `empty-${Date.now()}`, type: 'empty' };
-      return next;
-    });
-  }, []);
+  const handleChangeType = useCallback(
+    (id: string, newType: ChartType) => {
+      setSlotsByLayout(prev => ({
+        ...prev,
+        [layoutMode]: (prev[layoutMode] ?? []).map(s => (s.id === id ? { ...s, type: newType } : s)),
+      }));
+    },
+    [layoutMode]
+  );
 
-  const swapSlotsByIndex = useCallback((a: number, b: number) => {
-    if (a === b) return;
-    const max = Math.max(a, b);
-    const min = Math.min(a, b);
-    if (min < 0) return;
-    setSlots(prev => {
-      const next = [...prev];
-      while (next.length <= max) next.push({ id: `slot-${Date.now()}-${next.length}`, type: 'empty' });
-      const tmp = next[a];
-      next[a] = next[b];
-      next[b] = tmp;
-      return next;
-    });
-  }, []);
+  const handleRemoveChart = useCallback(
+    (id: string) => {
+      setSlotsByLayout(prev => {
+        const cur = [...(prev[layoutMode] ?? [])];
+        const i = cur.findIndex(s => s.id === id);
+        if (i === -1) return prev;
+        const next = [...cur];
+        next[i] = { id: `empty-${Date.now()}`, type: 'empty' };
+        return { ...prev, [layoutMode]: next };
+      });
+    },
+    [layoutMode]
+  );
+
+  const swapSlotsByIndex = useCallback(
+    (a: number, b: number) => {
+      if (a === b) return;
+      const max = Math.max(a, b);
+      const min = Math.min(a, b);
+      if (min < 0) return;
+      setSlotsByLayout(prev => {
+        const cur = [...(prev[layoutMode] ?? [])];
+        const next = [...cur];
+        while (next.length <= max) next.push({ id: `slot-${Date.now()}-${next.length}`, type: 'empty' });
+        const tmp = next[a];
+        next[a] = next[b]!;
+        next[b] = tmp!;
+        return { ...prev, [layoutMode]: next };
+      });
+    },
+    [layoutMode]
+  );
 
   const handleAddGradient = () => {
     if (newGradientName && newGradientColors.length >= 2) {
@@ -1098,11 +1154,11 @@ export default function App() {
                   );
                 }}
                 onSelectSlotType={(idx, type) => {
-                  setSlots(prev => {
-                    const next = [...prev];
-                    while (next.length <= idx) next.push({ id: `slot-${Date.now()}-${next.length}`, type: 'empty' });
-                    next[idx].type = type;
-                    return next;
+                  setSlotsByLayout(prev => {
+                    const cur = [...(prev[layoutMode] ?? [])];
+                    while (cur.length <= idx) cur.push({ id: `slot-${Date.now()}-${cur.length}`, type: 'empty' });
+                    cur[idx] = { ...cur[idx]!, type };
+                    return { ...prev, [layoutMode]: cur };
                   });
                 }}
                 onSwapSlots={swapSlotsByIndex}
