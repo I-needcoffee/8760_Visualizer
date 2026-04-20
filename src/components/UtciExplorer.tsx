@@ -421,6 +421,14 @@ export function UtciExplorer({
     return val;
   };
   const utciUnit = unitSystem === 'imperial' ? '°F' : '°C';
+  const utciLegendTitle =
+    showDifference && compareData
+      ? `Δ UTCI (${utciUnit})`
+      : colorMode === 'gradient'
+        ? `UTCI (${utciUnit})`
+        : colorMode === 'categories'
+          ? 'Stress categories'
+          : 'Time in comfort zone';
 
   const { utciMin, utciMax } = useMemo(() => {
     if (showDifference && compareData) {
@@ -1148,9 +1156,9 @@ export function UtciExplorer({
                   <span
                     id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                     className={`min-w-0 flex-1 truncate text-[10px] font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
-                    title="Outdoor Comfort"
+                    title={`Outdoor Comfort · ${utciLegendTitle}`}
                   >
-                    Outdoor Comfort
+                    Outdoor Comfort · {utciLegendTitle}
                   </span>
                 </div>
                 {onRemove && (
