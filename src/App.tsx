@@ -670,7 +670,7 @@ export default function App() {
     return (
       <div
         className="h-screen w-screen overflow-hidden font-sans relative"
-        style={{ backgroundColor: CARTO_LIGHT_ALL_WATER_HEX }}
+        style={{ backgroundColor: '#fcfbf8' }}
       >
         {isSelectingFile && selectedFiles.length > 0 && (
           <button 
@@ -695,7 +695,7 @@ export default function App() {
       className={`h-screen w-screen overflow-hidden flex flex-col font-sans transition-colors duration-300 ${
         theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
       }`}
-      style={theme === 'dark' ? undefined : { backgroundColor: '#fcfcfc' }}
+      style={theme === 'dark' ? undefined : { backgroundColor: '#fcfbf8' }}
     >
       <div id="tutorial-header-dock" className="relative z-20 flex shrink-0 flex-col">
       {/* Top Navigation Bar */}
@@ -1078,13 +1078,13 @@ export default function App() {
         className={`flex-1 min-h-0 flex flex-col relative transition-colors duration-500 ${
           selectedFiles.length >= 2 && viewMode === 'comparison' && !exportMode
             ? 'overflow-hidden'
-            : 'overflow-y-auto'
+            : 'overflow-hidden'
         } ${exportMode ? 'bg-white' : ''}`}
         style={{
-          backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : CARTO_LIGHT_ALL_WATER_HEX,
+          backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : '#fcfbf8',
         }}
       >
-        <div className={`max-w-[1600px] mx-auto p-2 sm:p-3 lg:p-4 flex-1 min-h-0 flex flex-col w-full ${exportMode ? 'bg-white' : ''}`}>
+        <div className={`max-w-[1600px] mx-auto p-1.5 sm:p-2.5 lg:p-3 flex-1 min-h-0 flex flex-col w-full overflow-hidden ${exportMode ? 'bg-white' : ''}`}>
           {exportMode && selectedFiles.length > 0 ? (
             <header className="mb-4 w-full shrink-0 border-b border-gray-200 pb-4">
               <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">
