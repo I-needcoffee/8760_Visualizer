@@ -159,7 +159,11 @@ export function SingleModeLayout({
         )}
         {slot.type === 'empty' ? (
           <div className={reorderChrome ? 'grayscale opacity-80 transition-[filter,opacity] duration-200' : ''}>
-            <EmptySlot onSelectType={type => onSelectSlotType(globalIndex, type)} theme={theme} />
+            <EmptySlot
+              exportMode={exportMode}
+              onSelectType={type => onSelectSlotType(globalIndex, type)}
+              theme={theme}
+            />
           </div>
         ) : (
           <div className={`min-h-0 flex-1 flex flex-col overflow-hidden ${chartReorderDim}`}>{renderChart(slot)}</div>
@@ -285,7 +289,19 @@ const EMPTY_SLOT_CHOICES: { type: ChartType; label: string; Icon: EmptySlotIcon 
   { type: 'windrose', label: 'Wind Rose', Icon: WindRoseGlyph },
 ];
 
-function EmptySlot({ onSelectType, theme }: { onSelectType: (t: ChartType) => void; theme: 'light' | 'dark' }) {
+function EmptySlot({
+  onSelectType,
+  theme,
+  exportMode,
+}: {
+  onSelectType: (t: ChartType) => void;
+  theme: 'light' | 'dark';
+  exportMode: boolean;
+}) {
+  if (exportMode) {
+    return <div className="h-full min-h-0 min-w-0 w-full flex-1 bg-transparent" aria-hidden />;
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col px-2 py-1.5 sm:px-2.5 sm:py-2">
       <div

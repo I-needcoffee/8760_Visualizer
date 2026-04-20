@@ -12,6 +12,8 @@ import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
+import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
+import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 
 interface WindRoseProps {
   data: EPWDataRow[];
@@ -59,6 +61,11 @@ export function WindRose({
   const [iGrad, setIGrad] = useState(gradients[0].id);
   const gradientId = windRoseShared?.gradientId ?? iGrad;
   const setGradientId = windRoseShared?.setGradientId ?? setIGrad;
+
+  useEffect(() => {
+    const id = defaultGradientIdForVariable(colorVar, variables, gradients);
+    setGradientId(id);
+  }, [colorVar, variables, gradients, setGradientId]);
 
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = windRoseShared?.showSettings ?? iShowSettings;
@@ -214,15 +221,15 @@ export function WindRose({
 
     const gradientDef = gradients.find(g => g.id === gradientId) || gradients[0];
     
-    let colorScale: any;
+    let colorScale: (v: number) => string;
     if (showDifference && compareData) {
-      colorScale = d3.scaleLinear<string>()
+      const diffScale = d3
+        .scaleLinear<string>()
         .domain([cMin, 0, cMax])
-        .range(["#3b82f6", theme === 'dark' ? "#1f2937" : "#ffffff", "#ef4444"]);
+        .range(['#3b82f6', theme === 'dark' ? '#1f2937' : '#ffffff', '#ef4444']);
+      colorScale = v => diffScale(v);
     } else {
-      colorScale = d3.scaleSequential()
-        .domain([cMin, cMax])
-        .interpolator(d3.interpolateRgbBasis(gradientDef.colors));
+      colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }
 
     // --- Wind Rose ---

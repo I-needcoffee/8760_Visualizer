@@ -33,7 +33,8 @@ export interface EPWVariable {
 }
 
 export const EPW_COLUMNS: { id: string; name: string; unit: string; missing: number; index: number; category: string; fixedMin?: number; fixedMax?: number }[] = [
-  { id: 'dryBulbTemperature', name: 'Dry Bulb Temperature', unit: '°C', missing: 99.9, index: 6, category: 'Temperature', fixedMin: -20, fixedMax: 45 },
+  /** Narrow fixed domain improves contrast for typical hourly values (heatmap legend span). */
+  { id: 'dryBulbTemperature', name: 'Dry Bulb Temperature', unit: '°C', missing: 99.9, index: 6, category: 'Temperature', fixedMin: 5, fixedMax: 35 },
   { id: 'dewPointTemperature', name: 'Dew Point Temperature', unit: '°C', missing: 99.9, index: 7, category: 'Temperature', fixedMin: -20, fixedMax: 30 },
   { id: 'relativeHumidity', name: 'Relative Humidity', unit: '%', missing: 999, index: 8, category: 'Humidity', fixedMin: 0, fixedMax: 100 },
   { id: 'atmosphericPressure', name: 'Atmospheric Station Pressure', unit: 'Pa', missing: 999999, index: 9, category: 'Other', fixedMin: 80000, fixedMax: 110000 },
@@ -48,7 +49,8 @@ export const EPW_COLUMNS: { id: string; name: string; unit: string; missing: num
   { id: 'diffuseHorizontalIlluminance', name: 'Diffuse Horizontal Illuminance', unit: 'lux', missing: 999999, index: 18, category: 'Solar', fixedMin: 0, fixedMax: 60000 },
   { id: 'zenithLuminance', name: 'Zenith Luminance', unit: 'Cd/m²', missing: 9999, index: 19, category: 'Solar', fixedMin: 0, fixedMax: 40000 },
   { id: 'windDirection', name: 'Wind Direction', unit: 'deg', missing: 999, index: 20, category: 'Wind', fixedMin: 0, fixedMax: 360 },
-  { id: 'windSpeed', name: 'Wind Speed', unit: 'm/s', missing: 999, index: 21, category: 'Wind', fixedMin: 0, fixedMax: 20 },
+  /** Narrow max so typical winds use more of the gradient range. */
+  { id: 'windSpeed', name: 'Wind Speed', unit: 'm/s', missing: 999, index: 21, category: 'Wind', fixedMin: 0, fixedMax: 12 },
   { id: 'totalSkyCover', name: 'Total Sky Cover', unit: 'tenths', missing: 99, index: 22, category: 'Other', fixedMin: 0, fixedMax: 10 },
   { id: 'opaqueSkyCover', name: 'Opaque Sky Cover', unit: 'tenths', missing: 99, index: 23, category: 'Other', fixedMin: 0, fixedMax: 10 },
   { id: 'visibility', name: 'Visibility', unit: 'km', missing: 9999, index: 24, category: 'Other', fixedMin: 0, fixedMax: 50 },

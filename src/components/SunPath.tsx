@@ -16,6 +16,8 @@ import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { VariableChartSelect } from './VariableChartSelect';
+import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
+import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
@@ -164,6 +166,11 @@ export function SunPath({
   const [iGrad, setIGrad] = useState(gradients[0].id);
   const gradientId = sunpathShared?.gradientId ?? iGrad;
   const setGradientId = sunpathShared?.setGradientId ?? setIGrad;
+
+  useEffect(() => {
+    const id = defaultGradientIdForVariable(colorVar, variables, gradients);
+    setGradientId(id);
+  }, [colorVar, variables, gradients, setGradientId]);
 
   const [iRadMin, setIRadMin] = useState<number | string>(1);
   const radiusMin = sunpathShared?.radiusMin ?? iRadMin;
@@ -505,9 +512,7 @@ const filteredCompareData = (compareData || []).filter(d => {
         .domain([cMin, 0, cMax])
         .range(["#3b82f6", theme === 'dark' ? "#1f2937" : "#ffffff", "#ef4444"]);
     } else {
-      colorScale = d3.scaleSequential()
-        .domain([cMin, cMax])
-        .interpolator(d3.interpolateRgbBasis(gradientDef.colors));
+      colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }
 
     // Radius scale (data → px), px range scales with chart so circles stay proportional
@@ -518,8 +523,8 @@ const filteredCompareData = (compareData || []).filter(d => {
       .clamp(true);
     const haloExtra = Math.max(0.5, sizeScale);
 
-    // Sort points so larger circles are drawn first (at the bottom)
-    points.sort((a, b) => ((b._rVal as number) || 0) - ((a._rVal as number) || 0));
+    // Draw smallest radii first so the largest points stay on top (readable halos).
+    points.sort((a, b) => ((a._rVal as number) || 0) - ((b._rVal as number) || 0));
 
     // Split points into selected and unselected
     const isSelected = (d: any) => {

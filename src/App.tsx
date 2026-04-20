@@ -551,6 +551,7 @@ export default function App() {
       case 'explorer':
         return (
           <DataExplorer
+            metadata={fileData.metadata}
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
@@ -580,6 +581,7 @@ export default function App() {
       case 'wind':
         return (
           <WindExplorer
+            metadata={fileData.metadata}
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
@@ -689,7 +691,12 @@ export default function App() {
   }
 
   return (
-    <div className={`h-screen w-screen overflow-hidden flex flex-col font-sans transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
+    <div
+      className={`h-screen w-screen overflow-hidden flex flex-col font-sans transition-colors duration-300 ${
+        theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
+      }`}
+      style={theme === 'dark' ? undefined : { backgroundColor: '#fcfcfc' }}
+    >
       <div id="tutorial-header-dock" className="relative z-20 flex shrink-0 flex-col">
       {/* Top Navigation Bar */}
       <div

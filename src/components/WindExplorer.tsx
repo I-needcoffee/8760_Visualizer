@@ -3,7 +3,9 @@ import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
-import { EPWDataRow, EPWVariable } from '../lib/epwParser';
+import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
+import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { isSolarNightEpwStation, solarNightOverlayRgba } from '../lib/solarNightHeatmap';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareWindSharedControls } from '../App';
@@ -15,6 +17,7 @@ import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
 import { CardModal } from './CardModal';
+import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -47,6 +50,8 @@ interface WindExplorerProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  /** Site location for solar diurnal shading on Solar-category 12×24 heatmaps. */
+  metadata?: EPWMetadata;
   comparePane?: 'primary' | 'secondary';
   paneCity?: string;
   pairSuppressHeader?: boolean;
@@ -111,7 +116,7 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
 
 export function WindExplorer({ 
   data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode, comparePane, paneCity,
+  setShowGradientModal, exportMode, metadata, comparePane, paneCity,
   pairSuppressHeader,
   pairModalHost,
   windShared,
@@ -132,6 +137,11 @@ export function WindExplorer({
   const [iGrad, setIGrad] = useState(gradients[0].id);
   const gradientId = windShared?.gradientId ?? iGrad;
   const setGradientId = windShared?.setGradientId ?? setIGrad;
+
+  useEffect(() => {
+    const id = defaultGradientIdForVariable(colorVar, variables, gradients);
+    setGradientId(id);
+  }, [colorVar, variables, gradients, setGradientId]);
 
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = windShared?.showSettings ?? iShowSettings;
@@ -357,17 +367,25 @@ export function WindExplorer({
 
     // --- Data Processing ---
     const gradientDef = gradients.find(g => g.id === gradientId) || gradients[0];
-    
-    let colorScale: any;
+
+    let colorScale: (v: number) => string;
     if (showDifference && compareData) {
-      colorScale = d3.scaleLinear<string>()
+      const diffScale = d3
+        .scaleLinear<string>()
         .domain([cMin, 0, cMax])
-        .range(["#3b82f6", theme === 'dark' ? "#1f2937" : "#ffffff", "#ef4444"]);
+        .range(['#3b82f6', theme === 'dark' ? '#1f2937' : '#ffffff', '#ef4444']);
+      colorScale = v => diffScale(v);
     } else {
-      colorScale = d3.scaleSequential()
-        .domain([cMin, cMax])
-        .interpolator(d3.interpolateRgbBasis(gradientDef.colors));
+      colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }
+
+    const solarNightOverlayEnabled =
+      !!metadata &&
+      Number.isFinite(metadata.lat) &&
+      Number.isFinite(metadata.lng) &&
+      Number.isFinite(metadata.timeZone) &&
+      colorVarDef.category === 'Solar' &&
+      !(showDifference && compareData);
 
     // X Scale for left charts (Day of Year 1-365)
     const xScale = d3.scaleLinear()
@@ -414,7 +432,11 @@ export function WindExplorer({
             value: val,
             direction: direction,
             label: `${monthNames[month - 1]}`,
-            tooltip: `${monthNames[month - 1]} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(direction)} (${Math.round(direction)}°)`
+            tooltip: `${monthNames[month - 1]} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(direction)} (${Math.round(direction)}°)`,
+            sunYear: values[0].year,
+            sunMonth: month,
+            sunDay: 15,
+            sunHour: hour,
           });
         });
       });
@@ -441,6 +463,7 @@ export function WindExplorer({
           }
           const { speed, direction } = wind;
           const month = values[0].month;
+          const mid = values[Math.floor(values.length / 2)];
           heatmapData.push({
             x0: startDay,
             x1: endDay,
@@ -449,7 +472,11 @@ export function WindExplorer({
             value: val,
             direction: direction,
             label: `W${week + 1}`,
-            tooltip: `Week ${week + 1} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(direction)} (${Math.round(direction)}°)`
+            tooltip: `Week ${week + 1} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(direction)} (${Math.round(direction)}°)`,
+            sunYear: mid.year,
+            sunMonth: mid.month,
+            sunDay: mid.day,
+            sunHour: hour,
           });
         });
       });
@@ -463,7 +490,11 @@ export function WindExplorer({
         value: convertValue(d[colorVar] as number, colorVarDef.unit),
         direction: d.windDirection as number,
         label: d.date.toLocaleDateString(),
-        tooltip: `${d.date.toLocaleString()}\n${colorVarDef.name}: ${convertValue(d[colorVar] as number, colorVarDef.unit).toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(d.windDirection as number)} (${d.windDirection}°)`
+        tooltip: `${d.date.toLocaleString()}\n${colorVarDef.name}: ${convertValue(d[colorVar] as number, colorVarDef.unit).toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(d.windDirection as number)} (${d.windDirection}°)`,
+        sunYear: d.year,
+        sunMonth: d.month,
+        sunDay: d.day,
+        sunHour: d.hour,
       }));
     }
 
@@ -485,9 +516,18 @@ export function WindExplorer({
       .attr("transform", d => {
         const xp = explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1);
         return `translate(${xp.x}, ${hourRowTop(d.y)})`;
+      })
+      .style("opacity", d => {
+        const isMonthMatch =
+          filter.startMonth <= filter.endMonth
+            ? d.month >= filter.startMonth && d.month <= filter.endMonth
+            : d.month >= filter.startMonth || d.month <= filter.endMonth;
+        const isHourMatch = d.y >= filter.startHour && d.y <= filter.endHour;
+        return isMonthMatch && isHourMatch ? 1 : 0.2;
       });
 
-    cells.append("rect")
+    cells
+      .append("rect")
       .attr("width", d =>
         explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width
       )
@@ -497,9 +537,33 @@ export function WindExplorer({
       .style("fill", d => colorScale(d.value))
       .style("stroke", (aggregation === 'month' || aggregation === 'week') ? "rgba(0,0,0,0.1)" : "none")
       .style("stroke-width", "1px")
-      .style("opacity", 1)
       .append("title")
       .text(d => d.tooltip);
+
+    if (solarNightOverlayEnabled) {
+      cells
+        .append("rect")
+        .attr("width", d =>
+          explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width
+        )
+        .attr("height", d => rowInnerHeight(d.y))
+        .attr("rx", 2)
+        .attr("ry", 2)
+        .style("fill", solarNightOverlayRgba(theme))
+        .style("stroke", "none")
+        .style("pointer-events", "none")
+        .style("opacity", d =>
+          isSolarNightEpwStation(metadata!.lat, metadata!.lng, {
+            year: d.sunYear,
+            month: d.sunMonth,
+            day: d.sunDay,
+            jsHour: d.sunHour,
+            timeZoneHours: metadata!.timeZone,
+          })
+            ? 1
+            : 0
+        );
+    }
 
     // Overlay text for wind direction
     if (aggregation === 'month' || aggregation === 'week') {
@@ -719,7 +783,7 @@ export function WindExplorer({
     // --- Wind Rose ---
     // Removed from WindExplorer
 
-  }, [data, compareData, showDifference, filteredData, variables, colorVar, gradientId, aggregation, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme]);
+  }, [data, compareData, showDifference, filteredData, variables, colorVar, gradientId, aggregation, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, metadata]);
 
   const stats = (() => {
     if (showDifference && compareData) {
