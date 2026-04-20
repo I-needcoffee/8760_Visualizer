@@ -714,6 +714,27 @@ export function WindRose({
         </div>
       </CardModal>
 
+      {!pairSuppressFooterLegend && (
+        <div className="w-full min-w-0 flex-shrink-0 px-2 pt-1">
+          <InteractiveLegend
+            domId={tutorialLegendDomId}
+            variable={{
+              id: colorVar,
+              name: colorVarDef.name,
+              unit: colorVarDef.unit,
+              min: cMin,
+              max: cMax,
+              category: colorVarDef.category,
+            }}
+            gradientId={gradientId}
+            setGradientId={setGradientId}
+            gradients={gradients}
+            theme={theme}
+            isDifference={showDifference}
+          />
+        </div>
+      )}
+
       <div className="px-1 py-0.5 flex-1 min-h-0 flex flex-col gap-0 overflow-hidden min-w-0">
         <div className="relative flex min-h-0 min-w-0 w-full flex-1 items-center justify-center overflow-hidden">
           <svg ref={roseRef} className="h-full w-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
@@ -722,26 +743,6 @@ export function WindRose({
         <div className="relative flex min-h-0 min-w-0 w-full flex-1 items-center justify-center overflow-hidden">
           <svg ref={compareRoseRef} className="h-full w-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
-        )}
-        {!pairSuppressFooterLegend && (
-          <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
-            <InteractiveLegend
-              domId={tutorialLegendDomId}
-              variable={{
-                id: colorVar,
-                name: colorVarDef.name,
-                unit: colorVarDef.unit,
-                min: cMin,
-                max: cMax,
-                category: colorVarDef.category,
-              }}
-              gradientId={gradientId}
-              setGradientId={setGradientId}
-              gradients={gradients}
-              theme={theme}
-              isDifference={showDifference}
-            />
-          </div>
         )}
       </div>
     </div>

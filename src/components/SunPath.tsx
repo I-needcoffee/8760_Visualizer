@@ -911,6 +911,21 @@ const filteredCompareData = (compareData || []).filter(d => {
       </div>
       )}
 
+      <div
+        className="w-full min-w-0 flex-shrink-0 px-2 pt-1"
+        style={legendTrackPx != null ? { width: legendTrackPx } : undefined}
+      >
+        <InteractiveLegend
+          domId={tutorialLegendDomId}
+          variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
+          gradientId={gradientId}
+          setGradientId={setGradientId}
+          gradients={gradients}
+          theme={theme}
+          isDifference={showDifference}
+        />
+      </div>
+
       <CardModal
         open={showStatsModal}
         onClose={() => setShowStats(false)}
@@ -1100,20 +1115,6 @@ const filteredCompareData = (compareData || []).filter(d => {
               <svg ref={compareSvgRef} className="block h-full max-h-full w-full max-w-full" preserveAspectRatio="xMidYMid meet" />
             </div>
           )}
-        </div>
-        <div
-          className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 px-1 pt-0.5 dark:border-gray-700"
-          style={legendTrackPx != null ? { width: legendTrackPx } : undefined}
-        >
-          <InteractiveLegend
-            domId={tutorialLegendDomId}
-            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
-            gradientId={gradientId}
-            setGradientId={setGradientId}
-            gradients={gradients}
-            theme={theme}
-            isDifference={showDifference}
-          />
         </div>
       </div>
     </div>

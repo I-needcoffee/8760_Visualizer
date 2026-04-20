@@ -1348,6 +1348,49 @@ export function UtciExplorer({
             </div>
       </CardModal>
 
+      {!pairSuppressFooterLegend && (
+        <div id={tutorialLegendDomId} className="w-full min-w-0 flex-shrink-0 px-2 pt-1">
+          {showDifference && compareData ? (
+            <InteractiveLegend
+              variable={{
+                id: 'utci',
+                name: 'UTCI',
+                unit: utciUnit,
+                min: convertUtci(utciMin),
+                max: convertUtci(utciMax),
+                category: 'Comfort',
+              }}
+              gradientId={gradientId}
+              setGradientId={setGradientId}
+              gradients={gradients}
+              theme={theme}
+              fontScale={LEGEND_STRIP_SCALE}
+              isDifference={true}
+            />
+          ) : colorMode === 'categories' ? (
+            <UtciCategoryLegendStrip theme={theme} />
+          ) : colorMode === 'gradient' ? (
+            <InteractiveLegend
+              variable={{
+                id: 'utci',
+                name: 'UTCI',
+                unit: utciUnit,
+                min: convertUtci(utciMin),
+                max: convertUtci(utciMax),
+                category: 'Comfort',
+              }}
+              gradientId={gradientId}
+              setGradientId={setGradientId}
+              gradients={gradients}
+              theme={theme}
+              fontScale={LEGEND_STRIP_SCALE}
+            />
+          ) : (
+            <UtciComfortTimeLegendStrip theme={theme} />
+          )}
+        </div>
+      )}
+
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden px-1 py-0.5">
         <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
           <svg
@@ -1357,49 +1400,6 @@ export function UtciExplorer({
           />
         </div>
 
-        {/* Custom Legend for UTCI */}
-        {!pairSuppressFooterLegend && (
-          <div id={tutorialLegendDomId} className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
-            {showDifference && compareData ? (
-              <InteractiveLegend
-                variable={{
-                  id: 'utci',
-                  name: 'UTCI',
-                  unit: utciUnit,
-                  min: convertUtci(utciMin),
-                  max: convertUtci(utciMax),
-                  category: 'Comfort',
-                }}
-                gradientId={gradientId}
-                setGradientId={setGradientId}
-                gradients={gradients}
-                theme={theme}
-                fontScale={LEGEND_STRIP_SCALE}
-                isDifference={true}
-              />
-            ) : colorMode === 'categories' ? (
-              <UtciCategoryLegendStrip theme={theme} />
-            ) : colorMode === 'gradient' ? (
-              <InteractiveLegend
-                variable={{
-                  id: 'utci',
-                  name: 'UTCI',
-                  unit: utciUnit,
-                  min: convertUtci(utciMin),
-                  max: convertUtci(utciMax),
-                  category: 'Comfort',
-                }}
-                gradientId={gradientId}
-                setGradientId={setGradientId}
-                gradients={gradients}
-                theme={theme}
-                fontScale={LEGEND_STRIP_SCALE}
-              />
-            ) : (
-              <UtciComfortTimeLegendStrip theme={theme} />
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -1051,6 +1051,20 @@ export function DataExplorer({
       </div>
       )}
 
+      {!pairSuppressFooterLegend && (
+        <div className="w-full min-w-0 flex-shrink-0 px-2 pt-1">
+          <InteractiveLegend
+            domId={tutorialLegendDomId}
+            variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
+            gradientId={gradientId}
+            setGradientId={setGradientId}
+            gradients={gradients}
+            theme={theme}
+            isDifference={showDifference}
+          />
+        </div>
+      )}
+
       <CardModal
         open={showStatsModal}
         onClose={() => setShowStats(false)}
@@ -1161,19 +1175,6 @@ export function DataExplorer({
             preserveAspectRatio={pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'}
           />
         </div>
-        )}
-        {!pairSuppressFooterLegend && (
-          <div className="mt-0 w-full min-w-0 flex-shrink-0 px-1 pt-0">
-            <InteractiveLegend
-              domId={tutorialLegendDomId}
-              variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
-              gradientId={gradientId}
-              setGradientId={setGradientId}
-              gradients={gradients}
-              theme={theme}
-              isDifference={showDifference}
-            />
-          </div>
         )}
       </div>
     </div>
