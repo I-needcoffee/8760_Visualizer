@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
   body {
-    overflow-y: scroll;
+    margin: 0;
   }
 }
 
@@ -17,30 +25,46 @@
   
   /* Hard-edge drop shadows */
   .shadow-hard-sm {
-    box-shadow: 1px 1px 0px 0px #e5e5e5;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.35),
+      0 0 5px rgba(148, 163, 184, 0.22);
   }
   .shadow-hard-md {
-    box-shadow: 1px 1px 0px 0px #e5e5e5;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.36),
+      0 0 5px rgba(148, 163, 184, 0.24);
   }
   .shadow-hard-lg {
-    box-shadow: 2px 2px 0px 0px #e5e5e5;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.38),
+      0 0 5px rgba(148, 163, 184, 0.26);
   }
   .shadow-hard-xl {
-    box-shadow: 3px 3px 0px 0px #e5e5e5;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.4),
+      0 0 5px rgba(148, 163, 184, 0.28);
   }
   
   /* Dark mode variants */
   .dark .shadow-hard-sm {
-    box-shadow: 1px 1px 0px 0px #1f2937;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.18),
+      0 0 5px rgba(56, 189, 248, 0.1);
   }
   .dark .shadow-hard-md {
-    box-shadow: 1px 1px 0px 0px #1f2937;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.2),
+      0 0 5px rgba(56, 189, 248, 0.11);
   }
   .dark .shadow-hard-lg {
-    box-shadow: 2px 2px 0px 0px #1f2937;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.22),
+      0 0 5px rgba(56, 189, 248, 0.12);
   }
   .dark .shadow-hard-xl {
-    box-shadow: 3px 3px 0px 0px #1f2937;
+    box-shadow:
+      0 0 0 1px rgba(148, 163, 184, 0.24),
+      0 0 5px rgba(56, 189, 248, 0.13);
   }
 }
 

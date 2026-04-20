@@ -669,7 +669,7 @@ export default function App() {
   if (selectedFiles.length === 0 || isSelectingFile) {
     return (
       <div
-        className="h-screen w-screen overflow-hidden font-sans relative"
+        className="h-dvh w-full overflow-hidden font-sans relative"
         style={{ backgroundColor: '#fcfbf8' }}
       >
         {isSelectingFile && selectedFiles.length > 0 && (
@@ -692,7 +692,7 @@ export default function App() {
 
   return (
     <div
-      className={`h-screen w-screen overflow-hidden flex flex-col font-sans transition-colors duration-300 ${
+      className={`h-dvh w-full overflow-hidden flex flex-col font-sans transition-colors duration-300 ${
         theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
       }`}
       style={theme === 'dark' ? undefined : { backgroundColor: '#fcfbf8' }}
