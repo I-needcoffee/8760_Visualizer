@@ -68,13 +68,6 @@ export function TutorialGuidePanel({
         </p>
       </section>
 
-      <section className="mb-4">
-        <h3 className={`text-xs font-bold uppercase tracking-wider ${muted}`}>{copy.readingTitle}</h3>
-        <p className={`mt-1.5 ${ink}`} style={textScale}>
-          {copy.readingBody}
-        </p>
-      </section>
-
       <section className="mt-1 border-t border-gray-200/80 pt-3 dark:border-gray-700/80">
         <h3 className={`mb-2 text-xs font-bold uppercase tracking-wider ${muted}`}>Quick numbers</h3>
         <p className={`mb-3 text-[11px] leading-snug ${muted}`}>
