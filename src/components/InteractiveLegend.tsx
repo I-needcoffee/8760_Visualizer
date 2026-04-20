@@ -68,7 +68,6 @@ export function InteractiveLegend({
 
   const pad = 3 * fontScale;
   const gap = 2 * fontScale;
-  const titlePx = Math.round(9.5 * fontScale);
   const barH = getLegendBarHeightPx(fontScale);
   const barBg = legendSurface(theme);
 
@@ -114,15 +113,6 @@ export function InteractiveLegend({
       className={`flex w-full select-none flex-col ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
       style={{ padding: `${pad}px`, gap: `${gap}px` }}
     >
-      <div className="flex justify-between items-center min-w-0 gap-1">
-        <span
-          className="font-semibold uppercase tracking-wide truncate leading-tight"
-          style={{ fontSize: `${titlePx}px` }}
-        >
-          {isDifference ? `Δ ${variable.name}` : variable.name} ({variable.unit})
-        </span>
-      </div>
-
       <div
         className={`relative w-full overflow-hidden rounded-full border ${
           theme === 'dark' ? 'border-gray-700 bg-[#111827]' : 'border-gray-200 bg-white'

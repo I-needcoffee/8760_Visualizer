@@ -202,6 +202,15 @@ function PairSharedToolbar({
   );
 }
 
+function convertUnitForLegend(unit: string, unitSystem: UnitSystem) {
+  if (unitSystem === 'imperial') {
+    if (unit === '°C') return '°F';
+    if (unit === 'm/s') return 'mph';
+    if (unit === 'mm') return 'in';
+  }
+  return unit;
+}
+
 export function ComparisonModeLayout({
   files,
   baselineIndex,
@@ -342,6 +351,11 @@ export function ComparisonModeLayout({
   const sunRadiusDef = baseline.variables.find(v => v.id === sunRadiusVar) || baseline.variables[0];
   const windColorDef = baseline.variables.find(v => v.id === windVar) || baseline.variables[0];
   const roseColorDef = baseline.variables.find(v => v.id === roseVar) || baseline.variables[0];
+  const expVarLabel = `${expColorDef.name} (${convertUnitForLegend(expColorDef.unit, unitSystem)})`;
+  const sunColorLabel = `${sunColorDef.name} (${convertUnitForLegend(sunColorDef.unit, unitSystem)})`;
+  const sunRadiusLabel = `${sunRadiusDef.name} (${convertUnitForLegend(sunRadiusDef.unit, unitSystem)})`;
+  const windVarLabel = `${windColorDef.name} (${convertUnitForLegend(windColorDef.unit, unitSystem)})`;
+  const roseVarLabel = `${roseColorDef.name} (${convertUnitForLegend(roseColorDef.unit, unitSystem)})`;
 
   const explorerPairLegend = useMemo(
     () =>
@@ -431,7 +445,7 @@ export function ComparisonModeLayout({
               <VariableChartSelect
                 value={sunColorVar}
                 onChange={setSunColorVar}
-                selectedLabel={sunColorDef.name}
+                selectedLabel={sunColorLabel}
                 theme={theme}
                 fillRow={false}
               >
@@ -439,7 +453,7 @@ export function ComparisonModeLayout({
                   <optgroup key={category} label={category}>
                     {vars.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {v.name} ({convertUnitForLegend(v.unit, unitSystem)})
                       </option>
                     ))}
                   </optgroup>
@@ -448,7 +462,7 @@ export function ComparisonModeLayout({
               <VariableChartSelect
                 value={sunRadiusVar}
                 onChange={setSunRadiusVar}
-                selectedLabel={sunRadiusDef.name}
+                selectedLabel={sunRadiusLabel}
                 theme={theme}
                 fillRow={false}
               >
@@ -456,7 +470,7 @@ export function ComparisonModeLayout({
                   <optgroup key={category} label={category}>
                     {vars.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {v.name} ({convertUnitForLegend(v.unit, unitSystem)})
                       </option>
                     ))}
                   </optgroup>
@@ -540,7 +554,7 @@ export function ComparisonModeLayout({
               <VariableChartSelect
                 value={expVar}
                 onChange={setExpVar}
-                selectedLabel={expColorDef.name}
+                selectedLabel={expVarLabel}
                 theme={theme}
                 fillRow={false}
               >
@@ -548,7 +562,7 @@ export function ComparisonModeLayout({
                   <optgroup key={category} label={category}>
                     {vars.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {v.name} ({convertUnitForLegend(v.unit, unitSystem)})
                       </option>
                     ))}
                   </optgroup>
@@ -798,7 +812,7 @@ export function ComparisonModeLayout({
               <VariableChartSelect
                 value={windVar}
                 onChange={setWindVar}
-                selectedLabel={windColorDef.name}
+                selectedLabel={windVarLabel}
                 theme={theme}
                 fillRow={false}
               >
@@ -806,7 +820,7 @@ export function ComparisonModeLayout({
                   <optgroup key={category} label={category}>
                     {vars.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {v.name} ({convertUnitForLegend(v.unit, unitSystem)})
                       </option>
                     ))}
                   </optgroup>
@@ -923,7 +937,7 @@ export function ComparisonModeLayout({
               <VariableChartSelect
                 value={roseVar}
                 onChange={setRoseVar}
-                selectedLabel={roseColorDef.name}
+                selectedLabel={roseVarLabel}
                 theme={theme}
                 fillRow={false}
               >
@@ -931,7 +945,7 @@ export function ComparisonModeLayout({
                   <optgroup key={category} label={category}>
                     {vars.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {v.name} ({convertUnitForLegend(v.unit, unitSystem)})
                       </option>
                     ))}
                   </optgroup>

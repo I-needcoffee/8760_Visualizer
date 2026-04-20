@@ -346,6 +346,8 @@ export function WindExplorer({
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
 
+  const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
+
   useEffect(() => {
     if (!svgRef.current || !filteredData.length || dimensions.width === 0) {
       d3.select(svgRef.current).selectAll("*").remove();
@@ -933,7 +935,7 @@ export function WindExplorer({
                   <VariableChartSelect
                     value={colorVar}
                     onChange={setColorVar}
-                    selectedLabel={colorVarDef.name}
+                    selectedLabel={colorVarLabel}
                     theme={theme}
                     fillRow={false}
                     domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
@@ -942,7 +944,7 @@ export function WindExplorer({
                       <optgroup key={category} label={category}>
                         {vars.map(v => (
                           <option key={v.id} value={v.id}>
-                            {v.name}
+                            {v.name} ({convertUnit(v.unit)})
                           </option>
                         ))}
                       </optgroup>

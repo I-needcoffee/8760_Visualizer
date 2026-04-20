@@ -235,6 +235,8 @@ export function DataExplorer({
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
 
+  const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
+
   useEffect(() => {
     if (!svgRef.current || dimensions.width === 0) return;
 
@@ -861,7 +863,7 @@ export function DataExplorer({
                   <VariableChartSelect
                     value={colorVar}
                     onChange={setColorVar}
-                    selectedLabel={colorVarDef.name}
+                    selectedLabel={colorVarLabel}
                     theme={theme}
                     fillRow={false}
                     domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
@@ -870,7 +872,7 @@ export function DataExplorer({
                       <optgroup key={category} label={category}>
                         {vars.map(v => (
                           <option key={v.id} value={v.id}>
-                            {v.name}
+                            {v.name} ({convertUnit(v.unit)})
                           </option>
                         ))}
                       </optgroup>
@@ -954,7 +956,7 @@ export function DataExplorer({
                   <VariableChartSelect
                     value={colorVar}
                     onChange={setColorVar}
-                    selectedLabel={colorVarDef.name}
+                    selectedLabel={colorVarLabel}
                     theme={theme}
                     fillRow={false}
                     domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
@@ -963,7 +965,7 @@ export function DataExplorer({
                       <optgroup key={category} label={category}>
                         {vars.map(v => (
                           <option key={v.id} value={v.id}>
-                            {v.name}
+                            {v.name} ({convertUnit(v.unit)})
                           </option>
                         ))}
                       </optgroup>
@@ -1146,7 +1148,9 @@ export function DataExplorer({
               ).map(([category, vars]) => (
                 <optgroup key={category} label={category}>
                   {vars.map(v => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({convertUnit(v.unit)})
+                    </option>
                   ))}
                 </optgroup>
               ))}

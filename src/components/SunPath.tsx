@@ -268,6 +268,8 @@ export function SunPath({
     return unit;
   };
 
+  const radiusUnit = convertUnit(radiusVarDef.unit);
+
   // Calculate local stats for filtered data
   const filteredData = data.filter(d => {
     const isMonthMatch = filter.startMonth <= filter.endMonth
@@ -330,6 +332,9 @@ const filteredCompareData = (compareData || []).filter(d => {
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
+
+  const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
+  const radiusVarLabel = `${radiusVarDef.name} (${radiusUnit})`;
 
   const tutorialLive = useTutorialLiveOptional();
   const tutorialReport = tutorialLive?.report;
@@ -807,7 +812,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                         <VariableChartSelect
                           value={colorVar}
                           onChange={setColorVar}
-                          selectedLabel={colorVarDef.name}
+                          selectedLabel={colorVarLabel}
                           theme={theme}
                           fillRow={false}
                           domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
@@ -816,7 +821,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                             <optgroup key={category} label={category}>
                               {vars.map(v => (
                                 <option key={v.id} value={v.id}>
-                                  {v.name}
+                                  {v.name} ({convertUnit(v.unit)})
                                 </option>
                               ))}
                             </optgroup>
@@ -834,7 +839,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                           <VariableChartSelect
                             value={radiusVar}
                             onChange={setRadiusVar}
-                            selectedLabel={radiusVarDef.name}
+                            selectedLabel={radiusVarLabel}
                             theme={theme}
                             fillRow={false}
                           >
@@ -842,7 +847,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                               <optgroup key={category} label={category}>
                                 {vars.map(v => (
                                   <option key={v.id} value={v.id}>
-                                    {v.name}
+                                    {v.name} ({convertUnit(v.unit)})
                                   </option>
                                 ))}
                               </optgroup>
@@ -972,7 +977,9 @@ const filteredCompareData = (compareData || []).filter(d => {
                   {Object.entries(groupedVariables).map(([category, vars]) => (
                     <optgroup key={category} label={category}>
                       {vars.map(v => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
+                        <option key={v.id} value={v.id}>
+                          {v.name} ({convertUnit(v.unit)})
+                        </option>
                       ))}
                     </optgroup>
                   ))}
@@ -988,7 +995,9 @@ const filteredCompareData = (compareData || []).filter(d => {
                   {Object.entries(groupedVariables).map(([category, vars]) => (
                     <optgroup key={category} label={category}>
                       {vars.map(v => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
+                        <option key={v.id} value={v.id}>
+                          {v.name} ({convertUnit(v.unit)})
+                        </option>
                       ))}
                     </optgroup>
                   ))}

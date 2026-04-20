@@ -222,6 +222,8 @@ export function WindRose({
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
 
+  const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
+
   useEffect(() => {
     if (!roseRef.current || !filteredData.length || dimensions.width === 0) return;
 
