@@ -117,14 +117,7 @@ export function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) 
       className={`flex flex-col w-full select-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
       style={{ padding: `${pad}px`, gap: `${gap}px` }}
     >
-      <div className="min-w-0">
-        <span
-          className="font-semibold uppercase tracking-wide truncate leading-tight block"
-          style={{ fontSize: `${titlePx}px` }}
-        >
-          UTCI (categories)
-        </span>
-      </div>
+      {/* Title removed: shown in chart header */}
       <div
         className={`relative w-full overflow-hidden rounded-full border ${
           theme === 'dark' ? 'border-gray-700 bg-[#111827]' : 'border-gray-200 bg-white'
@@ -191,14 +184,7 @@ export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' 
       className={`flex flex-col w-full select-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
       style={{ padding: `${pad}px`, gap: `${gap}px` }}
     >
-      <div className="min-w-0">
-        <span
-          className="font-semibold uppercase tracking-wide truncate leading-tight block"
-          style={{ fontSize: `${titlePx}px` }}
-        >
-          Time in comfort zone
-        </span>
-      </div>
+      {/* Title removed: shown in chart header */}
       <div
         className={`relative w-full overflow-hidden rounded-full border ${
           theme === 'dark' ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-white'
