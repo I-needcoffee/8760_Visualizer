@@ -195,7 +195,7 @@ export function SingleModeLayout({
                 {(() => {
                   const slot = pageSlots[0];
                   let className =
-                    'flex h-full min-h-[46vh] w-full flex-col overflow-visible md:min-h-0 md:min-h-0 ';
+                    'flex h-full min-h-[46vh] w-full flex-col overflow-hidden md:min-h-0 md:min-h-0 ';
                   if (!exportMode) {
                     className += `rounded-xl border shadow-hard-lg ${
                       theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
@@ -223,7 +223,7 @@ export function SingleModeLayout({
             <div className="grid w-full gap-2 flex-1 min-h-0 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] md:[grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] md:overflow-visible">
               {pageSlots.map((slot, idx) => {
                 const isHero = idx === 0;
-                let className = 'w-full min-h-0 h-full flex flex-col overflow-visible ';
+                let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden ';
                 if (!exportMode) {
                   className += `rounded-xl border shadow-hard-lg ${
                     theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
@@ -242,7 +242,7 @@ export function SingleModeLayout({
                 originalIdx => {
                   const slot = pageSlots[originalIdx];
                   if (!slot) return null;
-                  let className = 'w-full min-h-0 h-full flex flex-col overflow-visible col-span-1 ';
+                  let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden col-span-1 ';
                   if (!exportMode) {
                     className += `rounded-xl border shadow-hard-lg ${
                       theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
@@ -257,7 +257,7 @@ export function SingleModeLayout({
           {layoutMode === 'focus-deep' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 w-full flex-1 min-h-0 md:overflow-visible">
               {pageSlots.map((slot, idx) => {
-                let className = 'w-full min-h-0 h-full flex flex-col overflow-visible col-span-1 ';
+                let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden col-span-1 ';
                 if (!exportMode) {
                   className += `rounded-xl border shadow-hard-lg ${
                     theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'

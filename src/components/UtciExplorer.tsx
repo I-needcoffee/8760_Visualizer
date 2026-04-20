@@ -16,6 +16,7 @@ import { GlobalFilterState } from './GlobalFilterPanel';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
+import { gradientsForUtci } from '../lib/availableGradientsForVariable';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -302,6 +303,7 @@ export function UtciExplorer({
 
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+  const paletteGradients = useMemo(() => gradientsForUtci(gradients), [gradients]);
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   const chartToolbarRevealClass = expandChromeStrip
     ? 'pointer-events-auto max-h-[56px] overflow-visible opacity-100 pt-1.5 transition-[max-height,opacity] duration-200 ease-out'
@@ -1328,7 +1330,7 @@ export function UtciExplorer({
                       </button>
                     </div>
                     <div className={`flex p-1.5 rounded-lg overflow-x-auto border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                      {gradients.map(g => (
+                      {paletteGradients.map(g => (
                         <button
                           key={g.id}
                           onClick={() => setGradientId(g.id)}

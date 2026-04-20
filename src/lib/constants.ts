@@ -33,13 +33,13 @@ export const GRADIENTS = [
   {
     id: 'solar-yellow-orange',
     name: 'Solar (yellow→orange)',
-    colors: ['#ffff00', '#ffa500'],
+    colors: ['#ffff00', '#d97706'],
   },
-  /** Wind: warm 2/3 of temperature comfort ramp (consistent tone). */
+  /** Wind: muted blue → yellow → burnt orange (distinct steps, consistent tone). */
   {
     id: 'wind-intensity-blue',
     name: 'Wind speed (calm→storm)',
-    colors: ['#40b2a6', '#addb8b', '#fde767', '#f06441'],
+    colors: ['#2f66aa', '#7ea6d6', '#fde767', '#e6a35a', '#9a3412'],
   },
   /** Cloud cover (`Cloud Cover_js.html`): white → mid grey for 0–100% cover. */
   {

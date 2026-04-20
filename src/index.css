@@ -26,23 +26,23 @@
   /* Hard-edge drop shadows */
   .shadow-hard-sm {
     box-shadow:
-      0 0 0 1px rgba(148, 163, 184, 0.35),
-      0 0 5px rgba(148, 163, 184, 0.22);
+      0 0 0 1px rgba(226, 232, 240, 0.86),
+      0 0 10px 2px rgba(226, 232, 240, 0.34);
   }
   .shadow-hard-md {
     box-shadow:
-      0 0 0 1px rgba(148, 163, 184, 0.36),
-      0 0 5px rgba(148, 163, 184, 0.24);
+      0 0 0 1px rgba(226, 232, 240, 0.88),
+      0 0 11px 2px rgba(226, 232, 240, 0.36);
   }
   .shadow-hard-lg {
     box-shadow:
-      0 0 0 1px rgba(148, 163, 184, 0.38),
-      0 0 5px rgba(148, 163, 184, 0.26);
+      0 0 0 1px rgba(226, 232, 240, 0.9),
+      0 0 12px 3px rgba(226, 232, 240, 0.38);
   }
   .shadow-hard-xl {
     box-shadow:
-      0 0 0 1px rgba(148, 163, 184, 0.4),
-      0 0 5px rgba(148, 163, 184, 0.28);
+      0 0 0 1px rgba(226, 232, 240, 0.92),
+      0 0 13px 3px rgba(226, 232, 240, 0.4);
   }
   
   /* Dark mode variants */

@@ -14,6 +14,7 @@ import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 
 interface WindRoseProps {
   data: EPWDataRow[];
@@ -76,6 +77,11 @@ export function WindRose({
   const setNumBins = windRoseShared?.setNumBins ?? setIBins;
 
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+
+  const paletteGradients = useMemo(
+    () => gradientsForVariable(colorVar, variables, gradients),
+    [colorVar, variables, gradients]
+  );
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempThreshold, setTempThreshold] = useState(unitSystem === 'imperial' ? 70 : 21);
   const [tempFilterType, setTempFilterType] = useState<'above' | 'below'>('above');
@@ -691,7 +697,7 @@ export function WindRose({
                     </button>
                   </div>
                   <div className={`flex p-1.5 rounded-lg overflow-x-auto border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                    {gradients.map(g => (
+                    {paletteGradients.map(g => (
                       <button
                         key={g.id}
                         onClick={() => setGradientId(g.id)}

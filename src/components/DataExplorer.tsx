@@ -7,6 +7,7 @@ import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { isSolarNightEpwStation, solarNightOverlayRgba } from '../lib/solarNightHeatmap';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
+import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareExplorerSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
@@ -163,6 +164,11 @@ export function DataExplorer({
 
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+
+  const paletteGradients = useMemo(
+    () => gradientsForVariable(colorVar, variables, gradients),
+    [colorVar, variables, gradients]
+  );
 
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   const chartToolbarRevealClass = expandChromeStrip
@@ -1093,7 +1099,7 @@ export function DataExplorer({
               </button>
             </div>
             <div className={`flex overflow-x-auto rounded-full border p-1.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-              {gradients.map(g => (
+              {paletteGradients.map(g => (
                 <button
                   key={g.id}
                   type="button"

@@ -18,6 +18,7 @@ import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
+import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -153,6 +154,11 @@ export function WindExplorer({
 
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+
+  const paletteGradients = useMemo(
+    () => gradientsForVariable(colorVar, variables, gradients),
+    [colorVar, variables, gradients]
+  );
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   const chartToolbarRevealClass = expandChromeStrip
     ? 'pointer-events-auto max-h-[56px] overflow-visible opacity-100 pt-1.5 transition-[max-height,opacity] duration-200 ease-out'
@@ -1055,7 +1061,7 @@ export function WindExplorer({
                   </button>
                 </div>
                 <div className={`flex overflow-x-auto rounded-full border p-1.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                  {gradients.map(g => (
+                  {paletteGradients.map(g => (
                     <button
                       key={g.id}
                       onClick={() => setGradientId(g.id)}

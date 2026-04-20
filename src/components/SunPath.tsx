@@ -18,6 +18,7 @@ import { CardModal } from './CardModal';
 import { VariableChartSelect } from './VariableChartSelect';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
@@ -190,6 +191,11 @@ export function SunPath({
 
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
+
+  const paletteGradients = useMemo(
+    () => gradientsForVariable(colorVar, variables, gradients),
+    [colorVar, variables, gradients]
+  );
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   /** Full header row (icon + controls): width drives dual pickers — inner column was collapsing to ~select width. */
   const sunHeaderRowRef = useRef<HTMLDivElement>(null);
@@ -1003,7 +1009,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                   </button>
                 </div>
                 <div className={`flex overflow-x-auto rounded-full border p-1.5 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                  {gradients.map(g => (
+                  {paletteGradients.map(g => (
                     <button
                       key={g.id}
                       onClick={() => setGradientId(g.id)}
