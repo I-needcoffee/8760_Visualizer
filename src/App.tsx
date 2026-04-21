@@ -832,7 +832,7 @@ export default function App() {
       layoutMode={layoutMode}
       exportMode={exportMode}
       theme={theme}
-      tutorialHoverHints={tutorialHoverHints}
+      tutorialHoverHints={smUp && tutorialHoverHints}
       tutorialEpwRows={selectedFiles[activeFileIndex]?.data}
       tutorialFilter={globalFilter}
       tutorialUnitSystem={unitSystem}
@@ -1019,27 +1019,27 @@ export default function App() {
             </div>
           )}
 
-          {viewMode === 'single' && layoutMode === 'tutorial' && (
+          {viewMode === 'single' && layoutMode === 'tutorial' && smUp && (
             <button
               type="button"
               id="tutorial-nav-hover-hints"
               role="switch"
               aria-checked={tutorialHoverHints}
-              aria-label={tutorialHoverHints ? 'Deactivate tool tips' : 'Activate tool tips'}
+              aria-label={tutorialHoverHints ? 'Deactivate hover directions' : 'Activate hover directions'}
               onClick={() => setTutorialHoverHints(v => !v)}
-              title={tutorialHoverHints ? 'Deactivate tool tips' : 'Activate tool tips'}
-              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 text-[10px] font-bold uppercase tracking-wide shadow-hard-sm transition-all active:scale-95 min-[380px]:w-auto min-[380px]:justify-start min-[380px]:gap-1 min-[380px]:px-2 min-[380px]:py-1 sm:h-10 sm:gap-1.5 sm:px-2.5 ${
+              title={tutorialHoverHints ? 'Deactivate hover directions' : 'Activate hover directions'}
+              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border p-0 text-[10px] font-bold uppercase tracking-wide transition-all active:scale-95 sm:h-10 sm:gap-1.5 sm:px-2.5 ${
                 tutorialHoverHints
                   ? theme === 'dark'
-                    ? 'border-sky-700/70 bg-sky-950/40 text-sky-200 hover:bg-sky-900/35'
-                    : 'border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100'
+                    ? 'border-blue-500 bg-blue-600 text-white shadow-md hover:bg-blue-500'
+                    : 'border-blue-600 bg-blue-600 text-white shadow-md hover:bg-blue-700'
                   : theme === 'dark'
-                    ? 'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700'
-                    : 'border-gray-200 bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    ? 'border-dashed border-gray-500 bg-transparent text-gray-400 hover:bg-gray-800/80'
+                    : 'border-dashed border-gray-400 bg-transparent text-gray-600 hover:bg-gray-100'
               }`}
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />
-              <span className="hidden min-[380px]:inline">Tips</span>
+              <span className="hidden sm:inline">Directions</span>
             </button>
           )}
 
@@ -1173,7 +1173,7 @@ export default function App() {
         </div>
       </div>
 
-      {viewMode === 'single' && layoutMode === 'tutorial' && !exportMode ? (
+      {viewMode === 'single' && layoutMode === 'tutorial' && !exportMode && smUp && tutorialHoverHints ? (
         <TutorialHeaderHints theme={theme} showCompareToggle={selectedFiles.length > 1} />
       ) : null}
       </div>

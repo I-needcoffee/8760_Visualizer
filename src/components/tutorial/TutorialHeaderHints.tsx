@@ -34,8 +34,8 @@ export function TutorialHeaderHints({
       },
       {
         id: 'tutorial-nav-hover-hints',
-        title: 'Tips',
-        body: 'Activate or deactivate hover tool tips for this layout.',
+        title: 'Directions',
+        body: 'Turn hover directions on or off for this layout (desktop only).',
       },
       {
         id: 'tutorial-nav-settings',

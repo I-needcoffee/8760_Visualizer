@@ -132,10 +132,11 @@ export function TutorialHoverPopoverLayer({
     };
   }, [defs, rebindKey, cancelHide]);
 
+  /** Match primary UI blue used for the Directions control. */
   const surface =
     theme === 'dark'
-      ? 'border border-gray-600 bg-gray-800 text-gray-100 shadow-xl ring-1 ring-black/20'
-      : 'border border-gray-300 bg-gray-100 text-gray-900 shadow-lg ring-1 ring-gray-900/5';
+      ? 'border border-blue-400/55 bg-blue-950 text-blue-50 shadow-xl ring-1 ring-blue-500/35'
+      : 'border border-blue-500 bg-blue-50 text-gray-900 shadow-lg ring-2 ring-blue-100';
 
   if (!open) return null;
 
@@ -154,11 +155,11 @@ export function TutorialHoverPopoverLayer({
       }}
     >
       <div
-        className={`text-[10px] font-semibold uppercase tracking-wide ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+        className={`text-[10px] font-semibold uppercase tracking-wide ${theme === 'dark' ? 'text-blue-200' : 'text-blue-800'}`}
       >
         {open.title}
       </div>
-      <p className={`mt-1 text-xs leading-snug ${theme === 'dark' ? 'text-gray-200' : 'text-gray-600'}`}>{open.body}</p>
+      <p className={`mt-1 text-xs leading-snug ${theme === 'dark' ? 'text-blue-100/95' : 'text-gray-700'}`}>{open.body}</p>
     </div>,
     document.body
   );
