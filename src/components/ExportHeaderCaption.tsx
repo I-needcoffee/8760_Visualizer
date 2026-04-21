@@ -1,4 +1,10 @@
-/** Export subtitle: full variable name when header is ≥240px wide, else category. */
+/** Prefer category for compact export titles; use the variable name when category is missing or generic. */
+export function exportCaptionShort(category: string | undefined, fullName: string): string {
+  const c = category?.trim();
+  return !c || c === 'Other' ? fullName : c;
+}
+
+/** Export subtitle: full variable name when header is ≥240px wide; compact line uses category unless it is generic (then the variable name). */
 export function ExportHeaderCaption({
   lines,
 }: {

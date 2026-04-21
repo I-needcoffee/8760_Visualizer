@@ -10,7 +10,7 @@ import { X, Settings2 } from 'lucide-react';
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
-import { ExportHeaderCaption } from './ExportHeaderCaption';
+import { ExportHeaderCaption, exportCaptionShort } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
@@ -457,7 +457,12 @@ export function WindRose({
               staticIcon
             />
             <ExportHeaderCaption
-              lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
+              lines={[
+                {
+                  short: exportCaptionShort(colorVarDef.category, colorVarDef.name),
+                  long: colorVarDef.name,
+                },
+              ]}
             />
           </div>
         ) : comparePane === 'secondary' ? (

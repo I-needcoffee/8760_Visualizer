@@ -10,6 +10,8 @@ import { DataExplorer } from './components/DataExplorer';
 import { WindExplorer } from './components/WindExplorer';
 import { WindRose } from './components/WindRose';
 import { UtciExplorer } from './components/UtciExplorer';
+import { Grid4x2ComfortExportOutline } from './components/Grid4x2ComfortExportOutline';
+import { Grid4x2StatsColumn } from './components/QuickStatsSidebar';
 import { GlobalFilterState } from './components/GlobalFilterPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { toPng, toJpeg } from 'html-to-image';
@@ -18,7 +20,7 @@ import { SingleModeLayout } from './components/SingleModeLayout';
 import { ComparisonModeLayout } from './components/ComparisonModeLayout';
 import { TutorialLiveProvider } from './context/TutorialLiveContext';
 import { TutorialHeaderHints } from './components/tutorial/TutorialHeaderHints';
-import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, ArrowLeftRight, Sparkles } from 'lucide-react';
+import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, Sparkles } from 'lucide-react';
 import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
 import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
@@ -27,6 +29,7 @@ import {
   exportFilenameLine,
   weatherFileTypeLine,
   weatherLocationTypeCaption,
+  weatherPlaceCaption,
   weatherPlaceLine,
 } from './lib/weatherCaption';
 
@@ -171,15 +174,16 @@ function defaultSlotsForLayout(mode: LayoutMode): ChartConfig[] {
         { id: `ex-${mode}-dn`, type: 'explorer', variable: 'directNormalRadiation' },
       ];
     case 'grid-4x2':
+      /** Row-major: col1 sun+rose, col2 temp+wind, col3 DNR+sky cover, col4 RH+UTCI */
       return [
         { id: `sp-${mode}-0`, type: 'sunpath' },
-        ex('a'),
-        { id: `ut-${mode}-0`, type: 'utci' },
-        { id: `wd-${mode}-0`, type: 'wind' },
-        ex('b', 'directNormalRadiation'),
-        ex('c', 'relativeHumidity'),
+        ex('db', 'dryBulbTemperature'),
+        ex('dn', 'directNormalRadiation'),
+        ex('rh', 'relativeHumidity'),
         { id: `wr-${mode}-0`, type: 'windrose' },
-        { id: `em-${mode}-0`, type: 'empty' },
+        { id: `wd-${mode}-0`, type: 'wind' },
+        ex('cloud', 'totalSkyCover'),
+        { id: `ut-${mode}-0`, type: 'utci' },
       ];
     case 'hero-left':
       return [
@@ -335,10 +339,28 @@ export default function App() {
   const setExportMode = (val: boolean) => {
     setExportModeState(val);
     exportModeRef.current = val;
-    if (val) setReorderMode(false);
   };
 
   const allGradients = useMemo(() => [...GRADIENTS, ...customGradients], [customGradients]);
+
+  /** Files represented in the current dashboard export (active file in single mode; baseline + compare in comparison). */
+  const exportCaptionFiles = useMemo(() => {
+    if (!selectedFiles.length) return [];
+    if (viewMode === 'comparison' && selectedFiles.length >= 2) {
+      if (differenceBaselineIndex === differenceCompareIndex) {
+        const f = selectedFiles[differenceBaselineIndex];
+        return f ? [f] : [];
+      }
+      const a = selectedFiles[differenceBaselineIndex];
+      const b = selectedFiles[differenceCompareIndex];
+      const out: ParsedEPW[] = [];
+      if (a) out.push(a);
+      if (b) out.push(b);
+      return out;
+    }
+    const active = selectedFiles[activeFileIndex];
+    return active ? [active] : [];
+  }, [selectedFiles, viewMode, differenceBaselineIndex, differenceCompareIndex, activeFileIndex]);
 
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('hero-left');
   const activeLayoutPick = useMemo(
@@ -347,7 +369,8 @@ export default function App() {
   );
   const ActiveLayoutIcon = activeLayoutPick.Icon;
   const [tutorialHoverHints, setTutorialHoverHints] = useState(readTutorialHoverHintsEnabled);
-  const [reorderMode, setReorderMode] = useState(false);
+  /** Positioning root for export outline around bottom-right chart + comfort stats. */
+  const grid4x2ExportWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -690,6 +713,45 @@ export default function App() {
     );
   }
 
+  const singleModeLayoutEl = (
+    <SingleModeLayout
+      slots={slots}
+      layoutMode={layoutMode}
+      exportMode={exportMode}
+      theme={theme}
+      tutorialHoverHints={tutorialHoverHints}
+      tutorialEpwRows={selectedFiles[activeFileIndex]?.data}
+      tutorialFilter={globalFilter}
+      tutorialUnitSystem={unitSystem}
+      renderChart={config => {
+        const tutSlot =
+          viewMode === 'single' &&
+          layoutMode === 'tutorial' &&
+          config.id === slots[0]?.id &&
+          config.type !== 'empty';
+        return renderChartForFile(
+          config,
+          selectedFiles[activeFileIndex],
+          undefined,
+          false,
+          false,
+          undefined,
+          tutSlot ? TUTORIAL_LEGEND_DOM_ID : undefined,
+          tutSlot
+        );
+      }}
+      onSelectSlotType={(idx, type) => {
+        setSlotsByLayout(prev => {
+          const cur = [...(prev[layoutMode] ?? [])];
+          while (cur.length <= idx) cur.push({ id: `slot-${Date.now()}-${cur.length}`, type: 'empty' });
+          cur[idx] = { ...cur[idx]!, type };
+          return { ...prev, [layoutMode]: cur };
+        });
+      }}
+      onSwapSlots={swapSlotsByIndex}
+    />
+  );
+
   return (
     <div
       className={`h-dvh w-full overflow-hidden flex flex-col font-sans transition-colors duration-300 ${
@@ -958,19 +1020,6 @@ export default function App() {
             {!exportMode && (
               <div className="flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 transition-[max-width] duration-300 ease-out motion-reduce:transition-none pointer-events-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem]">
                 <button
-                  id="tutorial-nav-reorder"
-                  type="button"
-                  onClick={() => setReorderMode(v => !v)}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${
-                    reorderMode
-                      ? (theme === 'dark' ? 'bg-blue-900/40 border-blue-900/50 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-700')
-                      : (theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')
-                  }`}
-                  title="Reorder cards"
-                >
-                  <ArrowLeftRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-                <button
                   id="tutorial-nav-export"
                   type="button"
                   onClick={() => setExportMode(true)}
@@ -1085,19 +1134,21 @@ export default function App() {
         }}
       >
         <div className={`max-w-[1600px] mx-auto p-1.5 sm:p-2.5 lg:p-3 flex-1 min-h-0 flex flex-col w-full overflow-visible ${exportMode ? 'bg-white' : ''}`}>
-          {exportMode && selectedFiles.length > 0 ? (
-            <header className="mb-4 w-full shrink-0 border-b border-gray-200 pb-4">
-              <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                Weather data files
-              </h2>
-              <div className="flex flex-col gap-2">
-                {selectedFiles.map((f, i) => (
-                  <p
-                    key={i}
-                    className="break-all font-mono text-[11px] leading-snug text-gray-900"
+          {exportMode && exportCaptionFiles.length > 0 ? (
+            <header className="mb-1 w-full shrink-0 border-b border-gray-200 pb-1.5">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                {exportCaptionFiles.map((f, i) => (
+                  <div
+                    key={`${f.sourceFilename ?? ''}-${i}`}
+                    className="flex min-w-0 flex-nowrap items-baseline gap-x-2"
                   >
-                    {exportFilenameLine(f)}
-                  </p>
+                    <span className="min-w-0 shrink truncate text-[11px] font-medium text-gray-900">
+                      {weatherPlaceCaption(f)}
+                    </span>
+                    <span className="min-w-0 shrink truncate font-mono text-[10px] font-normal text-gray-400">
+                      {exportFilenameLine(f)}
+                    </span>
+                  </div>
                 ))}
               </div>
             </header>
@@ -1138,43 +1189,29 @@ export default function App() {
             </div>
           ) : (
             <TutorialLiveProvider enabled={layoutMode === 'tutorial'}>
-              <SingleModeLayout
-                slots={slots}
-                layoutMode={layoutMode}
-                exportMode={exportMode}
-                theme={theme}
-                reorderMode={reorderMode}
-                tutorialHoverHints={tutorialHoverHints}
-                tutorialEpwRows={selectedFiles[activeFileIndex]?.data}
-                tutorialFilter={globalFilter}
-                tutorialUnitSystem={unitSystem}
-                renderChart={config => {
-                  const tutSlot =
-                    viewMode === 'single' &&
-                    layoutMode === 'tutorial' &&
-                    config.id === slots[0]?.id &&
-                    config.type !== 'empty';
-                  return renderChartForFile(
-                    config,
-                    selectedFiles[activeFileIndex],
-                    undefined,
-                    false,
-                    false,
-                    undefined,
-                    tutSlot ? TUTORIAL_LEGEND_DOM_ID : undefined,
-                    tutSlot
-                  );
-                }}
-                onSelectSlotType={(idx, type) => {
-                  setSlotsByLayout(prev => {
-                    const cur = [...(prev[layoutMode] ?? [])];
-                    while (cur.length <= idx) cur.push({ id: `slot-${Date.now()}-${cur.length}`, type: 'empty' });
-                    cur[idx] = { ...cur[idx]!, type };
-                    return { ...prev, [layoutMode]: cur };
-                  });
-                }}
-                onSwapSlots={swapSlotsByIndex}
-              />
+              <div className="flex min-h-0 flex-1 flex-col">
+                {layoutMode === 'grid-4x2' ? (
+                  <div
+                    ref={grid4x2ExportWrapRef}
+                    className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,16.666%)] grid-rows-[1fr_1fr] gap-x-2 gap-y-2 items-stretch"
+                  >
+                    <Grid4x2ComfortExportOutline
+                      active={exportMode}
+                      containerRef={grid4x2ExportWrapRef}
+                      theme={theme}
+                    />
+                    <div className="col-span-1 row-span-2 min-h-0 min-w-0 flex flex-col">{singleModeLayoutEl}</div>
+                    <Grid4x2StatsColumn
+                      theme={theme}
+                      rows={selectedFiles[activeFileIndex]?.data}
+                      unitSystem={unitSystem}
+                      exportMode={exportMode}
+                    />
+                  </div>
+                ) : (
+                  singleModeLayoutEl
+                )}
+              </div>
             </TutorialLiveProvider>
           )}
 

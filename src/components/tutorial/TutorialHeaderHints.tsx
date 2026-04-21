@@ -38,15 +38,15 @@ export function TutorialHeaderHints({
         body: 'Activate or deactivate hover tool tips for this layout.',
       },
       {
-        id: 'tutorial-nav-reorder',
+        id: 'tutorial-nav-settings',
         title: 'Reorder',
-        body: 'Move the pointer over Settings to reveal Reorder here. Drag cards to new positions, then turn reorder off when you are done.',
+        body: 'Hover a card to reveal a grab handle, then drag it onto another card to swap positions.',
       },
       { id: 'tutorial-nav-export', title: 'Export', body: 'Move the pointer over Settings to reveal Export here. Capture the dashboard as PDF or JPEG for reports.' },
       {
         id: 'tutorial-nav-settings',
         title: 'Settings',
-        body: 'Move the pointer here to slide out Reorder and Export on the left. Click for global filters, units, theme, and custom color ramps.',
+        body: 'Move the pointer here to slide out Export on the left. Click for global filters, units, theme, and custom color ramps.',
       },
     ],
     [showCompareToggle]

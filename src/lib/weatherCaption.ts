@@ -5,6 +5,12 @@ export function weatherPlaceLine(f: ParsedEPW): string {
   return [f.metadata.city, f.metadata.state].filter(Boolean).join(', ');
 }
 
+/** City, state/province, country — for captions where full location context helps (e.g. export). */
+export function weatherPlaceCaption(f: ParsedEPW): string {
+  const parts = [f.metadata.city, f.metadata.state, f.metadata.country].map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean);
+  return parts.join(', ') || 'Unknown location';
+}
+
 /** Dataset / file-type label only (TMY3, TMYx …), when known from the loaded file. */
 export function weatherFileTypeLine(f: ParsedEPW): string | undefined {
   const t = f.sourceFileLabel?.trim();

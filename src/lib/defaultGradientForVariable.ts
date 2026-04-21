@@ -14,7 +14,7 @@ const CATEGORY_GRADIENT: Record<string, string> = {
   Temperature: 'temperature-comfort',
   Humidity: 'humidity-spectrum',
   Solar: 'solar-yellow-orange',
-  Wind: 'wind-intensity-blue',
+  Wind: 'wind-speed-warm',
 };
 
 function firstAvailableGradientId(gradients: GradientDef[], preferred: string): string {

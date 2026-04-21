@@ -14,7 +14,7 @@ import { X, Settings2 } from 'lucide-react';
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
-import { ExportHeaderCaption } from './ExportHeaderCaption';
+import { ExportHeaderCaption, exportCaptionShort } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
@@ -832,7 +832,7 @@ export function WindExplorer({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } p-2`}>
+      } px-2 py-1`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
             <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
@@ -845,7 +845,12 @@ export function WindExplorer({
                 staticIcon
               />
               <ExportHeaderCaption
-                lines={[{ short: colorVarDef.category, long: colorVarDef.name }]}
+                lines={[
+                  {
+                    short: exportCaptionShort(colorVarDef.category, colorVarDef.name),
+                    long: colorVarDef.name,
+                  },
+                ]}
               />
             </div>
           ) : comparePane === 'secondary' ? (

@@ -18,7 +18,6 @@ interface SingleModeLayoutProps {
   onSwapSlots: (a: number, b: number) => void;
   exportMode: boolean;
   theme: 'light' | 'dark';
-  reorderMode?: boolean;
   /** Guided layout: EPW rows for the tutorial side panel quick stats. */
   tutorialEpwRows?: EPWDataRow[];
   tutorialFilter?: GlobalFilterState;
@@ -43,7 +42,6 @@ export function SingleModeLayout({
   onSwapSlots,
   exportMode,
   theme,
-  reorderMode,
   tutorialEpwRows,
   tutorialFilter,
   tutorialUnitSystem,
@@ -56,21 +54,56 @@ export function SingleModeLayout({
   const pages = [];
   const [dragSource, setDragSource] = useState<number | null>(null);
   const [dropHover, setDropHover] = useState<number | null>(null);
+  const dragGhostRef = useRef<HTMLElement | null>(null);
 
   const onDragStart = (e: React.DragEvent, globalIndex: number) => {
     e.dataTransfer.setData(SLOT_DRAG_MIME, String(globalIndex));
     e.dataTransfer.setData('text/plain', String(globalIndex));
     e.dataTransfer.effectAllowed = 'move';
     setDragSource(globalIndex);
+
+    // Provide a visible drag preview (ghost outline) so users can see the card shape while dragging.
+    try {
+      const handleEl = e.currentTarget as HTMLElement;
+      const shell = handleEl.closest<HTMLElement>('[data-slot-shell="true"]');
+      if (shell) {
+        const r = shell.getBoundingClientRect();
+        const h = handleEl.getBoundingClientRect();
+        const ghost = document.createElement('div');
+        ghost.style.width = `${Math.max(48, r.width)}px`;
+        ghost.style.height = `${Math.max(48, r.height)}px`;
+        ghost.style.borderRadius = '16px';
+        ghost.style.boxSizing = 'border-box';
+        ghost.style.background = 'rgba(255,255,255,0.06)';
+        ghost.style.border = theme === 'dark' ? '2px solid rgba(209,213,219,0.85)' : '2px solid rgba(55,65,81,0.55)';
+        ghost.style.boxShadow = '0 10px 30px rgba(0,0,0,0.18)';
+        ghost.style.position = 'fixed';
+        ghost.style.top = '-10000px';
+        ghost.style.left = '-10000px';
+        ghost.style.zIndex = '9999';
+        document.body.appendChild(ghost);
+        dragGhostRef.current = ghost;
+        // Anchor the drag image at the grab handle location (so the outline follows the cursor naturally).
+        const offX = Math.max(0, Math.min(r.width, h.left - r.left + h.width / 2));
+        const offY = Math.max(0, Math.min(r.height, h.top - r.top + h.height / 2));
+        e.dataTransfer.setDragImage(ghost, offX, offY);
+      }
+    } catch {
+      // ignore drag-image failures
+    }
   };
 
   const onDragEnd = () => {
     setDragSource(null);
     setDropHover(null);
+    if (dragGhostRef.current) {
+      dragGhostRef.current.remove();
+      dragGhostRef.current = null;
+    }
   };
 
   const onDragOver = (e: React.DragEvent, globalIndex: number) => {
-    if (!reorderMode || exportMode) return;
+    if (exportMode) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropHover(globalIndex);
@@ -111,30 +144,34 @@ export function SingleModeLayout({
     idx: number,
     pageIndex: number,
     pageSlots: ChartConfig[],
-    baseClass: string
+    baseClass: string,
+    /** Bottom-right 4×2 cell — tagged for export outline with comfort stats. */
+    exportGrid4x2UtciCorner = false
   ) => {
     const globalIndex = pageIndex * slotsPerPage + idx;
-    const reorderChrome = !!reorderMode && !exportMode;
-    const showHandle = reorderChrome && slot.type !== 'empty';
+    const draggingActive = dragSource !== null && !exportMode;
+    const showHandle = !exportMode && slot.type !== 'empty';
     const isDragging = dragSource === globalIndex;
     const isDropTarget =
       dropHover === globalIndex && dragSource !== null && dragSource !== globalIndex;
 
     const dragRing = isDropTarget
       ? theme === 'dark'
-        ? 'ring-[3px] ring-sky-400 ring-offset-2 ring-offset-gray-900'
-        : 'ring-[3px] ring-sky-500 ring-offset-2 ring-offset-white'
+        ? 'ring-[3px] ring-gray-200/85 ring-offset-2 ring-offset-gray-900'
+        : 'ring-[3px] ring-gray-900/30 ring-offset-2 ring-offset-white'
       : '';
 
     const chartReorderDim =
-      reorderChrome && slot.type !== 'empty'
+      draggingActive && slot.type !== 'empty'
         ? `grayscale contrast-[0.94] ${isDragging ? 'opacity-45' : 'opacity-[0.9]'} transition-[filter,opacity] duration-200`
         : '';
 
     return (
       <div
         key={`${layoutMode}-${slot.id || `slot-${globalIndex}`}`}
-        className={`${baseClass} relative ${dragRing} ${slot.type === 'empty' ? '!overflow-visible' : ''}`}
+        className={`${baseClass} group/slot relative ${dragRing} ${slot.type === 'empty' ? '!overflow-visible' : ''}`}
+        data-export-grid4x2-corner={exportGrid4x2UtciCorner ? 'utci' : undefined}
+        data-slot-shell="true"
         style={{ contain: 'layout style' }}
         onDragOver={e => onDragOver(e, globalIndex)}
         onDragLeave={e => onDragLeave(e, globalIndex)}
@@ -145,20 +182,19 @@ export function SingleModeLayout({
             draggable
             onDragStart={e => onDragStart(e, globalIndex)}
             onDragEnd={onDragEnd}
-            className={`absolute left-1/2 top-1/2 z-[45] flex -translate-x-1/2 -translate-y-1/2 cursor-grab items-center gap-2 rounded-full border px-3.5 py-1.5 shadow-sm active:cursor-grabbing select-none ${
+            className={`absolute bottom-2 right-2 z-[45] inline-flex items-center justify-center rounded-full border p-1.5 shadow-sm cursor-grab active:cursor-grabbing select-none opacity-0 transition-opacity duration-150 group-hover/slot:opacity-100 group-focus-within/slot:opacity-100 ${
               theme === 'dark'
-                ? 'border-blue-900/50 bg-blue-900/55 text-blue-300 hover:bg-blue-900/75'
-                : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                ? 'border-gray-600 bg-gray-900/70 text-gray-200 hover:bg-gray-900'
+                : 'border-gray-200 bg-white/90 text-gray-700 hover:bg-white'
             }`}
-            title="Drag this handle onto another card to swap positions"
+            title="Drag to swap cards"
             onClick={e => e.stopPropagation()}
           >
-            <GripVertical className="h-5 w-5 shrink-0" aria-hidden />
-            <span className="text-[10px] font-bold uppercase tracking-wide">Move</span>
+            <GripVertical className="h-4 w-4" aria-hidden />
           </div>
         )}
         {slot.type === 'empty' ? (
-          <div className={reorderChrome ? 'grayscale opacity-80 transition-[filter,opacity] duration-200' : ''}>
+          <div className={draggingActive ? 'grayscale opacity-80 transition-[filter,opacity] duration-200' : ''}>
             <EmptySlot
               exportMode={exportMode}
               onSelectType={type => onSelectSlotType(globalIndex, type)}
@@ -239,7 +275,7 @@ export function SingleModeLayout({
           {layoutMode === 'grid-4x2' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 w-full flex-1 min-h-0 md:[grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] md:overflow-visible">
               {(pageSlots.length >= 8 ? GRID_4X2_DISPLAY_ORDER : pageSlots.map((_, i) => i)).map(
-                originalIdx => {
+                (originalIdx, visualPos) => {
                   const slot = pageSlots[originalIdx];
                   if (!slot) return null;
                   let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden col-span-1 ';
@@ -248,7 +284,14 @@ export function SingleModeLayout({
                       theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
                     }`;
                   }
-                  return renderSlotShell(slot, originalIdx, pageIndex, pageSlots, className);
+                  return renderSlotShell(
+                    slot,
+                    originalIdx,
+                    pageIndex,
+                    pageSlots,
+                    className,
+                    visualPos === 7
+                  );
                 }
               )}
             </div>
@@ -273,11 +316,8 @@ export function SingleModeLayout({
   );
 }
 
-/**
- * Grid 4×2 default ends with wind rose then padded empty — swap display order so the rose
- * occupies the bottom-right column (empty sits to its left).
- */
-const GRID_4X2_DISPLAY_ORDER: readonly number[] = [0, 1, 2, 3, 4, 5, 7, 6];
+/** Visual iteration order for 4×2 grid cells (matches slot indices left-to-right, top-to-bottom). */
+const GRID_4X2_DISPLAY_ORDER: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7];
 
 type EmptySlotIcon = LucideIcon | typeof WindRoseGlyph;
 

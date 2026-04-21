@@ -79,7 +79,7 @@ export function TutorialGuidePanel({
               {block.heading ? (
                 <h4 className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wide ${muted}`}>{block.heading}</h4>
               ) : null}
-              <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1.5 text-left">
+              <dl className="grid w-max max-w-full grid-cols-[max-content_max-content] gap-x-2 gap-y-1.5 text-left">
                 {block.rows.map((row, ri) => (
                   <React.Fragment key={`${bi}-${ri}`}>
                     <dt className={`text-[11px] ${muted}`}>{row.label}</dt>
