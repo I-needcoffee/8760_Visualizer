@@ -805,7 +805,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     } catch (e) {
       console.error(e);
       setErrorMsg(
-        'Could not look up that place. Run the app with Vite (npm run dev / vite preview) so /api/nominatim is available, or pan the map to pick a station.'
+        'Could not look up that place. Try again in a moment, or pan the map to pick a station. (Hosted builds need the /api/nominatim proxy — see README.)'
       );
     } finally {
       setLocating(false);
@@ -975,7 +975,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             Enter a city, airport, landmark, or address, then press Enter. The map zooms to that location and frames the two closest weather stations.
           </p>
           <div
-            className="inline-flex h-11 items-stretch rounded-full border border-gray-200 bg-gray-100 p-1 shadow-hard-sm gap-0.5 shrink-0"
+            className="inline-flex h-11 w-fit max-w-[18rem] self-center items-stretch rounded-full border border-gray-200 bg-gray-100 p-1 shadow-hard-sm gap-0.5 shrink-0 sm:max-w-none sm:self-auto"
             role="group"
             aria-label="Weather dataset source"
           >

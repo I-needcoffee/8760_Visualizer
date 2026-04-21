@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, useSyncExternalStore } from 'react';
 import { MapSelector } from './components/MapSelector';
 import { SunPath } from './components/SunPath';
 import { DataExplorer } from './components/DataExplorer';
@@ -12,6 +12,7 @@ import { WindRose } from './components/WindRose';
 import { UtciExplorer } from './components/UtciExplorer';
 import { Grid4x2ComfortExportOutline } from './components/Grid4x2ComfortExportOutline';
 import { Grid4x2StatsColumn } from './components/QuickStatsSidebar';
+import { SiteFooter, type SiteFooterExportCaption } from './components/SiteFooter';
 import { GlobalFilterState } from './components/GlobalFilterPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { toPng, toJpeg } from 'html-to-image';
@@ -42,6 +43,21 @@ function readTutorialHoverHintsEnabled(): boolean {
   } catch {
     return true;
   }
+}
+
+function useMediaMinWidthPx(minWidthPx: number, ssrFallback: boolean) {
+  const query = `(min-width: ${minWidthPx}px)`;
+  return useSyncExternalStore(
+    onStoreChange => {
+      if (typeof window === 'undefined') return () => {};
+      const mql = window.matchMedia(query);
+      const onChange = () => onStoreChange();
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    },
+    () => (typeof window !== 'undefined' ? window.matchMedia(query).matches : ssrFallback),
+    () => ssrFallback
+  );
 }
 
 /** Toolbar pictograms for single-mode dashboard layouts (stroke-only, rounded rects). */
@@ -117,7 +133,24 @@ function LayoutIconTutorial({ className }: { className?: string }) {
 }
 
 export type ChartType = 'sunpath' | 'explorer' | 'wind' | 'windrose' | 'utci' | 'empty';
-export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep' | 'tutorial';
+export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep' | 'tutorial' | 'stacked';
+
+function LayoutIconStacked({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 40 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      {/* Single card with a left↔right arrow to suggest full-width single-column layout. */}
+      <rect x="5" y="4" width="30" height="20" rx="3" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M14 14h12m0 0-2.5-2.5M26 14l-2.5 2.5M14 14l2.5-2.5M14 14l2.5 2.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.85"
+      />
+    </svg>
+  );
+}
 
 const LAYOUT_PICKER: readonly {
   mode: LayoutMode;
@@ -149,6 +182,12 @@ const LAYOUT_PICKER: readonly {
     title: 'Guided — one card + tutorial panel',
     Icon: LayoutIconTutorial,
   },
+  {
+    mode: 'stacked',
+    ariaLabel: 'Stacked layout — full-width cards',
+    title: 'Stacked — full-width cards',
+    Icon: LayoutIconStacked,
+  },
 ];
 
 export interface ChartConfig {
@@ -168,6 +207,15 @@ function defaultSlotsForLayout(mode: LayoutMode): ChartConfig[] {
   switch (mode) {
     case 'tutorial':
       return [{ id: `sp-${mode}-0`, type: 'sunpath' }];
+    case 'stacked':
+      return [
+        { id: `sp-${mode}-0`, type: 'sunpath' },
+        ex('db', 'dryBulbTemperature'),
+        { id: `ut-${mode}-0`, type: 'utci' },
+        { id: `wr-${mode}-0`, type: 'windrose' },
+        { id: `wd-${mode}-0`, type: 'wind' },
+        { id: `empty-${mode}-0`, type: 'empty' },
+      ];
     case 'focus-deep':
       return [
         { id: `sp-${mode}-0`, type: 'sunpath' },
@@ -204,6 +252,7 @@ function initialSlotsByLayout(): Record<LayoutMode, ChartConfig[]> {
     'grid-4x2': defaultSlotsForLayout('grid-4x2'),
     'focus-deep': defaultSlotsForLayout('focus-deep'),
     tutorial: defaultSlotsForLayout('tutorial'),
+    stacked: defaultSlotsForLayout('stacked'),
   };
 }
 
@@ -362,15 +411,57 @@ export default function App() {
     return active ? [active] : [];
   }, [selectedFiles, viewMode, differenceBaselineIndex, differenceCompareIndex, activeFileIndex]);
 
+  /** Export-only: place + filename lines shown in the footer strip (not duplicate header). */
+  const exportFooterCaptions = useMemo((): SiteFooterExportCaption[] | undefined => {
+    if (!exportMode || exportCaptionFiles.length === 0) return undefined;
+    return exportCaptionFiles.map(f => ({
+      place: weatherPlaceCaption(f),
+      filename: exportFilenameLine(f),
+    }));
+  }, [exportMode, exportCaptionFiles]);
+
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('hero-left');
+  const smUp = useMediaMinWidthPx(640, true);
+  const activeLayoutPicker = useMemo(() => {
+    if (viewMode !== 'single') return LAYOUT_PICKER;
+    return smUp ? LAYOUT_PICKER : LAYOUT_PICKER.filter(o => o.mode === 'tutorial' || o.mode === 'stacked');
+  }, [smUp, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'single') return;
+    if (smUp) return;
+    setLayoutMode(prev => (prev === 'tutorial' || prev === 'stacked' ? prev : 'tutorial'));
+  }, [smUp, viewMode]);
+
   const activeLayoutPick = useMemo(
-    () => LAYOUT_PICKER.find(o => o.mode === layoutMode) ?? LAYOUT_PICKER[0],
-    [layoutMode]
+    () => activeLayoutPicker.find(o => o.mode === layoutMode) ?? activeLayoutPicker[0] ?? LAYOUT_PICKER[0],
+    [layoutMode, activeLayoutPicker]
   );
   const ActiveLayoutIcon = activeLayoutPick.Icon;
   const [tutorialHoverHints, setTutorialHoverHints] = useState(readTutorialHoverHintsEnabled);
+  const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   /** Positioning root for export outline around bottom-right chart + comfort stats. */
   const grid4x2ExportWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (smUp) setLayoutPickerOpen(false);
+  }, [smUp]);
+
+  useEffect(() => {
+    if (smUp || !layoutPickerOpen) return;
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Element | null;
+      if (!t) return;
+      if (t.closest('#tutorial-nav-layouts')) return;
+      setLayoutPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('touchstart', onDoc, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('touchstart', onDoc);
+    };
+  }, [smUp, layoutPickerOpen]);
 
   useEffect(() => {
     try {
@@ -381,6 +472,21 @@ export default function App() {
   }, [tutorialHoverHints]);
   const [slotsByLayout, setSlotsByLayout] = useState<Record<LayoutMode, ChartConfig[]>>(initialSlotsByLayout);
   const slots = slotsByLayout[layoutMode];
+
+  useEffect(() => {
+    if (layoutMode !== 'stacked') return;
+    setSlotsByLayout(prev => {
+      const cur = [...(prev.stacked ?? [])];
+      if (cur.length < 2) return prev;
+      if (cur[1]?.type !== 'explorer') return prev;
+      if (cur[1]?.variable !== 'dryBulbTemperature') return prev;
+      if (cur[2]?.type === 'utci') return prev;
+
+      const next = [...cur];
+      next.splice(2, 0, { id: `ut-stacked-${Date.now()}`, type: 'utci' });
+      return { ...prev, stacked: next };
+    });
+  }, [layoutMode]);
 
   const handleChangeType = useCallback(
     (id: string, newType: ChartType) => {
@@ -692,7 +798,7 @@ export default function App() {
   if (selectedFiles.length === 0 || isSelectingFile) {
     return (
       <div
-        className="h-dvh w-full overflow-hidden font-sans relative"
+        className="relative flex h-dvh w-full flex-col overflow-hidden font-sans"
         style={{ backgroundColor: '#fcfbf8' }}
       >
         {isSelectingFile && selectedFiles.length > 0 && (
@@ -703,12 +809,19 @@ export default function App() {
             <X className="w-4 h-4" /> Cancel Selection
           </button>
         )}
-        <MapSelector 
-          onSelect={handleSelectEPW} 
-          isSelectingCompare={isSelectingFile && selectedFiles.length > 0} 
-          initialCenter={selectedFiles.length > 0 ? [selectedFiles[0].metadata.lat, selectedFiles[0].metadata.lng] : undefined}
-          initialZoom={selectedFiles.length > 0 ? 10 : undefined}
-        />
+        <div className="relative min-h-0 flex-1">
+          <MapSelector 
+            onSelect={handleSelectEPW} 
+            isSelectingCompare={isSelectingFile && selectedFiles.length > 0} 
+            initialCenter={selectedFiles.length > 0 ? [selectedFiles[0].metadata.lat, selectedFiles[0].metadata.lng] : undefined}
+            initialZoom={selectedFiles.length > 0 ? 10 : undefined}
+          />
+        </div>
+        <div className="shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
+          <div className="mx-auto max-w-[1600px]">
+            <SiteFooter theme={theme} exportMode={false} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -745,6 +858,17 @@ export default function App() {
           const cur = [...(prev[layoutMode] ?? [])];
           while (cur.length <= idx) cur.push({ id: `slot-${Date.now()}-${cur.length}`, type: 'empty' });
           cur[idx] = { ...cur[idx]!, type };
+          if (layoutMode === 'stacked') {
+            const last = cur[cur.length - 1];
+            const isLast = idx === cur.length - 1;
+            const lastWasEmpty = last?.type === 'empty';
+            if (isLast && type !== 'empty' && lastWasEmpty) {
+              cur.push({ id: `empty-${Date.now()}`, type: 'empty' });
+            }
+            if (cur.length === 0 || cur[cur.length - 1]?.type !== 'empty') {
+              cur.push({ id: `empty-${Date.now()}`, type: 'empty' });
+            }
+          }
           return { ...prev, [layoutMode]: cur };
         });
       }}
@@ -904,7 +1028,7 @@ export default function App() {
               aria-label={tutorialHoverHints ? 'Deactivate tool tips' : 'Activate tool tips'}
               onClick={() => setTutorialHoverHints(v => !v)}
               title={tutorialHoverHints ? 'Deactivate tool tips' : 'Activate tool tips'}
-              className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:gap-1.5 sm:px-2.5 ${
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 text-[10px] font-bold uppercase tracking-wide shadow-hard-sm transition-all active:scale-95 min-[380px]:w-auto min-[380px]:justify-start min-[380px]:gap-1 min-[380px]:px-2 min-[380px]:py-1 sm:h-10 sm:gap-1.5 sm:px-2.5 ${
                 tutorialHoverHints
                   ? theme === 'dark'
                     ? 'border-sky-700/70 bg-sky-950/40 text-sky-200 hover:bg-sky-900/35'
@@ -928,12 +1052,19 @@ export default function App() {
               role="group"
               aria-label="Dashboard layout"
             >
-              <div className="flex shrink-0 gap-0.5 overflow-hidden transition-[max-width] duration-300 ease-out motion-reduce:transition-none max-w-0 opacity-0 pointer-events-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[11rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[11rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[12rem] sm:group-focus-within/layout-pick:max-w-[12rem]">
-                {LAYOUT_PICKER.filter(o => o.mode !== layoutMode).map(({ mode, ariaLabel, title, Icon }) => (
+              <div
+                className={`flex shrink-0 gap-0.5 overflow-hidden transition-[max-width] duration-300 ease-out motion-reduce:transition-none max-w-0 opacity-0 pointer-events-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[11rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[11rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[12rem] sm:group-focus-within/layout-pick:max-w-[12rem] ${
+                  !smUp && layoutPickerOpen ? 'pointer-events-auto max-w-[12rem] opacity-100' : ''
+                }`}
+              >
+                {activeLayoutPicker.filter(o => o.mode !== layoutMode).map(({ mode, ariaLabel, title, Icon }) => (
                   <button
                     key={mode}
                     type="button"
-                    onClick={() => setLayoutMode(mode)}
+                    onClick={() => {
+                      setLayoutMode(mode);
+                      setLayoutPickerOpen(false);
+                    }}
                     aria-label={ariaLabel}
                     title={title}
                     className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
@@ -953,6 +1084,9 @@ export default function App() {
                 title={activeLayoutPick.title}
                 aria-current="true"
                 aria-label={activeLayoutPick.ariaLabel}
+                onClick={() => {
+                  if (!smUp) setLayoutPickerOpen(v => !v);
+                }}
               >
                 <ActiveLayoutIcon className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
               </div>
@@ -1018,7 +1152,11 @@ export default function App() {
               <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
             </button>
             {!exportMode && (
-              <div className="flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 transition-[max-width] duration-300 ease-out motion-reduce:transition-none pointer-events-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem]">
+              <div
+                className={`flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 transition-[max-width] duration-300 ease-out motion-reduce:transition-none pointer-events-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem] ${
+                  !smUp ? 'pointer-events-auto max-w-[6.25rem] opacity-100' : ''
+                }`}
+              >
                 <button
                   id="tutorial-nav-export"
                   type="button"
@@ -1121,39 +1259,15 @@ export default function App() {
         </div>
       )}
 
-      {/* Dashboard Area */}
+      {/* Dashboard Area — main charts flex-1; footer strip shrink-0 so pills never overlap cards */}
       <div 
         id="dashboard-area"
-        className={`flex-1 min-h-0 flex flex-col relative transition-colors duration-500 ${
-          selectedFiles.length >= 2 && viewMode === 'comparison' && !exportMode
-            ? 'overflow-hidden'
-            : 'overflow-visible'
-        } ${exportMode ? 'bg-white' : ''}`}
+        className={`flex flex-1 min-h-0 flex-col overflow-hidden transition-colors duration-500 ${exportMode ? 'bg-white' : ''}`}
         style={{
           backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : '#fcfbf8',
         }}
       >
-        <div className={`max-w-[1600px] mx-auto p-1.5 sm:p-2.5 lg:p-3 flex-1 min-h-0 flex flex-col w-full overflow-visible ${exportMode ? 'bg-white' : ''}`}>
-          {exportMode && exportCaptionFiles.length > 0 ? (
-            <header className="mb-1 w-full shrink-0 border-b border-gray-200 pb-1.5">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                {exportCaptionFiles.map((f, i) => (
-                  <div
-                    key={`${f.sourceFilename ?? ''}-${i}`}
-                    className="flex min-w-0 flex-nowrap items-baseline gap-x-2"
-                  >
-                    <span className="min-w-0 shrink truncate text-[11px] font-medium text-gray-900">
-                      {weatherPlaceCaption(f)}
-                    </span>
-                    <span className="min-w-0 shrink truncate font-mono text-[10px] font-normal text-gray-400">
-                      {exportFilenameLine(f)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </header>
-          ) : null}
-
+        <div className={`mx-auto flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 pt-1.5 sm:px-2.5 sm:pt-2.5 lg:px-3 lg:pt-3 w-full max-w-[1600px] ${exportMode ? 'bg-white' : ''}`}>
           {showSettingsModal && (
             <SettingsModal
               isOpen={showSettingsModal}
@@ -1216,6 +1330,15 @@ export default function App() {
           )}
 
           </div>
+        <div
+          className={`shrink-0 border-t ${
+            exportMode ? 'border-gray-200 bg-white' : theme === 'dark' ? 'border-gray-800/80 bg-inherit' : 'border-gray-200/80 bg-inherit'
+          }`}
+        >
+          <div className="mx-auto w-full max-w-[1600px] px-1.5 py-2 sm:px-2.5 lg:px-3">
+            <SiteFooter theme={theme} exportMode={exportMode} exportCaptions={exportFooterCaptions} />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -93,7 +93,7 @@ function nominatimProxyMiddleware(): Connect.NextHandleFunction {
       const response = await fetch(nomUrl, {
         headers: {
           Accept: 'application/json',
-          'User-Agent': 'ClimateCompare/1.0 (https://github.com; local dev)',
+          'User-Agent': 'ClimateCompare/1.0 (https://colorfulclimate.com)',
         },
       });
       const text = await response.text();

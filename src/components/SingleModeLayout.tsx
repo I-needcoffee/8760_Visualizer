@@ -28,6 +28,7 @@ interface SingleModeLayoutProps {
 
 function getSlotsPerPage(mode: LayoutMode) {
   if (mode === 'tutorial') return 1;
+  if (mode === 'stacked') return 1;
   if (mode === 'hero-left') return 7;
   if (mode === 'grid-4x2') return 8;
   if (mode === 'focus-deep') return 2;
@@ -128,15 +129,19 @@ export function SingleModeLayout({
   let allSlots: ChartConfig[];
   if (layoutMode === 'tutorial') {
     allSlots = [slots[0] ?? { id: 'empty-0', type: 'empty' }];
+    pages.push(allSlots);
+  } else if (layoutMode === 'stacked') {
+    // Stacked is a single, scrollable list (no pagination).
+    allSlots = [...slots];
+    pages.push(allSlots);
   } else {
     allSlots = [...slots];
     while (allSlots.length % slotsPerPage !== 0 || allSlots.length === 0) {
       allSlots.push({ id: `empty-${allSlots.length}`, type: 'empty' });
     }
-  }
-
-  for (let i = 0; i < allSlots.length; i += slotsPerPage) {
-    pages.push(allSlots.slice(i, i + slotsPerPage));
+    for (let i = 0; i < allSlots.length; i += slotsPerPage) {
+      pages.push(allSlots.slice(i, i + slotsPerPage));
+    }
   }
 
   const renderSlotShell = (
@@ -215,6 +220,24 @@ export function SingleModeLayout({
           key={pageIndex}
           className={`w-full relative flex flex-col ${pages.length === 1 ? 'flex-1 min-h-0' : ''}`}
         >
+          {layoutMode === 'stacked' && (
+            <div className="flex w-full flex-1 min-h-0 flex-col gap-2 overflow-y-auto">
+              {pageSlots.map((slot, idx) => {
+                let className = 'w-full min-h-[340px] flex flex-col overflow-hidden ';
+                if (!exportMode) {
+                  className += `rounded-xl border shadow-hard-lg ${
+                    theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+                  }`;
+                }
+                return (
+                  <div key={`${layoutMode}-${slot.id}-${idx}`} className="w-full">
+                    {renderSlotShell(slot, idx, pageIndex, pageSlots, className)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {layoutMode === 'tutorial' && (
             <div ref={tutorialColRef} className="flex w-full flex-1 min-h-0 flex-col gap-2 md:min-h-0 md:overflow-visible">
               {tutorialHoverHints && (

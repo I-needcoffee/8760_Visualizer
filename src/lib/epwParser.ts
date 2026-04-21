@@ -154,15 +154,26 @@ function parseSingleEPW(csvString: string): ParsedEPW {
 
     if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour)) continue;
 
-    // EPW hours are 1-24. We want 0-23 for JS Date.
+    // EPW hours are 1-24 (end-of-hour). We convert to 0-23 for filtering/labels.
     const jsHour = hour - 1;
-    const jsDate = new Date(year, month - 1, day, jsHour, minute);
-    
-    // Calculate day of year
-    const start = new Date(year, 0, 0);
-    const diff = (jsDate.getTime() - start.getTime()) + ((start.getTimezoneOffset() - jsDate.getTimezoneOffset()) * 60 * 1000);
+
+    /**
+     * IMPORTANT:
+     * `SunCalc` expects a real UTC instant (`Date.getTime()`), but EPW timestamps are in the
+     * station's local standard time (`metadata.timeZone`, hours offset from UTC).
+     *
+     * Many earlier bugs come from constructing `new Date(year,...)` which uses the viewer's local
+     * timezone (and DST rules), causing some files to appear “time-shifted” (e.g. morning plotted as afternoon).
+     *
+     * Convert station-local time → UTC instant:  utc = local - tzHours.
+     * (EPW timeZone is e.g. -8 for Pacific: local = UTC-8 ⇒ UTC = local - (-8) = local + 8)
+     */
+    const utcMs = Date.UTC(year, month - 1, day, jsHour - metadata.timeZone, minute);
+    const jsDate = new Date(utcMs);
+
+    // Calculate day of year from calendar date (stable, DST-independent).
     const oneDay = 1000 * 60 * 60 * 24;
-    const dayOfYear = Math.floor(diff / oneDay);
+    const dayOfYear = Math.floor((Date.UTC(year, month - 1, day) - Date.UTC(year, 0, 0)) / oneDay);
 
     const row: EPWDataRow = {
       date: jsDate,

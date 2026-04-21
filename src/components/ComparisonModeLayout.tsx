@@ -385,7 +385,7 @@ export function ComparisonModeLayout({
   const roseLegendTrack = useLegendTrackWidthFromLeftPane();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden lg:overflow-hidden lg:flex-row lg:gap-4">
       <aside className="flex w-full min-w-0 shrink-0 flex-col overflow-hidden lg:w-1/2 lg:min-w-0 lg:flex-none">
         <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-0 flex-1">
           {renderChart(
@@ -399,9 +399,9 @@ export function ComparisonModeLayout({
         </CompareCardShell>
       </aside>
 
-      <section className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden pb-2 pr-0.5 lg:w-1/2 lg:flex-none">
+      <section className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 overflow-visible pb-2 pr-0.5 lg:w-1/2 lg:flex-none lg:overflow-y-auto lg:overflow-x-hidden">
         <div
-          className={`sticky top-0 z-10 -mx-0.5 mb-1 grid shrink-0 grid-cols-2 gap-2 px-0.5 pb-1.5 pt-0.5 sm:gap-3 ${
+          className={`z-10 -mx-0.5 mb-1 grid shrink-0 grid-cols-2 gap-2 px-0.5 pb-1.5 pt-0.5 sm:gap-3 lg:sticky lg:top-0 ${
             theme === 'dark' ? 'border-b border-gray-800/50 bg-transparent' : 'border-b border-gray-200/60 bg-transparent'
           }`}
         >
@@ -535,7 +535,7 @@ export function ComparisonModeLayout({
           )}
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px] sm:min-h-[360px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -613,7 +613,7 @@ export function ComparisonModeLayout({
             </div>
           </PairSharedToolbar>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden divide-x divide-gray-200 dark:divide-gray-700">
               <div
                 ref={explorerLegendTrack.leftPaneRef}
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
@@ -676,7 +676,7 @@ export function ComparisonModeLayout({
           </div>
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px] sm:min-h-[360px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -737,7 +737,7 @@ export function ComparisonModeLayout({
             </div>
           </PairSharedToolbar>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden divide-x divide-gray-200 dark:divide-gray-700">
               <div
                 ref={utciLegendTrack.leftPaneRef}
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
@@ -793,7 +793,7 @@ export function ComparisonModeLayout({
           </div>
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px] sm:min-h-[360px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -871,7 +871,7 @@ export function ComparisonModeLayout({
             </div>
           </PairSharedToolbar>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden divide-x divide-gray-200 dark:divide-gray-700">
               <div
                 ref={windLegendTrack.leftPaneRef}
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
@@ -918,7 +918,7 @@ export function ComparisonModeLayout({
           </div>
         </CompareCardShell>
 
-        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[360px] sm:min-h-[400px]">
+        <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px] sm:min-h-[360px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <ChartTypeMenu
@@ -987,7 +987,7 @@ export function ComparisonModeLayout({
             </div>
           </PairSharedToolbar>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden divide-y divide-gray-200 dark:divide-gray-700 md:flex-row md:divide-x md:divide-y-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden divide-x divide-gray-200 dark:divide-gray-700">
               <div
                 ref={roseLegendTrack.leftPaneRef}
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:min-h-[280px]"
