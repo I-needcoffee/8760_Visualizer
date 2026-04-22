@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/**
+ * Typography experiment — Ysabeau UI (easy revert):
+ * Remove the `@theme { --font-sans: ... }` block and the Google Fonts `<link>`s in `index.html`.
+ * `font-mono` stays monospace for hex fields.
+ */
+@theme {
+  --font-sans:
+    "Ysabeau", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
 @layer base {
   html,
   body,
@@ -11,6 +22,11 @@
 
   body {
     margin: 0;
+  }
+
+  /** D3 chart text uses SVG defaults unless inherited — match the UI sans stack. */
+  svg {
+    font-family: inherit;
   }
 }
 

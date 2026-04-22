@@ -1062,7 +1062,14 @@ export function UtciExplorer({
                 display="icon"
                 staticIcon
               />
-              <ExportHeaderCaption lines={[{ short: 'Outdoor Comfort', long: 'Outdoor Comfort' }]} />
+              <ExportHeaderCaption
+                lines={[
+                  {
+                    short: `Outdoor Comfort (${utciUnit})`,
+                    long: `Outdoor Comfort · UTCI (${utciUnit})`,
+                  },
+                ]}
+              />
             </div>
           ) : comparePane === 'secondary' ? (
             <>

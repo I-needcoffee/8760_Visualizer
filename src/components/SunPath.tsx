@@ -13,7 +13,7 @@ import { X, Settings2 } from 'lucide-react';
 import { GlobalFilterState } from './GlobalFilterPanel';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
-import { ExportHeaderCaption, exportCaptionShort } from './ExportHeaderCaption';
+import { ExportHeaderCaption, exportCaptionLinesWithUnit, exportCaptionShort } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { VariableChartSelect } from './VariableChartSelect';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
@@ -799,14 +799,14 @@ const filteredCompareData = (compareData || []).filter(d => {
               </div>
               <ExportHeaderCaption
                 lines={[
-                  {
-                    short: `Color · ${exportCaptionShort(colorVarDef.category, colorVarDef.name)}`,
-                    long: `Color · ${colorVarDef.name}`,
-                  },
-                  {
-                    short: `Radius · ${exportCaptionShort(radiusVarDef.category, radiusVarDef.name)}`,
-                    long: `Radius · ${radiusVarDef.name}`,
-                  },
+                  (() => {
+                    const c = exportCaptionLinesWithUnit(colorVarDef.category, colorVarDef.name, cUnit);
+                    return { short: `Color · ${c.short}`, long: `Color · ${c.long}` };
+                  })(),
+                  (() => {
+                    const r = exportCaptionLinesWithUnit(radiusVarDef.category, radiusVarDef.name, radiusUnit);
+                    return { short: `Radius · ${r.short}`, long: `Radius · ${r.long}` };
+                  })(),
                 ]}
               />
             </div>

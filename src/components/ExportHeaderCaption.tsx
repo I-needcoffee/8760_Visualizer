@@ -4,6 +4,20 @@ export function exportCaptionShort(category: string | undefined, fullName: strin
   return !c || c === 'Other' ? fullName : c;
 }
 
+/** Export card title lines: same short/long pattern as `ExportHeaderCaption`, with display unit appended. */
+export function exportCaptionLinesWithUnit(
+  category: string | undefined,
+  variableName: string,
+  displayUnit: string
+): { short: string; long: string } {
+  const u = displayUnit?.trim();
+  const suffix = u ? ` (${u})` : '';
+  return {
+    short: `${exportCaptionShort(category, variableName)}${suffix}`,
+    long: `${variableName}${suffix}`,
+  };
+}
+
 /** Export subtitle: full variable name when header is ≥240px wide; compact line uses category unless it is generic (then the variable name). */
 export function ExportHeaderCaption({
   lines,

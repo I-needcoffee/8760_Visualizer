@@ -468,6 +468,46 @@ function FitBoundsController({
   return null;
 }
 
+/**
+ * One EPW DATA row with **35 fields** (indices 0–34) so `parseEPW` accepts it (`parts.length >= 30`
+ * and columns through liquid precip quantity exist). Earlier samples were too short and parsed as empty.
+ */
+function sampleEpwDataRow(year: number, month: number, day: number, hourEpw: number, dryBulb: number, dewPoint: number) {
+  const flags = '?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9';
+  const p: string[] = new Array(35);
+  p[0] = String(year);
+  p[1] = String(month);
+  p[2] = String(day);
+  p[3] = String(hourEpw);
+  p[4] = '0';
+  p[5] = flags;
+  p[6] = dryBulb.toFixed(1);
+  p[7] = dewPoint.toFixed(1);
+  p[8] = '80';
+  p[9] = '101325';
+  for (let i = 10; i <= 15; i++) p[i] = '0';
+  p[16] = '999999';
+  p[17] = '999999';
+  p[18] = '999999';
+  p[19] = '9999';
+  p[20] = '180';
+  p[21] = '2';
+  p[22] = '0';
+  p[23] = '0';
+  p[24] = '9999';
+  p[25] = '99999';
+  p[26] = '9';
+  p[27] = '999999999';
+  p[28] = '999';
+  p[29] = '0.999';
+  p[30] = '999';
+  p[31] = '99';
+  p[32] = '999';
+  p[33] = '999';
+  p[34] = '99';
+  return p.join(',') + '\n';
+}
+
 const generateSampleEPW = (name: string, year: number, baseTemp: number, amplitude: number) => {
   const header = `LOCATION,${name},CA,USA,Custom,999999,37.7749,-122.4194,-8.0,2.0
 DESIGN CONDITIONS,1,Climate Design Data 2009 ASHRAE Handbook,,Heating,1,-5.4,-3.4,-14.7,0.9,-3.9,-12.3,1.2,-2.1,13.3,10.6,12.1,10.1,2.5,350,Cooling,7,8.8,28.2,16.8,25.9,16.1,23.9,15.5,18.0,25.1,16.9,23.3,16.3,4.1,300,Extreme,10.1,8.5,7.3,31.5,-9.6,33.5,-11.2,35.2,-12.7,37.1,-14.5,39.2
@@ -483,10 +523,10 @@ DATA PERIODS,1,1,Data,Sunday, 1/ 1,12/31
     const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
     for (let d = 1; d <= daysInMonth; d++) {
       for (let h = 1; h <= 24; h++) {
-        const seasonal = Math.sin((m - 1) / 12 * Math.PI * 2 - Math.PI / 2) * 10;
-        const daily = Math.sin((h - 1) / 24 * Math.PI * 2 - Math.PI / 2) * amplitude;
+        const seasonal = Math.sin(((m - 1) / 12) * Math.PI * 2 - Math.PI / 2) * 10;
+        const daily = Math.sin(((h - 1) / 24) * Math.PI * 2 - Math.PI / 2) * amplitude;
         const temp = baseTemp + seasonal + daily + (Math.random() - 0.5) * 2;
-        data += `${year},${m},${d},${h},0,?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9,${temp.toFixed(1)},${(temp - 2).toFixed(1)},80,101325,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n`;
+        data += sampleEpwDataRow(year, m, d, h, temp, temp - 2);
       }
     }
   }
@@ -637,9 +677,10 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       
       for (const [filename, zipEntry] of entries) {
         const text = await zipEntry.async("string");
-        const lines = text.split('\n');
-        if (lines.length > 0 && lines[0].startsWith('LOCATION')) {
-          const parts = lines[0].split(',');
+        const lines = text.split(/\r?\n/);
+        const locLine = lines.find(l => l.trim().startsWith('LOCATION,'));
+        if (locLine) {
+          const parts = locLine.split(',');
           if (parts.length >= 8) {
             const city = parts[1];
             const state = parts[2];

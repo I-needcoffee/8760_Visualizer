@@ -894,9 +894,13 @@ export default function App() {
       {/* Top Navigation Bar */}
       <div
         id="tutorial-nav-bar"
-        className={`relative z-30 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 shadow-[0_1px_0_0_rgba(0,0,0,0.35)]' : 'bg-white border-gray-200 shadow-sm'} border-b px-2 sm:px-4 py-1.5 flex items-center justify-between gap-2 transition-[background-color,border-color,box-shadow] duration-200`}
+        className={`relative z-30 flex min-w-0 w-full min-h-0 items-center justify-between gap-2 border-b px-2 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 sm:px-4 ${
+          theme === 'dark'
+            ? 'bg-gray-800 border-gray-700 shadow-[0_1px_0_0_rgba(0,0,0,0.35)]'
+            : 'bg-white border-gray-200 shadow-sm'
+        }`}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
+        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-4">
           <button 
             id="tutorial-nav-back"
             onClick={() => {
@@ -991,11 +995,11 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex shrink min-w-0 items-center justify-end gap-1 sm:gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2">
           {selectedFiles.length > 1 && (
             <div
               id="tutorial-nav-viewmode"
-              className={`flex shrink min-w-0 items-center rounded-full border p-0.5 sm:p-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-hard-sm'}`}
+              className={`flex shrink-0 items-center rounded-full border p-0.5 sm:p-1 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-hard-sm'}`}
             >
               <button
                 onClick={() => {

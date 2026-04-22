@@ -6,39 +6,36 @@
 import * as d3 from 'd3';
 
 /**
- * Low end → midpoint (white at t=0.5 in normalized “difference” space):
- * deep blue → medium blue → sky → very pale blue → white.
+ * Low end → midpoint (white at t=0.5): same family as `TEMPERATURE_COMFORT_GRADIENT_COLORS`
+ * cool end — muted blue → lighter blues → white (no near‑black navy).
  */
 const DIFF_LOWS = [
-  '#051324',
-  '#0a1f3c',
-  '#0c4a6e',
-  '#1d4ed8',
-  '#2563eb',
-  '#3b82f6',
-  '#60a5fa',
-  '#7dd3fc',
-  '#bae6fd',
-  '#e0f2fe',
-  '#f0f9ff',
+  '#085a96',
+  '#0069b4',
+  '#1e80c4',
+  '#3d96d0',
+  '#62adda',
+  '#8ac3e4',
+  '#b0d8ef',
+  '#d6ebf7',
+  '#eef6fc',
   '#ffffff',
 ] as const;
 
 /**
- * Midpoint (white) → high end: white → cream → gold → deep burnt orange.
+ * Midpoint → high end: white → pale cream/yellow → `TEMPERATURE_COMFORT` yellow/orange
+ * (ends near `#f06441`, no dark brown).
  */
 const DIFF_HIGHS = [
   '#ffffff',
   '#fffbeb',
-  '#fef3c7',
-  '#fde68a',
-  '#fcd34d',
-  '#fbbf24',
-  '#f59e0b',
-  '#ea580c',
-  '#c2410c',
-  '#9a3412',
-  '#7c2d12',
+  '#fef9c3',
+  '#fef08a',
+  '#fde767',
+  '#f5d163',
+  '#f0a65c',
+  '#ed8a52',
+  '#f06441',
 ] as const;
 
 const lowBasis = d3.interpolateRgbBasis([...DIFF_LOWS]);

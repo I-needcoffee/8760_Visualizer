@@ -25,7 +25,7 @@ export const GRADIENTS = [
     name: 'Temperature (comfort)',
     colors: [...TEMPERATURE_COMFORT_GRADIENT_COLORS],
   },
-  /** Default for comparison “difference” heatmaps: deep blue → white (0) → burnt orange. */
+  /** Default for comparison “difference” heatmaps: muted blue → white (0) → muted burnt orange (temperature ramp family). */
   {
     id: DIFFERENCE_DIVERGING_ID,
     name: 'Difference (cool — neutral — warm)',
