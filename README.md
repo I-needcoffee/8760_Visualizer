@@ -45,9 +45,8 @@ If geocoding or EPW loading fails in production, confirm the deployment includes
 ## Domain on Vercel
 
 1. Import the Git repository and deploy (Framework Preset: **Vite**, or leave auto-detect).
-2. **Project → Settings → Domains** — add `climatecompare.yourdomain.com` (or apex) and follow DNS instructions.
-3. Optional: set environment variables for donation links (see `.env.example`).
+2. **Project → Settings → Domains** — add `climatecanvas.app` and follow DNS instructions.
 
 ## Footer / contributions
 
-The bottom-right pill shows **Created at ColorfulClimate.com** and **Support**. Support opens a dialog with PayPal and Venmo links (configured in `SiteFooter.tsx`).
+The footer shows **Created at ClimateCanvas.app** and **Support**. Support opens a dialog with PayPal and Venmo links (configured in `SiteFooter.tsx`).

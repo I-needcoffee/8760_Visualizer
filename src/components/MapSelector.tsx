@@ -1046,7 +1046,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             Future Weather Data
           </h3>
           <p className="text-sm text-gray-600 mb-4">
-            Zenodo projections are not pre-loaded due to size (115MB). You can upload the dataset once, and it will be cached in your browser.
+            Zenodo projections are not pre-loaded due to size. You can upload the dataset once, and it will be cached in your browser.
           </p>
           <div className="flex flex-col gap-3">
             <button 

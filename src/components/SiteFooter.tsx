@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
-const COLORFUL_CLIMATE = 'https://colorfulclimate.com';
+const CLIMATE_CANVAS = 'https://climatecanvas.app';
 const PAYPAL_URL = 'https://www.paypal.com/paypalme/coffee4tim';
 const VENMO_URL = 'https://account.venmo.com/u/Tim_Meyers';
 
@@ -140,8 +140,8 @@ export function SiteFooter({
             </div>
           ) : null}
           <div className="flex min-h-[2.25rem] shrink-0 items-center text-[11px] leading-snug">
-            <a href={COLORFUL_CLIMATE} target="_blank" rel="noopener noreferrer" className={exportLinkClass}>
-              Created at ColorfulClimate.com
+            <a href={CLIMATE_CANVAS} target="_blank" rel="noopener noreferrer" className={exportLinkClass}>
+              Created at ClimateCanvas.app
             </a>
           </div>
         </footer>
@@ -169,8 +169,8 @@ export function SiteFooter({
           <div
             className={`pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 rounded-full border px-2.5 py-1 sm:px-3 ${pillShell}`}
           >
-            <a href={COLORFUL_CLIMATE} target="_blank" rel="noopener noreferrer" className={`min-w-0 ${linkClassNormal}`}>
-              Created at ColorfulClimate.com
+            <a href={CLIMATE_CANVAS} target="_blank" rel="noopener noreferrer" className={`min-w-0 ${linkClassNormal}`}>
+              Created at ClimateCanvas.app
             </a>
             <span className="text-gray-400 select-none" aria-hidden>
               ·

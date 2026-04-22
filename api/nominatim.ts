@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const response = await fetch(nomUrl, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'ClimateCompare/1.0 (https://colorfulclimate.com)',
+        'User-Agent': 'ClimateCompare/1.0 (https://climatecanvas.app)',
       },
     });
     const text = await response.text();
