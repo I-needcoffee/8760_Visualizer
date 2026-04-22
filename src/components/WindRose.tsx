@@ -14,6 +14,8 @@ import { ExportHeaderCaption, exportCaptionShort } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
+import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 
 interface WindRoseProps {
@@ -64,9 +66,15 @@ export function WindRose({
   const setGradientId = windRoseShared?.setGradientId ?? setIGrad;
 
   useEffect(() => {
+    if (showDifference && compareData) {
+      if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
+        setGradientId(DIFFERENCE_DIVERGING_ID);
+        return;
+      }
+    }
     const id = defaultGradientIdForVariable(colorVar, variables, gradients);
     setGradientId(id);
-  }, [colorVar, variables, gradients, setGradientId]);
+  }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
 
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = windRoseShared?.showSettings ?? iShowSettings;
@@ -215,9 +223,10 @@ export function WindRose({
         if (primaryVal === null || compareVal === null) return 0;
         return compareVal - primaryVal;
       });
-      const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
-      min = convertValue(-maxDiff, def.unit, true);
-      max = convertValue(maxDiff, def.unit, true);
+      const bound = symmetricDiffBound(diffs);
+      const half = bound > 0 ? bound : 1;
+      min = convertValue(-half, def.unit, true);
+      max = convertValue(half, def.unit, true);
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
@@ -231,11 +240,7 @@ export function WindRose({
     
     let colorScale: (v: number) => string;
     if (showDifference && compareData) {
-      const diffScale = d3
-        .scaleLinear<string>()
-        .domain([cMin, 0, cMax])
-        .range(['#3b82f6', theme === 'dark' ? '#1f2937' : '#ffffff', '#ef4444']);
-      colorScale = v => diffScale(v);
+      colorScale = v => differenceDivergingColor(v, cMin, cMax);
     } else {
       colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }

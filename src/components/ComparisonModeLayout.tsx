@@ -15,6 +15,7 @@ import type {
 } from '../App';
 import { variableLegendDomain } from '../lib/variableLegendDomain';
 import { GRADIENTS } from '../lib/constants';
+import { DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import type { GradientDef } from './InteractiveLegend';
 import { InteractiveLegend } from './InteractiveLegend';
 import {
@@ -230,7 +231,7 @@ export function ComparisonModeLayout({
 
   const [expAgg, setExpAgg] = useState<CompareExplorerSharedControls['aggregation']>('month');
   const [expVar, setExpVar] = useState('dryBulbTemperature');
-  const [expGrad, setExpGrad] = useState(GRADIENTS[0].id);
+  const [expGrad, setExpGrad] = useState(DIFFERENCE_DIVERGING_ID);
   const [expStats, setExpStats] = useState(false);
   const [expSettings, setExpSettings] = useState(false);
 
@@ -251,7 +252,7 @@ export function ComparisonModeLayout({
   const [utciSun, setUtciSun] = useState(true);
   const [utciWind, setUtciWind] = useState(true);
   const [utciColorMode, setUtciColorMode] = useState<CompareUtciSharedControls['colorMode']>('comfortTime');
-  const [utciGrad, setUtciGrad] = useState(GRADIENTS[0].id);
+  const [utciGrad, setUtciGrad] = useState(DIFFERENCE_DIVERGING_ID);
   const [utciStats, setUtciStats] = useState(false);
   const [utciSettings, setUtciSettings] = useState(false);
 
@@ -276,7 +277,7 @@ export function ComparisonModeLayout({
   const [windVar, setWindVar] = useState(
     () => baseline.variables.find(v => v.id === 'windSpeed')?.id || baseline.variables[0]?.id || ''
   );
-  const [windGrad, setWindGrad] = useState(GRADIENTS[0].id);
+  const [windGrad, setWindGrad] = useState(DIFFERENCE_DIVERGING_ID);
   const [windStats, setWindStats] = useState(false);
   const [windSettings, setWindSettings] = useState(false);
 
@@ -296,7 +297,7 @@ export function ComparisonModeLayout({
   const [roseVar, setRoseVar] = useState(
     () => baseline.variables.find(v => v.id === 'windSpeed')?.id || baseline.variables[0]?.id || ''
   );
-  const [roseGrad, setRoseGrad] = useState(GRADIENTS[0].id);
+  const [roseGrad, setRoseGrad] = useState(DIFFERENCE_DIVERGING_ID);
   const [roseBins, setRoseBins] = useState(16);
   const [roseSettings, setRoseSettings] = useState(false);
 
@@ -321,7 +322,7 @@ export function ComparisonModeLayout({
       baseline.variables[0]?.id ||
       ''
   );
-  const [sunGrad, setSunGrad] = useState(GRADIENTS[0].id);
+  const [sunGrad, setSunGrad] = useState(DIFFERENCE_DIVERGING_ID);
   const [sunRadMin, setSunRadMin] = useState<number | string>(1);
   const [sunRadMax, setSunRadMax] = useState<number | string>(5);
   const [sunStats, setSunStats] = useState(false);
@@ -653,7 +654,9 @@ export function ComparisonModeLayout({
               </div>
             </div>
             <div
-              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              className={`mx-auto w-full max-w-full shrink-0 border-t px-1 pt-1 pb-0.5 ${
+                theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
+              }`}
               style={
                 explorerLegendTrack.legendTrackPx != null
                   ? { width: explorerLegendTrack.legendTrackPx }
@@ -763,7 +766,9 @@ export function ComparisonModeLayout({
               </div>
             </div>
             <div
-              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              className={`mx-auto w-full max-w-full shrink-0 border-t px-1 pt-1 pb-0.5 ${
+                theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
+              }`}
               style={
                 utciLegendTrack.legendTrackPx != null ? { width: utciLegendTrack.legendTrackPx } : undefined
               }
@@ -897,7 +902,9 @@ export function ComparisonModeLayout({
               </div>
             </div>
             <div
-              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              className={`mx-auto w-full max-w-full shrink-0 border-t px-1 pt-1 pb-0.5 ${
+                theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
+              }`}
               style={
                 windLegendTrack.legendTrackPx != null ? { width: windLegendTrack.legendTrackPx } : undefined
               }
@@ -1013,7 +1020,9 @@ export function ComparisonModeLayout({
               </div>
             </div>
             <div
-              className="mx-auto w-full max-w-full shrink-0 border-t border-gray-200 bg-white px-1 pt-1 pb-0.5 dark:border-gray-700 dark:bg-gray-800"
+              className={`mx-auto w-full max-w-full shrink-0 border-t px-1 pt-1 pb-0.5 ${
+                theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
+              }`}
               style={
                 roseLegendTrack.legendTrackPx != null ? { width: roseLegendTrack.legendTrackPx } : undefined
               }

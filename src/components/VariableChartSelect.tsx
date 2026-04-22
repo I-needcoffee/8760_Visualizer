@@ -108,7 +108,7 @@ export function VariableChartSelect({
 
   const wrapOuter = fillRow
     ? 'relative flex min-w-0 flex-1 basis-0 max-w-full items-center justify-start'
-    : 'relative inline-flex max-w-full items-center';
+    : 'relative flex min-w-0 flex-1 max-w-full items-center justify-start';
 
   return (
     <div id={domId} ref={wrapRef} className={wrapOuter}>
@@ -126,7 +126,7 @@ export function VariableChartSelect({
       >
         {'  '}
       </span>
-      <div className="relative inline-flex max-w-full shrink-0 items-center">
+      <div className="relative flex min-w-0 w-full max-w-full items-center">
         <select
           value={value}
           onChange={e => onChange(e.target.value)}

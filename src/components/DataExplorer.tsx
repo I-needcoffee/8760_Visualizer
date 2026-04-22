@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
+import { dataExplorerDiffValuesForAggregation } from '../lib/dataExplorerDiffAggregation';
+import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { isSolarNightEpwStation, solarNightOverlayRgba } from '../lib/solarNightHeatmap';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
@@ -154,9 +157,15 @@ export function DataExplorer({
   const setGradientId = explorerShared?.setGradientId ?? setInternalGradientId;
 
   useEffect(() => {
+    if (showDifference && compareData) {
+      if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
+        setGradientId(DIFFERENCE_DIVERGING_ID);
+        return;
+      }
+    }
     const id = defaultGradientIdForVariable(colorVar, variables, gradients);
     setGradientId(id);
-  }, [colorVar, variables, gradients, setGradientId]);
+  }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
 
   const [internalShowSettings, setInternalShowSettings] = useState(false);
   const showSettings = explorerShared?.showSettings ?? internalShowSettings;
@@ -188,7 +197,7 @@ export function DataExplorer({
     });
   }, [tutorialEnabled, tutorialReport, aggregation, colorVar, variables]);
 
-  const convertValue = (val: number | null | undefined, unit: string, isDelta: boolean = false) => {
+  const convertValue = useCallback((val: number | null | undefined, unit: string, isDelta: boolean = false) => {
     if (val === null || val === undefined) return 0;
     if (unitSystem === 'imperial') {
       if (unit === '°C') return isDelta ? val * 9/5 : val * 9/5 + 32;
@@ -196,7 +205,7 @@ export function DataExplorer({
       if (unit === 'mm') return val / 25.4;
     }
     return val;
-  };
+  }, [unitSystem]);
 
   const convertUnit = (unit: string) => {
     if (unitSystem === 'imperial') {
@@ -222,18 +231,21 @@ export function DataExplorer({
     const unit = convertUnit(def.unit);
 
     if (showDifference && compareData) {
-      const diffs = data.map((d, i) => {
-        const primaryVal = d[colorVar] as number;
-        const compareVal = compareData[i]?.[colorVar] as number;
-        if (primaryVal === null || compareVal === null) return 0;
-        return compareVal - primaryVal;
-      });
-      const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
-      min = convertValue(-maxDiff, def.unit, true);
-      max = convertValue(maxDiff, def.unit, true);
+      const diffs = dataExplorerDiffValuesForAggregation(
+        aggregation,
+        data,
+        compareData,
+        colorVar,
+        def.unit,
+        convertValue
+      );
+      const bound = symmetricDiffBound(diffs);
+      const half = bound > 0 ? bound : 1;
+      min = -half;
+      max = half;
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
-  }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
+  }, [variables, colorVar, showDifference, compareData, data, unitSystem, aggregation, convertValue]);
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
 
@@ -262,11 +274,7 @@ export function DataExplorer({
     let colorScale: (v: number) => string;
 
     if (showDifference && compareData) {
-      const diffScale = d3
-        .scaleLinear<string>()
-        .domain([cMin, 0, cMax])
-        .range(['#3b82f6', theme === 'dark' ? '#1f2937' : '#ffffff', '#ef4444']);
-      colorScale = v => diffScale(v);
+      colorScale = v => differenceDivergingColor(v, cMin, cMax);
     } else {
       colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }

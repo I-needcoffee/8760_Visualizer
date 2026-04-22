@@ -18,6 +18,8 @@ import { CardModal } from './CardModal';
 import { VariableChartSelect } from './VariableChartSelect';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
+import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
@@ -169,9 +171,15 @@ export function SunPath({
   const setGradientId = sunpathShared?.setGradientId ?? setIGrad;
 
   useEffect(() => {
+    if (showDifference && compareData) {
+      if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
+        setGradientId(DIFFERENCE_DIVERGING_ID);
+        return;
+      }
+    }
     const id = defaultGradientIdForVariable(colorVar, variables, gradients);
     setGradientId(id);
-  }, [colorVar, variables, gradients, setGradientId]);
+  }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
 
   const [iRadMin, setIRadMin] = useState<number | string>(1);
   const radiusMin = sunpathShared?.radiusMin ?? iRadMin;
@@ -326,9 +334,10 @@ const filteredCompareData = (compareData || []).filter(d => {
         if (primaryVal === null || compareVal === null) return 0;
         return compareVal - primaryVal;
       });
-      const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
-      min = convertValue(-maxDiff, def.unit, true);
-      max = convertValue(maxDiff, def.unit, true);
+      const bound = symmetricDiffBound(diffs);
+      const half = bound > 0 ? bound : 1;
+      min = convertValue(-half, def.unit, true);
+      max = convertValue(half, def.unit, true);
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
@@ -519,9 +528,7 @@ const filteredCompareData = (compareData || []).filter(d => {
     
     let colorScale: any;
     if (showDifference && compareData) {
-      colorScale = d3.scaleLinear<string>()
-        .domain([cMin, 0, cMax])
-        .range(["#3b82f6", theme === 'dark' ? "#1f2937" : "#ffffff", "#ef4444"]);
+      colorScale = (v: number) => differenceDivergingColor(v, cMin, cMax);
     } else {
       colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }
@@ -748,6 +755,23 @@ const filteredCompareData = (compareData || []).filter(d => {
   }
   }, [metadata, compareMetadata, data, compareData, showDifference, stackedComparison, pairComparisonHorizontal, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, slotSize.primary.w, slotSize.primary.h, slotSize.compare.w, slotSize.compare.h, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
 
+  /** Compare page: two-pane sun path — legend under both charts, centered (matches other compare cards). */
+  const sunComparePairLegendInFooter = Boolean(
+    stackedComparison && compareData && pairSuppressHeader && !exportMode
+  );
+
+  const interactiveLegendNode = (
+    <InteractiveLegend
+      domId={tutorialLegendDomId}
+      variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
+      gradientId={gradientId}
+      setGradientId={setGradientId}
+      gradients={gradients}
+      theme={theme}
+      isDifference={showDifference}
+    />
+  );
+
   return (
     <div 
       ref={outerRef}
@@ -916,20 +940,14 @@ const filteredCompareData = (compareData || []).filter(d => {
       </div>
       )}
 
-      <div
-        className="w-full min-w-0 flex-shrink-0 px-2 pt-1"
-        style={legendTrackPx != null ? { width: legendTrackPx } : undefined}
-      >
-        <InteractiveLegend
-          domId={tutorialLegendDomId}
-          variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
-          gradientId={gradientId}
-          setGradientId={setGradientId}
-          gradients={gradients}
-          theme={theme}
-          isDifference={showDifference}
-        />
-      </div>
+      {!sunComparePairLegendInFooter && (
+        <div
+          className="w-full min-w-0 flex-shrink-0 px-2 pt-1"
+          style={legendTrackPx != null ? { width: legendTrackPx } : undefined}
+        >
+          {interactiveLegendNode}
+        </div>
+      )}
 
       <CardModal
         open={showStatsModal}
@@ -1126,6 +1144,17 @@ const filteredCompareData = (compareData || []).filter(d => {
           )}
         </div>
       </div>
+
+      {sunComparePairLegendInFooter && (
+        <div
+          className={`mx-auto w-full max-w-full shrink-0 border-t px-1 pt-1 pb-0.5 ${
+            theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
+          }`}
+          style={legendTrackPx != null ? { width: legendTrackPx } : undefined}
+        >
+          {interactiveLegendNode}
+        </div>
+      )}
     </div>
   );
 }

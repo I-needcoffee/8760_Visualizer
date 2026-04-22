@@ -1,5 +1,5 @@
-import * as d3 from 'd3';
 import type { EPWDataRow, EPWVariable } from './epwParser';
+import { symmetricDiffBound } from './symmetricDiffDomain';
 
 export type LegendUnitSystem = 'metric' | 'imperial';
 
@@ -54,9 +54,10 @@ export function variableLegendDomain(
       if (primaryVal === null || compareVal === null) return 0;
       return compareVal - primaryVal;
     });
-    const maxDiff = d3.max(diffs, dd => Math.abs(dd)) || 5;
-    min = convertValue(-maxDiff, def.unit, unitSystem, true);
-    max = convertValue(maxDiff, def.unit, unitSystem, true);
+    const bound = symmetricDiffBound(diffs);
+    const half = bound > 0 ? bound : 1;
+    min = convertValue(-half, def.unit, unitSystem, true);
+    max = convertValue(half, def.unit, unitSystem, true);
   }
   return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
 }

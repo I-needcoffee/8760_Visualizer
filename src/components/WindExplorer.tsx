@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
+import { dataExplorerDiffValuesForAggregation } from '../lib/dataExplorerDiffAggregation';
+import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { isSolarNightEpwStation, solarNightOverlayRgba } from '../lib/solarNightHeatmap';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
@@ -140,9 +143,15 @@ export function WindExplorer({
   const setGradientId = windShared?.setGradientId ?? setIGrad;
 
   useEffect(() => {
+    if (showDifference && compareData) {
+      if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
+        setGradientId(DIFFERENCE_DIVERGING_ID);
+        return;
+      }
+    }
     const id = defaultGradientIdForVariable(colorVar, variables, gradients);
     setGradientId(id);
-  }, [colorVar, variables, gradients, setGradientId]);
+  }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
 
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = windShared?.showSettings ?? iShowSettings;
@@ -216,7 +225,7 @@ export function WindExplorer({
     }
   }, [unitSystem]);
 
-  const convertValue = (val: number | null | undefined, unit: string, isDelta: boolean = false) => {
+  const convertValue = useCallback((val: number | null | undefined, unit: string, isDelta: boolean = false) => {
     if (val === null || val === undefined) return 0;
     if (unitSystem === 'imperial') {
       if (unit === '°C') return isDelta ? val * 9/5 : val * 9/5 + 32;
@@ -224,7 +233,7 @@ export function WindExplorer({
       if (unit === 'mm') return val / 25.4;
     }
     return val;
-  };
+  }, [unitSystem]);
 
   const applyPreset = (type: 'summer' | 'winter' | 'pedestrian' | 'sitting') => {
     switch (type) {
@@ -333,18 +342,22 @@ export function WindExplorer({
     const unit = convertUnit(def.unit);
 
     if (showDifference && compareData) {
-      const diffs = data.map((d, i) => {
-        const primaryVal = d[colorVar] as number;
-        const compareVal = compareData[i]?.[colorVar] as number;
-        if (primaryVal === null || compareVal === null) return 0;
-        return compareVal - primaryVal;
-      });
-      const maxDiff = d3.max(diffs, d => Math.abs(d)) || 5;
-      min = convertValue(-maxDiff, def.unit, true);
-      max = convertValue(maxDiff, def.unit, true);
+      const diffs = dataExplorerDiffValuesForAggregation(
+        aggregation,
+        data,
+        compareData,
+        colorVar,
+        def.unit,
+        convertValue,
+        filteredData
+      );
+      const bound = symmetricDiffBound(diffs);
+      const half = bound > 0 ? bound : 1;
+      min = -half;
+      max = half;
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
-  }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
+  }, [variables, colorVar, showDifference, compareData, data, unitSystem, aggregation, convertValue, filteredData]);
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
 
@@ -378,11 +391,7 @@ export function WindExplorer({
 
     let colorScale: (v: number) => string;
     if (showDifference && compareData) {
-      const diffScale = d3
-        .scaleLinear<string>()
-        .domain([cMin, 0, cMax])
-        .range(['#3b82f6', theme === 'dark' ? '#1f2937' : '#ffffff', '#ef4444']);
-      colorScale = v => diffScale(v);
+      colorScale = v => differenceDivergingColor(v, cMin, cMax);
     } else {
       colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }
@@ -490,20 +499,35 @@ export function WindExplorer({
       });
     } else {
       // day or hour
-      heatmapData = rows.map(d => ({
-        x0: d.dayOfYear,
-        x1: d.dayOfYear + 1,
-        y: d.hour,
-        month: d.month,
-        value: convertValue(d[colorVar] as number, colorVarDef.unit),
-        direction: d.windDirection as number,
-        label: d.date.toLocaleDateString(),
-        tooltip: `${d.date.toLocaleString()}\n${colorVarDef.name}: ${convertValue(d[colorVar] as number, colorVarDef.unit).toFixed(1)} ${cUnit}\nDir: ${getCompassDirection(d.windDirection as number)} (${d.windDirection}°)`,
-        sunYear: d.year,
-        sunMonth: d.month,
-        sunDay: d.day,
-        sunHour: d.hour,
-      }));
+      heatmapData = rows.map(d => {
+        const i = data.indexOf(d);
+        const val =
+          showDifference && compareData
+            ? convertValue(
+                (compareData[i]?.[colorVar] as number || 0) - (d[colorVar] as number || 0),
+                colorVarDef.unit,
+                true
+              )
+            : convertValue(d[colorVar] as number, colorVarDef.unit);
+        const comp =
+          showDifference && compareData
+            ? `Diff\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`
+            : `${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`;
+        return {
+          x0: d.dayOfYear,
+          x1: d.dayOfYear + 1,
+          y: d.hour,
+          month: d.month,
+          value: val,
+          direction: d.windDirection as number,
+          label: d.date.toLocaleDateString(),
+          tooltip: `${d.date.toLocaleString()}\n${comp}\nDir: ${getCompassDirection(d.windDirection as number)} (${d.windDirection}°)`,
+          sunYear: d.year,
+          sunMonth: d.month,
+          sunDay: d.day,
+          sunHour: d.hour,
+        };
+      });
     }
 
     const { cellGapPx, cellInnerHeightPx, rowInnerHeight, hourRowTop, hourRowCenter } =

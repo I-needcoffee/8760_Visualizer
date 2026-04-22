@@ -1,6 +1,7 @@
 import React from 'react';
 import { EPWVariable } from '../lib/epwParser';
 import * as d3 from 'd3';
+import { DIFFERENCE_DIVERGING_COLORS } from '../lib/differenceDivergingColor';
 
 /** Matches `DataExplorer` bar rects (`.style("opacity", 0.6)` on filled bars). */
 const LEGEND_FILL_OPACITY = 0.6;
@@ -61,8 +62,7 @@ export function InteractiveLegend({
   let domain = [variable.min, variable.max];
 
   if (isDifference) {
-    // For difference mode, we use a fixed Blue-White-Red scale
-    colors = ["#3b82f6", theme === 'dark' ? "#1f2937" : "#ffffff", "#ef4444"];
+    colors = [...DIFFERENCE_DIVERGING_COLORS];
     domain = [variable.min, 0, variable.max];
   }
 
@@ -70,6 +70,8 @@ export function InteractiveLegend({
   const gap = 2 * fontScale;
   const barH = getLegendBarHeightPx(fontScale);
   const barBg = legendSurface(theme);
+  /** Keep end labels inside the rounded bar (avoids -50% translate on 0% / 100% clipping). */
+  const endInset = Math.max(2, 4 * fontScale);
 
   const contrastText = (bg: string) => {
     const c = d3.color(bg);
@@ -90,10 +92,11 @@ export function InteractiveLegend({
 
   // Build one label per segment and center it in that segment.
   const segColors = colors.length > 0 ? colors : ['#999'];
+  const isDiffAxis = isDifference && domain.length === 3;
   const segLabels = (() => {
     const n = segColors.length;
-    if (isDifference && domain.length === 3 && n === 3) {
-      return [domain[0], domain[1], domain[2]].map(formatValue);
+    if (isDiffAxis) {
+      return [domain[0]!, domain[1]!, domain[2]!].map(formatValue);
     }
     if (n === 1) return [formatValue(variable.min)];
     const min = variable.min;
@@ -129,8 +132,19 @@ export function InteractiveLegend({
         />
 
         {segLabels.map((label, i) => {
-          const n = Math.max(1, segColors.length);
-          const rawAtCenter = d3.interpolateRgbBasis(segColors)((i + 0.5) / n);
+          const n = Math.max(1, segLabels.length);
+          const tSample = isDiffAxis
+            ? i === 0
+              ? 0
+              : i === 1
+                ? 0.5
+                : 1
+            : n === 1
+              ? 0.5
+              : (n - 1) > 0
+                ? i / (n - 1)
+                : 0.5;
+          const rawAtCenter = d3.interpolateRgbBasis(segColors)(tSample);
           const blended = blendOnto(barBg, rawAtCenter, LEGEND_FILL_OPACITY);
           const fg = contrastText(blended);
           const shadow =
@@ -140,21 +154,103 @@ export function InteractiveLegend({
           const len = Math.max(1, label.length);
           const fitFactor = Math.min(1, 6 / len);
           const labelPx = Math.max(7 * fontScale, Math.floor(labelBasePx * fitFactor));
+
+          let pos: {
+            left?: string | number;
+            right?: string | number;
+            transform: string;
+            textAlign: 'left' | 'center' | 'right';
+            maxWidth?: string;
+          };
+          if (isDiffAxis) {
+            if (i === 0) {
+              pos = {
+                left: endInset,
+                transform: 'translateY(-50%)',
+                textAlign: 'left',
+                maxWidth: '33%',
+              };
+            } else if (i === 1) {
+              pos = {
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+                maxWidth: '34%',
+              };
+            } else {
+              pos = {
+                right: endInset,
+                left: 'auto',
+                transform: 'translateY(-50%)',
+                textAlign: 'right',
+                maxWidth: '33%',
+              };
+            }
+          } else if (n === 1) {
+            pos = {
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              textAlign: 'center',
+              maxWidth: '100%',
+            };
+          } else if (n === 2) {
+            pos =
+              i === 0
+                ? {
+                    left: endInset,
+                    transform: 'translateY(-50%)',
+                    textAlign: 'left',
+                    maxWidth: '45%',
+                  }
+                : {
+                    right: endInset,
+                    left: 'auto',
+                    transform: 'translateY(-50%)',
+                    textAlign: 'right',
+                    maxWidth: '45%',
+                  };
+          } else {
+            const t = n > 1 ? i / (n - 1) : 0.5;
+            if (i === 0) {
+              pos = {
+                left: endInset,
+                transform: 'translateY(-50%)',
+                textAlign: 'left',
+                maxWidth: `${Math.min(40, 100 / n + 5)}%`,
+              };
+            } else if (i === n - 1) {
+              pos = {
+                right: endInset,
+                left: 'auto',
+                transform: 'translateY(-50%)',
+                textAlign: 'right',
+                maxWidth: `${Math.min(40, 100 / n + 5)}%`,
+              };
+            } else {
+              pos = {
+                left: `${t * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+                maxWidth: `${100 / n}%`,
+              };
+            }
+          }
           return (
             <span
               key={i}
               className="absolute top-1/2 tabular-nums font-normal leading-none"
               style={{
-                left: `${((i + 0.5) / n) * 100}%`,
-                transform: 'translate(-50%, -50%)',
+                left: pos.left,
+                right: pos.right,
+                transform: pos.transform,
                 fontSize: `${labelPx}px`,
                 color: fg,
                 textShadow: shadow,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'clip',
-                maxWidth: `${100 / n}%`,
-                textAlign: 'center',
+                maxWidth: pos.maxWidth,
+                textAlign: pos.textAlign,
               }}
             >
               {label}

@@ -17,6 +17,8 @@ import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { gradientsForUtci } from '../lib/availableGradientsForVariable';
+import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
+import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -279,6 +281,14 @@ export function UtciExplorer({
   const gradientId = utciShared?.gradientId ?? iGrad;
   const setGradientId = utciShared?.setGradientId ?? setIGrad;
 
+  useEffect(() => {
+    if (showDifference && compareData) {
+      if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
+        setGradientId(DIFFERENCE_DIVERGING_ID);
+      }
+    }
+  }, [showDifference, compareData, gradients, setGradientId]);
+
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = utciShared?.showSettings ?? iShowSettings;
   const setShowSettings = utciShared?.setShowSettings ?? setIShowSettings;
@@ -440,7 +450,8 @@ export function UtciExplorer({
 
           return getUtci(cD) - getUtci(d);
         });
-        maxDiff = d3.max(diffs, d => Math.abs(d)) || 10;
+        const bound = symmetricDiffBound(diffs);
+        maxDiff = bound > 0 ? bound : 1;
       } catch (e) {}
 
       return {
@@ -480,9 +491,7 @@ export function UtciExplorer({
     
     let colorScale: any;
     if (showDifference && compareData) {
-      colorScale = d3.scaleLinear<string>()
-        .domain([utciMin, 0, utciMax])
-        .range(["#3b82f6", theme === 'dark' ? "#1f2937" : "#ffffff", "#ef4444"]);
+      colorScale = (v: number) => differenceDivergingColor(v, utciMin, utciMax);
     } else if (colorMode === 'categories') {
       colorScale = utciCategoryScale;
     } else if (colorMode === 'comfortTime') {

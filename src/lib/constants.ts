@@ -1,3 +1,5 @@
+import { DIFFERENCE_DIVERGING_COLORS, DIFFERENCE_DIVERGING_ID } from './differenceDivergingColor';
+
 /**
  * Water fill aligned with Carto light basemaps (Positron vector `water` layer uses `#d4dadc`;
  * `light_all` PNG tiles match this cool grey‑blue). Used behind the map, map shell, and
@@ -22,6 +24,12 @@ export const GRADIENTS = [
     id: 'temperature-comfort',
     name: 'Temperature (comfort)',
     colors: [...TEMPERATURE_COMFORT_GRADIENT_COLORS],
+  },
+  /** Default for comparison “difference” heatmaps: deep blue → white (0) → burnt orange. */
+  {
+    id: DIFFERENCE_DIVERGING_ID,
+    name: 'Difference (cool — neutral — warm)',
+    colors: [...DIFFERENCE_DIVERGING_COLORS],
   },
   /** Dry → humid: warm low-end, neutral mid, stronger blue at high RH. */
   {

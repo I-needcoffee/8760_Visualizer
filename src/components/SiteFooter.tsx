@@ -61,7 +61,9 @@ export function SiteFooter({
     'font-medium text-gray-900 underline decoration-gray-400/70 underline-offset-2 hover:text-gray-950';
 
   const supportBtn =
-    'shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold text-gray-700 shadow-[inset_0_0_0_1px_rgba(229,231,235,0.95)] transition-colors hover:bg-gray-200 sm:text-[11px]';
+    theme === 'dark'
+      ? 'shrink-0 rounded-full bg-gray-700/90 px-2.5 py-0.5 text-[10px] font-semibold text-gray-200 shadow-[inset_0_0_0_1px_rgba(75,85,99,0.7)] transition-colors duration-200 hover:bg-gray-600 sm:text-[11px]'
+      : 'shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold text-gray-700 shadow-[inset_0_0_0_1px_rgba(229,231,235,0.95)] transition-colors duration-200 hover:bg-gray-200 sm:text-[11px]';
 
   const captionPlace =
     exportMode ? 'text-[11px] font-medium leading-snug text-gray-900' : theme === 'dark' ? 'text-[11px] font-medium leading-snug text-gray-100' : 'text-[11px] font-medium leading-snug text-gray-900';
@@ -80,11 +82,17 @@ export function SiteFooter({
           if (e.target === e.currentTarget) setSupportOpen(false);
         }}
       >
-        <div className="relative w-full max-w-md rounded-2xl border border-gray-200 bg-white p-4 shadow-hard-xl sm:p-5">
+        <div
+          className={`relative w-full max-w-md rounded-2xl border p-4 shadow-hard-xl sm:p-5 ${
+            theme === 'dark' ? 'border-gray-600 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white'
+          }`}
+        >
           <button
             type="button"
             onClick={() => setSupportOpen(false)}
-            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+            className={`absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 ${
+              theme === 'dark' ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+            }`}
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -92,7 +100,11 @@ export function SiteFooter({
           <h2 id="support-modal-title" className="sr-only">
             Support development
           </h2>
-          <div className="px-2 pr-12 text-center font-light text-gray-800 sm:px-4">
+          <div
+            className={`px-2 pr-12 text-center font-light sm:px-4 ${
+              theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+            }`}
+          >
             <p className="text-sm leading-relaxed sm:text-base">{SUPPORT_MODAL_LINE_1}</p>
             <p className="mt-3 text-sm leading-relaxed sm:text-base">{SUPPORT_MODAL_LINE_2}</p>
           </div>

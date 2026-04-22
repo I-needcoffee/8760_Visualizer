@@ -52,8 +52,8 @@ export function ChartHeader({
             <select
               value={chartType}
               onChange={(e) => onChartTypeChange && onChartTypeChange(e.target.value as ChartType)}
-              className={`font-semibold uppercase text-[10px] tracking-wide border rounded-full px-2 py-0.5 shadow-hard-sm cursor-pointer ${
-                theme === 'dark' ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-50 text-gray-800 border-gray-200'
+              className={`cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow-hard-sm transition-[color,background-color,border-color,box-shadow] duration-200 ${
+                theme === 'dark' ? 'border-gray-600 bg-gray-700 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-800'
               }`}
             >
               <option value="sunpath">Sun Path</option>
@@ -70,7 +70,7 @@ export function ChartHeader({
         {onRemove && !exportMode && (
           <button 
             onClick={onRemove} 
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors shadow-hard-sm ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full shadow-hard-sm transition-[color,background-color,box-shadow] duration-200 ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
           >
             <X className="w-3.5 h-3.5" />
           </button>

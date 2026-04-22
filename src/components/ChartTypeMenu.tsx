@@ -97,9 +97,9 @@ export function ChartTypeMenu({
         aria-controls={menuId}
         className={
           display === 'icon'
-            ? `shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors ${
-                disabled ? 'opacity-60 cursor-default' : 'hover:text-gray-900 dark:hover:text-white'
-              } ${dark ? 'text-gray-300' : 'text-gray-600'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 ${className ?? ''}`
+            ? `flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors duration-200 ${
+                disabled ? 'cursor-default opacity-60' : 'hover:text-gray-900 dark:hover:text-white'
+              } ${dark ? 'text-gray-300' : 'text-gray-600'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-800 ${className ?? ''}`
             : `inline-flex max-w-full min-w-0 font-semibold uppercase tracking-wide text-[10px] underline-offset-2 transition-colors truncate w-max ${
                 disabled ? 'opacity-60 cursor-default' : 'hover:underline'
               } ${dark ? 'text-gray-200' : 'text-gray-800'} ${className ?? ''}`

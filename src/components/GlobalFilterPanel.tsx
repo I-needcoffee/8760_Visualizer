@@ -23,9 +23,9 @@ export function GlobalFilterPanel({ filter, onChange, theme }: GlobalFilterPanel
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div className={`border-b z-10 shadow-sm rounded-b-2xl mx-4 mt-2 overflow-hidden border-x border-t transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div className={`z-10 mx-4 mt-2 overflow-hidden rounded-b-2xl border-x border-t border-b shadow-sm transition-[background-color,border-color,box-shadow] duration-200 ease-out ${theme === 'dark' ? 'border-gray-700 bg-gray-800 shadow-[0_1px_0_0_rgba(0,0,0,0.35)]' : 'border-gray-200 bg-white'}`}>
       <div 
-        className={`flex items-center justify-between cursor-pointer transition-colors ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}
+        className={`flex cursor-pointer items-center justify-between transition-colors duration-200 ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}
         onClick={() => setIsCollapsed(!isCollapsed)}
         style={{ padding: '8px 16px' }}
       >

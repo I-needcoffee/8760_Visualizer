@@ -374,7 +374,13 @@ export default function App() {
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [heatmapTextColor, setHeatmapTextColor] = useState<string>('#000000');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', theme === 'dark');
+    root.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
+  }, [theme]);
+
   const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>({
     startMonth: 1,
     endMonth: 12,
@@ -449,18 +455,19 @@ export default function App() {
 
   useEffect(() => {
     if (smUp || !layoutPickerOpen) return;
-    const onDoc = (e: MouseEvent | TouchEvent) => {
+    /**
+     * Close on outside *click* only (not touchstart). A document touchstart would run before the
+     * child button's onClick, could collapse the panel and steal the tap; max-w-0 + overflow
+     * can also make targets miss hit-testing. Bubble-phase click: layout buttons fire first.
+     */
+    const onDoc = (e: MouseEvent) => {
       const t = e.target as Element | null;
       if (!t) return;
       if (t.closest('#tutorial-nav-layouts')) return;
       setLayoutPickerOpen(false);
     };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('touchstart', onDoc, { passive: true });
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('touchstart', onDoc);
-    };
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
   }, [smUp, layoutPickerOpen]);
 
   useEffect(() => {
@@ -878,7 +885,7 @@ export default function App() {
 
   return (
     <div
-      className={`h-dvh w-full overflow-hidden flex flex-col font-sans transition-colors duration-300 ${
+      className={`flex h-dvh w-full flex-col overflow-hidden font-sans transition-[background-color,color] duration-200 ease-out ${
         theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
       }`}
       style={theme === 'dark' ? undefined : { backgroundColor: '#fcfbf8' }}
@@ -887,7 +894,7 @@ export default function App() {
       {/* Top Navigation Bar */}
       <div
         id="tutorial-nav-bar"
-        className={`${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-2 sm:px-4 py-1.5 flex items-center justify-between gap-2 shadow-sm transition-colors duration-300`}
+        className={`relative z-30 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 shadow-[0_1px_0_0_rgba(0,0,0,0.35)]' : 'bg-white border-gray-200 shadow-sm'} border-b px-2 sm:px-4 py-1.5 flex items-center justify-between gap-2 transition-[background-color,border-color,box-shadow] duration-200`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
           <button 
@@ -896,7 +903,7 @@ export default function App() {
               setSelectedFiles([]);
               setShowDifference(false);
             }}
-            className={`inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border border-transparent p-0 shadow-hard-sm transition-colors ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-300 hover:border-gray-600' : 'hover:bg-gray-100 text-gray-600 hover:border-gray-200'}`}
+            className={`inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border border-transparent p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow] duration-200 ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-300 hover:border-gray-600' : 'hover:bg-gray-100 text-gray-600 hover:border-gray-200'}`}
             title="Back to Map"
           >
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -911,7 +918,7 @@ export default function App() {
               return (
               <div 
                 key={index} 
-                className={`group flex shrink-0 items-center gap-1 px-1.5 py-0.5 sm:gap-1.5 sm:px-2.5 sm:py-1 rounded-full border transition-all cursor-pointer ${
+                className={`group flex shrink-0 items-center gap-1 px-1.5 py-0.5 sm:gap-1.5 sm:px-2.5 sm:py-1 rounded-full border transition-[color,background-color,border-color,box-shadow] duration-200 cursor-pointer ${
                   viewMode === 'single' && activeFileIndex === index 
                     ? (theme === 'dark'
                       ? 'bg-gray-600 border-gray-500 text-gray-100 shadow-sm z-10'
@@ -995,10 +1002,14 @@ export default function App() {
                   setViewMode('single');
                   setShowDifference(false);
                 }}
-                className={`min-w-0 shrink rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:px-3 sm:py-1.5 sm:text-xs ${
+                className={`min-w-0 shrink rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-800 sm:px-3 sm:py-1.5 sm:text-xs ${
                   viewMode === 'single'
-                    ? 'bg-gray-300 text-gray-900 shadow-md hover:bg-gray-600 hover:text-white'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    ? theme === 'dark'
+                      ? 'bg-gray-600 text-white hover:bg-gray-500'
+                      : 'bg-gray-200 text-gray-900 shadow-sm hover:bg-gray-300'
+                    : theme === 'dark'
+                      ? 'text-gray-400 hover:text-gray-200'
+                      : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 Single
@@ -1008,10 +1019,14 @@ export default function App() {
                   setViewMode('comparison');
                   setShowDifference(true);
                 }}
-                className={`min-w-0 shrink rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:px-3 sm:py-1.5 sm:text-xs ${
+                className={`min-w-0 shrink rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-800 sm:px-3 sm:py-1.5 sm:text-xs ${
                   viewMode === 'comparison'
-                    ? 'bg-gray-300 text-gray-900 shadow-md hover:bg-gray-600 hover:text-white'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    ? theme === 'dark'
+                      ? 'bg-gray-600 text-white hover:bg-gray-500'
+                      : 'bg-gray-200 text-gray-900 shadow-sm hover:bg-gray-300'
+                    : theme === 'dark'
+                      ? 'text-gray-400 hover:text-gray-200'
+                      : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 Compare
@@ -1028,11 +1043,11 @@ export default function App() {
               aria-label={tutorialHoverHints ? 'Deactivate hover directions' : 'Activate hover directions'}
               onClick={() => setTutorialHoverHints(v => !v)}
               title={tutorialHoverHints ? 'Deactivate hover directions' : 'Activate hover directions'}
-              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border p-0 text-[10px] font-bold uppercase tracking-wide transition-all active:scale-95 sm:h-10 sm:gap-1.5 sm:px-2.5 ${
+              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border p-0 text-[10px] font-bold uppercase tracking-wide transition-[color,background-color,border-color,transform] duration-200 ease-out active:scale-[0.98] sm:h-10 sm:gap-1.5 sm:px-2.5 ${
                 tutorialHoverHints
                   ? theme === 'dark'
-                    ? 'border-blue-500 bg-blue-600 text-white shadow-md hover:bg-blue-500'
-                    : 'border-blue-600 bg-blue-600 text-white shadow-md hover:bg-blue-700'
+                    ? 'border-blue-500 bg-blue-600 text-white shadow-sm hover:bg-blue-500'
+                    : 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
                   : theme === 'dark'
                     ? 'border-dashed border-gray-500 bg-transparent text-gray-400 hover:bg-gray-800/80'
                     : 'border-dashed border-gray-400 bg-transparent text-gray-600 hover:bg-gray-100'
@@ -1053,9 +1068,13 @@ export default function App() {
               aria-label="Dashboard layout"
             >
               <div
-                className={`flex shrink-0 gap-0.5 overflow-hidden transition-[max-width] duration-300 ease-out motion-reduce:transition-none max-w-0 opacity-0 pointer-events-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[11rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[11rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[12rem] sm:group-focus-within/layout-pick:max-w-[12rem] ${
-                  !smUp && layoutPickerOpen ? 'pointer-events-auto max-w-[12rem] opacity-100' : ''
-                }`}
+                className={
+                  !smUp
+                    ? layoutPickerOpen
+                      ? 'flex min-w-0 shrink-0 gap-0.5 overflow-hidden max-w-[min(12rem,calc(100vw-5rem))] opacity-100 pointer-events-auto transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none'
+                      : 'flex min-w-0 shrink-0 gap-0.5 max-w-0 overflow-hidden opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none'
+                    : 'flex min-w-0 shrink-0 gap-0.5 overflow-hidden max-w-0 opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[11rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[11rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[12rem] sm:group-focus-within/layout-pick:max-w-[12rem]'
+                }
               >
                 {activeLayoutPicker.filter(o => o.mode !== layoutMode).map(({ mode, ariaLabel, title, Icon }) => (
                   <button
@@ -1067,7 +1086,7 @@ export default function App() {
                     }}
                     aria-label={ariaLabel}
                     title={title}
-                    className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 sm:min-w-10 sm:px-2.5 ${
+                    className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-800 sm:min-w-10 sm:px-2.5 ${
                       theme === 'dark'
                         ? 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
                         : 'text-gray-500 hover:bg-white/60 hover:text-gray-800'
@@ -1077,8 +1096,9 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div
-                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 sm:min-w-10 sm:px-2.5 ${
+              <button
+                type="button"
+                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-colors duration-200 sm:min-w-10 sm:px-2.5 ${
                   theme === 'dark' ? 'bg-gray-600 text-gray-100 shadow-sm' : 'bg-white text-gray-900 shadow-sm'
                 }`}
                 title={activeLayoutPick.title}
@@ -1089,7 +1109,7 @@ export default function App() {
                 }}
               >
                 <ActiveLayoutIcon className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
-              </div>
+              </button>
             </div>
           )}
 
@@ -1146,22 +1166,24 @@ export default function App() {
               id="tutorial-nav-settings"
               type="button"
               onClick={() => setShowSettingsModal(true)}
-              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.97] sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
               title="Global settings"
             >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-300" />
+              <Settings className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden />
             </button>
             {!exportMode && (
               <div
-                className={`flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 transition-[max-width] duration-300 ease-out motion-reduce:transition-none pointer-events-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem] ${
-                  !smUp ? 'pointer-events-auto max-w-[6.25rem] opacity-100' : ''
-                }`}
+                className={
+                  !smUp
+                    ? 'flex max-w-[6.25rem] shrink-0 flex-row gap-1 overflow-hidden opacity-100 pointer-events-auto transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none'
+                    : 'flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem]'
+                }
               >
                 <button
                   id="tutorial-nav-export"
                   type="button"
                   onClick={() => setExportMode(true)}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-all active:scale-95 sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.97] sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
                   title="Export layout"
                 >
                   <Download className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1180,22 +1202,38 @@ export default function App() {
 
       {/* Gradient Creator Modal */}
       {showGradientModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2">
-          <div className="bg-white rounded-lg shadow-hard-xl max-w-xs sm:max-w-sm w-full p-3 border border-gray-200">
-            <h3 className="text-sm font-bold mb-2">Create custom gradient</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
+          <div
+            className={`w-full max-w-xs rounded-lg border p-3 shadow-hard-xl sm:max-w-sm ${
+              theme === 'dark' ? 'border-gray-600 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white text-gray-900'
+            }`}
+          >
+            <h3 className="mb-2 text-sm font-bold">Create custom gradient</h3>
             <div className="space-y-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input 
-                  type="text" 
+                <label
+                  className={`mb-1 block text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+                >
+                  Name
+                </label>
+                <input
+                  type="text"
                   value={newGradientName}
                   onChange={e => setNewGradientName(e.target.value)}
-                  className="w-full rounded-full border border-gray-300 px-3 py-2 text-sm"
+                  className={`w-full rounded-full border px-3 py-2 text-sm transition-colors duration-200 ${
+                    theme === 'dark'
+                      ? 'border-gray-600 bg-gray-900/50 text-gray-100 placeholder:text-gray-500'
+                      : 'border-gray-300 bg-white text-gray-900'
+                  }`}
                   placeholder="e.g., My Cool Gradient"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Colors</label>
+                <label
+                  className={`mb-1 block text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+                >
+                  Colors
+                </label>
                 <div className="space-y-2">
                   {newGradientColors.map((color, i) => (
                     <div key={i} className="flex items-center gap-2">
@@ -1217,13 +1255,19 @@ export default function App() {
                           newColors[i] = e.target.value;
                           setNewGradientColors(newColors);
                         }}
-                        className="flex-1 rounded-full border border-gray-300 px-2 py-1 text-sm font-mono"
+                        className={`flex-1 rounded-full border px-2 py-1 text-sm font-mono transition-colors duration-200 ${
+                          theme === 'dark'
+                            ? 'border-gray-600 bg-gray-900/50 text-gray-100'
+                            : 'border-gray-300 bg-white text-gray-900'
+                        }`}
                       />
                       {newGradientColors.length > 2 && (
                         <button 
                           type="button"
                           onClick={() => setNewGradientColors(prev => prev.filter((_, idx) => idx !== i))}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-red-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-red-500 transition-colors duration-200 ${
+                            theme === 'dark' ? 'hover:bg-red-950/50 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'
+                          }`}
                           aria-label="Remove color"
                         >
                           <X className="w-4 h-4" />
@@ -1233,24 +1277,32 @@ export default function App() {
                   ))}
                   <button 
                     onClick={() => setNewGradientColors(prev => [...prev, '#ffffff'])}
-                    className="text-xs font-bold text-gray-600 hover:text-gray-800 flex items-center gap-1"
+                    className={`flex items-center gap-1 text-xs font-bold transition-colors duration-200 ${
+                      theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'
+                    }`}
                   >
                     <Plus className="w-3 h-3" /> Add Color
                   </button>
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="mt-8 flex justify-end gap-3">
               <button 
                 type="button"
                 onClick={() => setShowGradientModal(false)}
-                className="rounded-full px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  theme === 'dark'
+                    ? 'text-gray-300 hover:bg-gray-700/80 hover:text-white'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                }`}
               >
                 Cancel
               </button>
               <button 
                 onClick={handleAddGradient}
-                className="px-6 py-2 bg-gray-800 text-white text-sm font-bold rounded-full shadow-hard-md hover:bg-gray-900 transition-colors"
+                className={`rounded-full px-6 py-2 text-sm font-bold text-white shadow-hard-md transition-colors duration-200 ${
+                  theme === 'dark' ? 'bg-sky-600 hover:bg-sky-500' : 'bg-gray-800 hover:bg-gray-900'
+                }`}
               >
                 Create
               </button>
@@ -1262,7 +1314,7 @@ export default function App() {
       {/* Dashboard Area — main charts flex-1; footer strip shrink-0 so pills never overlap cards */}
       <div 
         id="dashboard-area"
-        className={`flex flex-1 min-h-0 flex-col overflow-hidden transition-colors duration-500 ${exportMode ? 'bg-white' : ''}`}
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden transition-[background-color] duration-200 ease-out ${exportMode ? 'bg-white' : ''}`}
         style={{
           backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : '#fcfbf8',
         }}
