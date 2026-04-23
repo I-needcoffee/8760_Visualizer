@@ -33,10 +33,10 @@ export function ChartHeader({
   return (
     <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
       exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-    } p-2 ${exportMode ? '' : 'gap-1.5'}`}>
+    } py-1 px-1.5 ${exportMode ? '' : 'gap-1'}`}>
       {/* Top Row */}
-      <div className="flex items-center justify-between w-full gap-1.5">
-        <div className={`flex items-center min-w-0 ${exportMode ? 'gap-2 flex-1' : 'gap-1.5 sm:gap-2'}`}>
+      <div className="flex w-full items-center justify-between gap-1">
+        <div className={`flex min-w-0 items-center ${exportMode ? 'flex-1 gap-2' : 'gap-1.5 sm:gap-2'}`}>
           {exportMode ? (
             <>
               <ChartTypeMenu
@@ -70,9 +70,9 @@ export function ChartHeader({
         {onRemove && !exportMode && (
           <button 
             onClick={onRemove} 
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-full shadow-hard-sm transition-[color,background-color,box-shadow] duration-200 ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
+            className={`inline-flex h-6 w-6 items-center justify-center rounded-full shadow-hard-sm transition-[color,background-color,box-shadow] duration-200 ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="h-3 w-3" />
           </button>
         )}
       </div>

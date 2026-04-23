@@ -366,7 +366,7 @@ function EmptySlot({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col px-2 py-1.5 sm:px-2.5 sm:py-2">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col px-1.5 py-1 sm:px-2 sm:py-1.5">
       <div
         className={`flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 py-5 sm:px-4 sm:py-6 ${
           theme === 'dark'

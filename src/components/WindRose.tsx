@@ -450,9 +450,9 @@ export function WindRose({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-2 py-1`}>
+      } px-1.5 py-0.5`}>
         {exportMode ? (
-          <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+          <div className="flex min-h-[24px] min-w-0 items-center gap-2">
             <ChartTypeMenu
               value="windrose"
               label="Wind Rose"
@@ -468,7 +468,7 @@ export function WindRose({
         ) : comparePane === 'secondary' ? (
           <>
             <div
-              className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+              className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                 theme === 'dark'
                   ? 'border-orange-800/60 bg-orange-950/45 text-orange-100'
                   : 'border-orange-200 bg-orange-50 text-orange-900'
@@ -476,7 +476,7 @@ export function WindRose({
             >
               Comparison · {paneCity ?? '—'}
             </div>
-            <div className="flex min-h-[28px] items-center justify-end gap-1">
+            <div className="flex min-h-[24px] items-center justify-end gap-1">
               <button
                 type="button"
                 onClick={() => setShowSettings(!showSettings)}
@@ -499,7 +499,7 @@ export function WindRose({
           <>
             {comparePane === 'primary' && paneCity && (
               <div
-                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                   theme === 'dark'
                     ? 'border-blue-800/60 bg-blue-950/45 text-blue-100'
                     : 'border-blue-200 bg-blue-50 text-blue-900'
@@ -508,7 +508,7 @@ export function WindRose({
                 Baseline · {paneCity}
               </div>
             )}
-            <div className="relative flex min-h-[28px] w-full items-center gap-1.5">
+            <div className="relative flex min-h-[24px] w-full items-center gap-1.5">
               <div
                 className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ease-out sm:gap-2 ${
                   showSettings

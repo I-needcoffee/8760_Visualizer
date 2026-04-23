@@ -7,7 +7,7 @@ import { EPWDataRow } from '../lib/epwParser';
 // @ts-ignore
 import tc from 'jsthermalcomfort';
 import { X, Settings2 } from 'lucide-react';
-import { InteractiveLegend, GradientDef, getLegendBarHeightPx } from './InteractiveLegend';
+import { InteractiveLegend, GradientDef, getLegendBarHeightPx, getLegendLabelBasePx } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareUtciSharedControls } from '../App';
 import { UnitSystem } from '../App';
@@ -104,10 +104,10 @@ const LEGEND_FILL_OPACITY = 0.6;
 const LEGEND_STRIP_SCALE = UTCI_LEGEND_FONT_SCALE;
 
 export function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
-  const pad = 3 * LEGEND_STRIP_SCALE;
-  const gap = 2 * LEGEND_STRIP_SCALE;
+  const pad = 2.5 * LEGEND_STRIP_SCALE;
+  const gap = 1.5 * LEGEND_STRIP_SCALE;
   const titlePx = Math.round(9.5 * LEGEND_STRIP_SCALE);
-  const tickPx = 7 * LEGEND_STRIP_SCALE;
+  const tickPx = 6.5 * LEGEND_STRIP_SCALE;
   const barH = getLegendBarHeightPx(LEGEND_STRIP_SCALE);
   const cats = Object.keys(UTCI_COLORS);
   const catColors = cats.map(k => UTCI_COLORS[k]);
@@ -134,7 +134,7 @@ export function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) 
           }}
         />
       </div>
-      <div className="relative w-full" style={{ minHeight: `${Math.max(tickPx, 10)}px`, fontSize: `${tickPx}px` }}>
+      <div className="relative w-full" style={{ minHeight: `${Math.max(tickPx, 8)}px`, fontSize: `${tickPx}px` }}>
         <span
           className={`absolute left-0 top-0 max-w-[34%] truncate font-medium uppercase tracking-tight leading-none ${
             theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
@@ -161,11 +161,11 @@ export function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) 
 }
 
 export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
-  const pad = 3 * LEGEND_STRIP_SCALE;
-  const gap = 2 * LEGEND_STRIP_SCALE;
+  const pad = 2.5 * LEGEND_STRIP_SCALE;
+  const gap = 1.5 * LEGEND_STRIP_SCALE;
   const titlePx = Math.round(9.5 * LEGEND_STRIP_SCALE);
   const barH = getLegendBarHeightPx(LEGEND_STRIP_SCALE);
-  const labelBasePx = Math.max(7 * LEGEND_STRIP_SCALE, Math.floor(barH * 0.56));
+  const labelBasePx = getLegendLabelBasePx(barH, LEGEND_STRIP_SCALE);
 
   const contrastText = (hex: string) => {
     const c = d3.color(hex);
@@ -202,7 +202,7 @@ export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' 
         {(['0%', '100%'] as const).map((label) => {
           const len = Math.max(1, label.length);
           const fitFactor = Math.min(1, 6 / len);
-          const labelPx = Math.max(6 * LEGEND_STRIP_SCALE, Math.floor(labelBasePx * fitFactor));
+          const labelPx = Math.max(5.5 * LEGEND_STRIP_SCALE, Math.floor(labelBasePx * fitFactor));
           const isLeft = label === '0%';
           const fg = contrastText(isLeft ? leftBg : rightBg);
           const shadow =
@@ -302,8 +302,8 @@ export function UtciExplorer({
   const paletteGradients = useMemo(() => gradientsForUtci(gradients), [gradients]);
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   const chartToolbarRevealClass = expandChromeStrip
-    ? 'pointer-events-auto max-h-[56px] overflow-visible opacity-100 pt-1.5 transition-[max-height,opacity] duration-200 ease-out'
-    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100';
+    ? 'pointer-events-auto max-h-[52px] overflow-visible opacity-100 pt-1 transition-[max-height,opacity] duration-200 ease-out'
+    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[48px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100';
   // chart type switching handled by ChartTypeMenu
 
   const tutorialLive = useTutorialLiveOptional();
@@ -1050,10 +1050,10 @@ export function UtciExplorer({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-2 py-1`}>
+      } px-1.5 py-0.5`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
-            <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
               <ChartTypeMenu
                 value="utci"
                 label="UTCI Comfort"
@@ -1074,7 +1074,7 @@ export function UtciExplorer({
           ) : comparePane === 'secondary' ? (
             <>
               <div
-                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                   theme === 'dark'
                     ? 'border-orange-800/60 bg-orange-950/45 text-orange-100'
                     : 'border-orange-200 bg-orange-50 text-orange-900'
@@ -1083,7 +1083,7 @@ export function UtciExplorer({
                 Comparison · {paneCity ?? '—'}
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}
@@ -1135,7 +1135,7 @@ export function UtciExplorer({
             <>
               {comparePane === 'primary' && paneCity && (
                 <div
-                  className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                     theme === 'dark'
                       ? 'border-blue-800/60 bg-blue-950/45 text-blue-100'
                       : 'border-blue-200 bg-blue-50 text-blue-900'
@@ -1144,7 +1144,7 @@ export function UtciExplorer({
                   Baseline · {paneCity}
                 </div>
               )}
-              <div className="relative flex min-h-[28px] w-full items-center gap-1.5">
+              <div className="relative flex min-h-[24px] w-full items-center gap-1.5">
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 pr-0 transition-[padding] duration-200 ease-out group-hover:pr-9 focus-within:pr-9 sm:gap-2">
                   <ChartTypeMenu
                     value="utci"
@@ -1176,7 +1176,7 @@ export function UtciExplorer({
                 )}
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}

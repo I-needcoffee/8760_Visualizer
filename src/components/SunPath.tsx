@@ -240,8 +240,8 @@ export function SunPath({
   }, []);
 
   const chartToolbarRevealClass = expandChromeStrip
-    ? 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-[56px] opacity-100 pointer-events-auto'
-    : 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[52px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100 focus-within:pointer-events-auto';
+    ? 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-[52px] opacity-100 pointer-events-auto'
+    : 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[48px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100 focus-within:pointer-events-auto';
   // chart type switching handled by ChartTypeMenu
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempFilterType, setTempFilterType] = useState<'helpful' | 'harmful'>('helpful');
@@ -665,28 +665,45 @@ const filteredCompareData = (compareData || []).filter(d => {
       { name: 'Winter Solstice', date: new Date(year, 11, 21) } // Dec 21
     ];
 
-    const lineGenerator = d3.line<any>()
+    /**
+     * One continuous `d3.line` on all "sun up" samples draws a spurious chord if the sun is
+     * above the horizon in two or more local-time windows the same day (e.g. high latitudes) or
+     * if a numerical blip at the horizon leaves two disjoint segments. Also `curveBasis` can
+     * overshoot between sunrise/sunset points and look like a straight tie across the dial.
+     */
+    const lineGenerator = d3
+      .line<{ altitude: number; azimuth: number }>()
       .x(d => rScale(d.altitude) * Math.sin(aScale(d.azimuth)))
       .y(d => -rScale(d.altitude) * Math.cos(aScale(d.azimuth)))
-      .curve(d3.curveBasis);
+      .curve(d3.curveLinear);
 
     keyDates.forEach(kd => {
-      const pathPoints = [];
-      // Generate points for every 10 minutes throughout the day
+      const segments: { altitude: number; azimuth: number }[][] = [];
+      let current: { altitude: number; azimuth: number }[] = [];
       for (let h = 0; h < 24; h++) {
         for (let m = 0; m < 60; m += 10) {
           const d = new Date(kd.date);
           d.setHours(h, m, 0, 0);
           const pos = SunCalc.getPosition(d, locMeta.lat, locMeta.lng);
-          const altitude = pos.altitude * 180 / Math.PI;
-          if (altitude >= 0) { // Stop exactly at horizon
-            const azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
-            pathPoints.push({ altitude, azimuth });
+          const altitude = (pos.altitude * 180) / Math.PI;
+          if (altitude >= 0) {
+            const azDeg = (pos.azimuth * 180) / Math.PI + 180;
+            const azimuth = ((azDeg % 360) + 360) % 360;
+            current.push({ altitude, azimuth });
+          } else {
+            if (current.length > 0) {
+              segments.push(current);
+              current = [];
+            }
           }
         }
       }
+      if (current.length > 0) {
+        segments.push(current);
+      }
 
-      if (pathPoints.length > 0) {
+      for (const pathPoints of segments) {
+        if (pathPoints.length < 2) continue;
         g.append("path")
           .datum(pathPoints)
           .attr("d", lineGenerator)
@@ -695,9 +712,11 @@ const filteredCompareData = (compareData || []).filter(d => {
           .style("stroke-width", '3px')
           .style("opacity", 0.8)
           .style("pointer-events", "none");
-          
-        // Add label for the path
-        const highestPoint = pathPoints.reduce((prev, current) => (prev.altitude > current.altitude) ? prev : current);
+      }
+
+      const allPoints = segments.flat();
+      if (allPoints.length > 0) {
+        const highestPoint = allPoints.reduce((prev, cur) => (prev.altitude > cur.altitude ? prev : cur));
         if (highestPoint.altitude > 0) {
           g.append("text")
             .attr("x", rScale(highestPoint.altitude) * Math.sin(aScale(highestPoint.azimuth)))
@@ -800,7 +819,7 @@ const filteredCompareData = (compareData || []).filter(d => {
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-2 py-1`}>
+      } px-1.5 py-0.5`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
             <div className="flex items-start gap-2 min-w-0">
@@ -829,7 +848,7 @@ const filteredCompareData = (compareData || []).filter(d => {
             </div>
           ) : (
             <>
-              <div ref={sunHeaderRowRef} className="relative flex w-full min-h-[28px] items-center gap-1.5">
+              <div ref={sunHeaderRowRef} className="relative flex w-full min-h-[24px] items-center gap-1.5">
                 <div className="flex min-h-0 min-w-0 flex-1 items-center gap-1.5 self-stretch pr-0 transition-[padding] duration-200 ease-out group-hover:pr-9 focus-within:pr-9 sm:gap-2">
                   <ChartTypeMenu
                     value="sunpath"
@@ -845,9 +864,9 @@ const filteredCompareData = (compareData || []).filter(d => {
                       className={`flex min-h-0 w-full min-w-0 gap-2 ${sunDualVarPickers ? 'flex-row items-stretch' : 'flex-col'}`}
                     >
                       <div
-                        className={`flex min-w-0 flex-col items-start gap-0 text-left ${sunDualVarPickers ? 'min-w-0 flex-[1.35] basis-0' : 'w-full'}`}
+                        className={`flex min-w-0 flex-row items-center gap-1.5 text-left ${sunDualVarPickers ? 'min-w-0 flex-[1.35] basis-0' : 'w-full'}`}
                       >
-                        <span className="block text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
+                        <span className="shrink-0 self-center text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
                           Color
                         </span>
                         <VariableChartSelect
@@ -871,10 +890,10 @@ const filteredCompareData = (compareData || []).filter(d => {
                       </div>
                       {sunDualVarPickers ? (
                         <div
-                          className="flex min-w-0 flex-1 basis-0 flex-col items-start gap-0 text-left"
+                          className="flex min-w-0 flex-1 basis-0 flex-row items-center gap-1.5 text-left"
                           id={tutorialChromeAnchors ? 'tutorial-card-sunpath-radius' : undefined}
                         >
-                          <span className="block text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
+                          <span className="shrink-0 self-center text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
                             Radius
                           </span>
                           <VariableChartSelect
@@ -904,15 +923,15 @@ const filteredCompareData = (compareData || []).filter(d => {
                     <button
                       type="button"
                       onClick={onRemove}
-                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-hard-sm transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
+                      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full shadow-hard-sm transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/30 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="h-3 w-3" />
                     </button>
                   </div>
                 )}
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}

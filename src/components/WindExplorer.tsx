@@ -170,8 +170,8 @@ export function WindExplorer({
   );
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   const chartToolbarRevealClass = expandChromeStrip
-    ? 'pointer-events-auto max-h-[56px] overflow-visible opacity-100 pt-1.5 transition-[max-height,opacity] duration-200 ease-out'
-    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100';
+    ? 'pointer-events-auto max-h-[52px] overflow-visible opacity-100 pt-1 transition-[max-height,opacity] duration-200 ease-out'
+    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[48px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100';
   // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
@@ -856,10 +856,10 @@ export function WindExplorer({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-2 py-1`}>
+      } px-1.5 py-0.5`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
-            <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
               <ChartTypeMenu
                 value="wind"
                 label="Wind Explorer"
@@ -875,7 +875,7 @@ export function WindExplorer({
           ) : comparePane === 'secondary' ? (
             <>
               <div
-                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                   theme === 'dark'
                     ? 'border-orange-800/60 bg-orange-950/45 text-orange-100'
                     : 'border-orange-200 bg-orange-50 text-orange-900'
@@ -884,7 +884,7 @@ export function WindExplorer({
                 Comparison · {paneCity ?? '—'}
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}
@@ -936,7 +936,7 @@ export function WindExplorer({
             <>
               {comparePane === 'primary' && paneCity && (
                 <div
-                  className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                     theme === 'dark'
                       ? 'border-blue-800/60 bg-blue-950/45 text-blue-100'
                       : 'border-blue-200 bg-blue-50 text-blue-900'
@@ -988,7 +988,7 @@ export function WindExplorer({
                 )}
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}

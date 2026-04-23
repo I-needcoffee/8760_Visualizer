@@ -23,9 +23,18 @@ function blendOnto(surfaceHex: string, colorHex: string, opacity: number) {
     .formatHex();
 }
 
-/** Shared pill height for `InteractiveLegend` and UTCI footer strips (tweak both together). */
+/**
+ * Shared pill height for `InteractiveLegend` and UTCI footer strips (tweak both together).
+ * ~2/3 of the historical 16×scale to reduce vertical space while keeping labels readable.
+ */
 export function getLegendBarHeightPx(scale: number) {
-  return Math.max(9, Math.round(16 * scale));
+  return Math.max(6, Math.round(16 * scale * (2 / 3)));
+}
+
+/** Max label size (px) that still fits inside the rounded bar; uses most of the bar height. */
+export function getLegendLabelBasePx(barH: number, fontScale: number) {
+  const cap = Math.max(1, barH - 3);
+  return Math.max(6.5 * fontScale, Math.min(Math.floor(barH * 0.78), cap));
 }
 
 export interface GradientDef {
@@ -66,12 +75,12 @@ export function InteractiveLegend({
     domain = [variable.min, 0, variable.max];
   }
 
-  const pad = 3 * fontScale;
-  const gap = 2 * fontScale;
+  const pad = 2.5 * fontScale;
+  const gap = 1.5 * fontScale;
   const barH = getLegendBarHeightPx(fontScale);
   const barBg = legendSurface(theme);
   /** Keep end labels inside the rounded bar (avoids -50% translate on 0% / 100% clipping). */
-  const endInset = Math.max(2, 4 * fontScale);
+  const endInset = Math.max(1.5, 3.2 * fontScale);
 
   const contrastText = (bg: string) => {
     const c = d3.color(bg);
@@ -107,8 +116,7 @@ export function InteractiveLegend({
     });
   })();
 
-  // Max text size that still fits in the pill segments.
-  const labelBasePx = Math.max(8 * fontScale, Math.floor(barH * 0.56));
+  const labelBasePx = getLegendLabelBasePx(barH, fontScale);
 
   return (
     <div
@@ -153,7 +161,7 @@ export function InteractiveLegend({
               : '0 1px 2px rgba(255,255,255,0.35)';
           const len = Math.max(1, label.length);
           const fitFactor = Math.min(1, 6 / len);
-          const labelPx = Math.max(7 * fontScale, Math.floor(labelBasePx * fitFactor));
+          const labelPx = Math.max(6.5 * fontScale, Math.floor(labelBasePx * fitFactor));
 
           let pos: {
             left?: string | number;

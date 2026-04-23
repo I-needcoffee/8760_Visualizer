@@ -181,8 +181,8 @@ export function DataExplorer({
 
   const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
   const chartToolbarRevealClass = expandChromeStrip
-    ? 'pointer-events-auto max-h-[56px] overflow-visible opacity-100 pt-1.5 transition-[max-height,opacity] duration-200 ease-out'
-    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[52px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[52px] focus-within:opacity-100';
+    ? 'pointer-events-auto max-h-[52px] overflow-visible opacity-100 pt-1 transition-[max-height,opacity] duration-200 ease-out'
+    : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[48px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100';
 
   const tutorialLive = useTutorialLiveOptional();
   const tutorialReport = tutorialLive?.report;
@@ -838,11 +838,11 @@ export function DataExplorer({
       <div
         className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
           exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-        } ${diffFillColumn && !exportMode ? 'shrink-0 py-0.5' : 'px-2 py-1'}`}
+        } ${diffFillColumn && !exportMode ? 'shrink-0 py-0.5' : 'px-1.5 py-0.5'}`}
       >
         <div className="flex flex-col min-w-0">
           {exportMode ? (
-            <div className="flex items-center gap-2 min-w-0 min-h-[28px]">
+            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
               <ChartTypeMenu
                 value="explorer"
                 label={showDifference ? 'Data Difference' : 'Data Explorer'}
@@ -858,7 +858,7 @@ export function DataExplorer({
           ) : comparePane === 'secondary' ? (
             <>
               <div
-                className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                   theme === 'dark'
                     ? 'border-gray-700 bg-gray-950 text-gray-100'
                     : 'border-gray-800 bg-gray-950 text-white'
@@ -889,7 +889,7 @@ export function DataExplorer({
                 </div>
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}
@@ -941,7 +941,7 @@ export function DataExplorer({
             <>
               {comparePane === 'primary' && paneCity && (
                 <div
-                  className={`mb-2 rounded-lg border px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide ${
+                  className={`mb-1.5 rounded-lg border px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide ${
                     theme === 'dark'
                       ? 'border-gray-600 bg-gray-700/50 text-gray-100'
                       : 'border-gray-300 bg-gray-200/90 text-gray-900'
@@ -1008,7 +1008,7 @@ export function DataExplorer({
                 )}
               </div>
               <div className={chartToolbarRevealClass}>
-                <div className="pt-1.5">
+                <div className="pt-1">
                   <AggregationToolbar
                     value={aggregation}
                     onChange={setAggregation}

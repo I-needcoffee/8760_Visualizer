@@ -1163,9 +1163,7 @@ export default function App() {
             </div>
           ) : null}
 
-          <div
-            className={`inline-flex shrink-0 flex-row-reverse items-center gap-1 ${!exportMode ? 'group/nav-more' : ''}`}
-          >
+          <div className="inline-flex shrink-0 flex-row items-center gap-1">
             <button
               id="tutorial-nav-settings"
               type="button"
@@ -1176,23 +1174,15 @@ export default function App() {
               <Settings className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden />
             </button>
             {!exportMode && (
-              <div
-                className={
-                  !smUp
-                    ? 'flex max-w-[6.25rem] shrink-0 flex-row gap-1 overflow-hidden opacity-100 pointer-events-auto transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none'
-                    : 'flex max-w-0 shrink-0 flex-row gap-1 overflow-hidden opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none group-hover/nav-more:pointer-events-auto group-hover/nav-more:max-w-[6.25rem] group-hover/nav-more:opacity-100 group-focus-within/nav-more:pointer-events-auto group-focus-within/nav-more:max-w-[6.25rem] group-focus-within/nav-more:opacity-100 sm:group-hover/nav-more:max-w-[6.75rem] sm:group-focus-within/nav-more:max-w-[6.75rem]'
-                }
+              <button
+                id="tutorial-nav-export"
+                type="button"
+                onClick={() => setExportMode(true)}
+                className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.97] sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                title="Export layout"
               >
-                <button
-                  id="tutorial-nav-export"
-                  type="button"
-                  onClick={() => setExportMode(true)}
-                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.97] sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
-                  title="Export layout"
-                >
-                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              </div>
+                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
             )}
           </div>
 

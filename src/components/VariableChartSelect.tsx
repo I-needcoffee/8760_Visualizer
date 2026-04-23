@@ -1,11 +1,13 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-/** Room after the two-space gap: chevron (12px) + `right-0.5` inset + buffer. */
-const CHEVRON_SLOT_PX = 22;
+/** Chevron (12px) + two-space visual gap: total tail after the selected label. */
+const CHEVRON_GLYPH_PX = 12;
+const CHEVRON_GAP_AFTER_TEXT_PX = 4;
 
 /**
- * Ghost control: measured width = label + two spaces + chevron slot; `appearance-none` + Lucide chevron.
+ * Measured width = label + two spaces (gap) + chevron. Chevron is a flex sibling of the native
+ * `select` so it stays vertically centered with the 10px control (`h-5`, `leading-none`).
  * Use `fillRow={false}` in tight toolbars so the control is not squeezed by `flex-1 basis-0`.
  */
 export function VariableChartSelect({
@@ -29,7 +31,6 @@ export function VariableChartSelect({
   const measureRef = useRef<HTMLSpanElement>(null);
   const gapMeasureRef = useRef<HTMLSpanElement>(null);
   const [widthPx, setWidthPx] = useState<number | null>(null);
-  const [paddingRightPx, setPaddingRightPx] = useState(22);
   const [isTruncated, setIsTruncated] = useState(false);
   const dark = theme === 'dark';
   const minSelectW = 56;
@@ -74,9 +75,9 @@ export function VariableChartSelect({
     const g = gapMeasureRef.current;
     if (g) gapW = g.getBoundingClientRect().width;
 
-    const padRight = Math.ceil(gapW + CHEVRON_SLOT_PX);
-    const desired = Math.ceil(textW + padRight);
-    setPaddingRightPx(prev => (prev === padRight ? prev : padRight));
+    const desired = Math.ceil(
+      textW + gapW + CHEVRON_GAP_AFTER_TEXT_PX + CHEVRON_GLYPH_PX
+    );
 
     const resolved = Math.max(minSelectW, Math.min(desired, cap));
     const truncated = resolved + 0.5 < desired;
@@ -102,13 +103,13 @@ export function VariableChartSelect({
 
   const truncateClass = isTruncated ? 'truncate' : 'whitespace-nowrap';
 
-  const selectClass = `box-border min-w-0 max-w-full cursor-pointer appearance-none border-none bg-transparent py-0 pl-0 pr-0 text-left text-[10px] font-medium leading-snug focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0 ${truncateClass} ${
+  const selectClass = `box-border h-5 min-w-0 flex-1 max-w-full cursor-pointer appearance-none border-none bg-transparent py-0 pl-0 pr-0 text-left text-[10px] font-medium leading-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0 ${truncateClass} ${
     dark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
   }`;
 
   const wrapOuter = fillRow
-    ? 'relative flex min-w-0 flex-1 basis-0 max-w-full items-center justify-start'
-    : 'relative flex min-w-0 flex-1 max-w-full items-center justify-start';
+    ? 'relative flex min-w-0 flex-1 basis-0 max-w-full min-h-5 items-center justify-start'
+    : 'relative flex min-w-0 flex-1 max-w-full min-h-5 items-center justify-start';
 
   return (
     <div id={domId} ref={wrapRef} className={wrapOuter}>
@@ -126,36 +127,26 @@ export function VariableChartSelect({
       >
         {'  '}
       </span>
-      <div className="relative flex min-w-0 w-full max-w-full items-center">
+      {/* Sizing this wrapper (not the full flex row) keeps a tight “text + 2 sp + chevron” track. */}
+      <div
+        className="flex min-h-5 min-w-0 max-w-full shrink-0 items-center gap-0"
+        style={
+          widthPx != null
+            ? { width: `${widthPx}px`, maxWidth: '100%' }
+            : { maxWidth: '100%' }
+        }
+      >
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
           title={selectedLabel}
-          style={
-            widthPx != null
-              ? {
-                  width: `${widthPx}px`,
-                  maxWidth: '100%',
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                  paddingRight: paddingRightPx,
-                  paddingLeft: 0,
-                }
-              : {
-                  width: 'auto',
-                  maxWidth: '100%',
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                  paddingRight: paddingRightPx,
-                  paddingLeft: 0,
-                }
-          }
+          style={{ minWidth: 0, boxSizing: 'border-box' }}
           className={selectClass}
         >
           {children}
         </select>
         <ChevronDown
-          className={`pointer-events-none absolute right-0.5 top-1/2 h-3 w-3 -translate-y-1/2 shrink-0 ${
+          className={`h-3 w-3 shrink-0 ${
             dark ? 'text-gray-500' : 'text-gray-500'
           }`}
           strokeWidth={2.25}

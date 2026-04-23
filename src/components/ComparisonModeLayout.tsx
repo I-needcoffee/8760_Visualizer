@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { EPWVariable, ParsedEPW } from '../lib/epwParser';
 import { weatherLocationTypeCaption } from '../lib/weatherCaption';
@@ -63,6 +63,15 @@ function useLegendTrackWidthFromLeftPane() {
   return { leftPaneRef, legendTrackPx };
 }
 
+/** Two spaces + chevron: align with `VariableChartSelect` (text measure + `CHEVRON_SLOT_PX`). */
+const PILL_DROPDOWN_CHEVRON_GUTTER_PX = 20;
+
+function pillSelectOptionLabel(f: ParsedEPW) {
+  return (
+    weatherLocationTypeCaption(f) || `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}` || '—'
+  );
+}
+
 function PillSelect({
   label,
   value,
@@ -97,9 +106,46 @@ function PillSelect({
         ? 'text-gray-500'
         : 'text-gray-300';
 
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const gapRef = useRef<HTMLSpanElement>(null);
+  const [boxW, setBoxW] = useState<number | null>(null);
+  const [paddingRightPx, setPaddingRightPx] = useState(PILL_DROPDOWN_CHEVRON_GUTTER_PX);
+  const selectedLabel = useMemo(
+    () => (options[value] != null ? pillSelectOptionLabel(options[value]) : ''),
+    [options, value]
+  );
+
+  const recalc = useCallback(() => {
+    const m = measureRef.current;
+    const row = rowRef.current;
+    if (!m || !row) return;
+    const textW = m.getBoundingClientRect().width;
+    let gapW = 8;
+    if (gapRef.current) gapW = gapRef.current.getBoundingClientRect().width;
+    const pr = Math.ceil(gapW + PILL_DROPDOWN_CHEVRON_GUTTER_PX);
+    const cap = Math.max(40, Math.floor(row.getBoundingClientRect().width));
+    const desired = Math.ceil(textW + pr);
+    setPaddingRightPx(prev => (prev === pr ? prev : pr));
+    const nextW = Math.min(desired, cap);
+    setBoxW(prev => (prev === nextW ? prev : nextW));
+  }, [selectedLabel]);
+
+  useLayoutEffect(() => {
+    recalc();
+  }, [recalc]);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const ro = new ResizeObserver(() => recalc());
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [recalc]);
+
   return (
     <label
-      className={`mx-auto flex w-full max-w-[min(100%,280px)] flex-col items-center justify-center gap-0.5 rounded-full border px-2.5 py-1 text-center shadow-sm ${base}`}
+      className={`mx-auto flex w-full max-w-[min(100%,280px)] flex-col items-center justify-center gap-0.5 rounded-full border px-2 py-0.5 text-center shadow-sm ${base}`}
     >
       <span
         className={`block w-full text-center text-[7px] font-bold uppercase leading-none tracking-wider ${
@@ -114,11 +160,10 @@ function PillSelect({
       >
         {label}
       </span>
-      <div className="relative flex w-full min-w-0 items-center justify-center leading-none">
-        <select
-          value={value}
-          onChange={e => onChange(Number(e.target.value))}
-          className={`m-0 block h-auto min-h-0 w-full cursor-pointer appearance-none truncate rounded-none border-0 bg-transparent py-0 pl-1 pr-5 text-center text-[10px] font-semibold leading-none outline-none ring-0 focus:ring-0 ${
+      <div ref={rowRef} className="relative flex w-full min-w-0 items-center justify-center">
+        <span
+          ref={measureRef}
+          className={`pointer-events-none absolute left-0 top-0 -z-10 whitespace-nowrap opacity-0 text-[10px] font-semibold ${
             tone === 'baseline'
               ? theme === 'dark'
                 ? 'text-gray-100'
@@ -128,20 +173,58 @@ function PillSelect({
                 : 'text-white'
           }`}
           style={{ lineHeight: 1.15 }}
-        >
-          {options.map((f, i) => (
-            <option key={i} value={i} className="bg-white text-gray-900">
-              {weatherLocationTypeCaption(f) ||
-                `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}`}
-            </option>
-          ))}
-        </select>
-        <span
-          className={`pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-[8px] leading-none opacity-70 ${caret}`}
           aria-hidden
         >
-          ▾
+          {selectedLabel}
         </span>
+        <span
+          ref={gapRef}
+          className={`pointer-events-none absolute left-0 top-0 -z-10 whitespace-pre opacity-0 text-[10px] font-semibold ${
+            tone === 'baseline'
+              ? theme === 'dark'
+                ? 'text-gray-100'
+                : 'text-gray-900'
+              : theme === 'dark'
+                ? 'text-gray-50'
+                : 'text-white'
+          }`}
+          style={{ lineHeight: 1.15 }}
+          aria-hidden
+        >
+          {'  '}
+        </span>
+        <div
+          className="relative min-w-0 max-w-full shrink-0"
+          style={boxW != null ? { width: `${boxW}px`, maxWidth: '100%' } : { maxWidth: '100%' }}
+        >
+          <select
+            value={value}
+            onChange={e => onChange(Number(e.target.value))}
+            className={`m-0 block h-auto min-h-0 w-full cursor-pointer appearance-none truncate rounded-none border-0 bg-transparent py-0 pl-0 pr-0 text-center text-[10px] font-semibold leading-none outline-none ring-0 focus:ring-0 ${
+              tone === 'baseline'
+                ? theme === 'dark'
+                  ? 'text-gray-100'
+                  : 'text-gray-900'
+                : theme === 'dark'
+                  ? 'text-gray-50'
+                  : 'text-white'
+            }`}
+            style={{ lineHeight: 1.15, paddingRight: paddingRightPx }}
+            title={selectedLabel}
+          >
+            {options.map((f, i) => (
+              <option key={i} value={i} className="bg-white text-gray-900">
+                {pillSelectOptionLabel(f)}
+              </option>
+            ))}
+          </select>
+          <span
+            className={`pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-[8px] leading-none opacity-70 ${caret}`}
+            aria-hidden
+          >
+            ▾
+          </span>
+        </div>
       </div>
     </label>
   );
@@ -194,7 +277,7 @@ function PairSharedToolbar({
   if (exportMode) return null;
   return (
     <div
-      className={`shrink-0 border-b px-2 py-2 ${
+      className={`shrink-0 border-b px-1.5 py-1.5 ${
         theme === 'dark' ? 'border-gray-700 bg-gray-800/95' : 'border-gray-200 bg-gray-50/90'
       }`}
     >
@@ -402,7 +485,7 @@ export function ComparisonModeLayout({
 
       <section className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 overflow-visible pb-2 pr-0.5 lg:w-1/2 lg:flex-none lg:overflow-y-auto lg:overflow-x-hidden">
         <div
-          className={`z-10 -mx-0.5 mb-1 grid shrink-0 grid-cols-2 gap-2 px-0.5 pb-1.5 pt-0.5 sm:gap-3 lg:sticky lg:top-0 ${
+          className={`z-10 -mx-0.5 mb-0.5 grid shrink-0 grid-cols-2 gap-2 px-0.5 pb-1 pt-0.5 sm:gap-3 lg:sticky lg:top-0 ${
             theme === 'dark' ? 'border-b border-gray-800/50 bg-transparent' : 'border-b border-gray-200/60 bg-transparent'
           }`}
         >
