@@ -618,7 +618,18 @@ export function DataExplorer({
     // Optional: Give it a bit of bottom margin if min is above 0, or zero-bound if we prefer
     if (yMin > 0 && colorVarDef.category !== "Temperature") yMin = 0;
 
-    const yScaleBar = d3.scaleLinear().domain([yMin, yMax]).range([barChartHeight, 0]).nice();
+    if (pairSuppressHeader && comparePane && explorerShared?.onBarYExtent) {
+      explorerShared.onBarYExtent({ min: yMin, max: yMax, pane: comparePane });
+    }
+
+    const usePairBarDomain =
+      pairSuppressHeader && !showDifference && explorerShared?.barYDomain != null;
+    const y0 = usePairBarDomain ? explorerShared!.barYDomain!.min : yMin;
+    const y1 = usePairBarDomain ? explorerShared!.barYDomain!.max : yMax;
+
+    const yScaleBar = usePairBarDomain
+      ? d3.scaleLinear().domain([y0, y1]).range([barChartHeight, 0])
+      : d3.scaleLinear().domain([y0, y1]).range([barChartHeight, 0]).nice();
     const validData = aggregatedData.filter(d => d.valueSelected !== null);
     const pairLineData = aggregatedData.filter(
       d => d.valueSelected !== null && d.compareValueSelected !== null
@@ -786,7 +797,25 @@ export function DataExplorer({
       .style("font-size", `${heatmapMonthAxisPx}px`)
       .text(d => d.label);
 
-  }, [data, compareData, showDifference, variables, colorVar, gradientId, aggregation, gradients, filter, unitSystem, heatmapTextColor, theme, dimensions.width, metadata]);
+  }, [
+    data,
+    compareData,
+    showDifference,
+    variables,
+    colorVar,
+    gradientId,
+    aggregation,
+    gradients,
+    filter,
+    unitSystem,
+    heatmapTextColor,
+    theme,
+    dimensions.width,
+    metadata,
+    pairSuppressHeader,
+    comparePane,
+    explorerShared?.barYDomain,
+  ]);
 
   // Calculate local stats for filtered data
   const stats = (() => {

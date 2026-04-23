@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import * as d3 from 'd3';
 import { Settings2 } from 'lucide-react';
 import { EPWVariable, ParsedEPW } from '../lib/epwParser';
 import { weatherLocationTypeCaption } from '../lib/weatherCaption';
@@ -318,18 +319,85 @@ export function ComparisonModeLayout({
   const [expStats, setExpStats] = useState(false);
   const [expSettings, setExpSettings] = useState(false);
 
-  const explorerShared: CompareExplorerSharedControls = {
-    aggregation: expAgg,
-    setAggregation: setExpAgg,
-    colorVar: expVar,
-    setColorVar: setExpVar,
-    gradientId: expGrad,
-    setGradientId: setExpGrad,
-    showStats: expStats,
-    setShowStats: setExpStats,
-    showSettings: expSettings,
-    setShowSettings: setExpSettings,
-  };
+  const [barYDomain, setBarYDomain] = useState<{ min: number; max: number } | null>(null);
+  const barYPrimary = useRef<{ min: number; max: number } | null>(null);
+  const barYSecondary = useRef<{ min: number; max: number } | null>(null);
+
+  const onBarYExtent = useCallback(
+    (e: { min: number; max: number; pane: 'primary' | 'secondary' } | 'clear') => {
+      if (e === 'clear') {
+        barYPrimary.current = null;
+        barYSecondary.current = null;
+        setBarYDomain(null);
+        return;
+      }
+      if (e.pane === 'primary') barYPrimary.current = { min: e.min, max: e.max };
+      else barYSecondary.current = { min: e.min, max: e.max };
+      const p = barYPrimary.current;
+      const s = barYSecondary.current;
+      const setIfChanged = (next: { min: number; max: number } | null) => {
+        setBarYDomain(cur => {
+          if (cur === null && next === null) return cur;
+          if (cur && next) {
+            const same =
+              Math.abs(cur.min - next.min) < 1e-4 && Math.abs(cur.max - next.max) < 1e-4;
+            if (same) return cur;
+            return next;
+          }
+          return next;
+        });
+      };
+      if (p && s) {
+        const lo = Math.min(p.min, s.min);
+        const hi = Math.max(p.max, s.max);
+        const n = d3.scaleLinear().domain([lo, hi]).nice();
+        const d = n.domain();
+        setIfChanged({ min: d[0]!, max: d[1]! });
+      } else {
+        const only = p ?? s;
+        if (only) {
+          const n = d3.scaleLinear().domain([only.min, only.max]).nice();
+          const d = n.domain();
+          setIfChanged({ min: d[0]!, max: d[1]! });
+        } else {
+          setIfChanged(null);
+        }
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    barYPrimary.current = null;
+    barYSecondary.current = null;
+    setBarYDomain(null);
+  }, [expVar, expAgg, baselineIndex, compareIndex]);
+
+  const explorerShared: CompareExplorerSharedControls = useMemo(
+    () => ({
+      aggregation: expAgg,
+      setAggregation: setExpAgg,
+      colorVar: expVar,
+      setColorVar: setExpVar,
+      gradientId: expGrad,
+      setGradientId: setExpGrad,
+      showStats: expStats,
+      setShowStats: setExpStats,
+      showSettings: expSettings,
+      setShowSettings: setExpSettings,
+      barYDomain,
+      onBarYExtent,
+    }),
+    [
+      expAgg,
+      expVar,
+      expGrad,
+      expStats,
+      expSettings,
+      barYDomain,
+      onBarYExtent,
+    ]
+  );
 
   const [utciAgg, setUtciAgg] = useState<CompareUtciSharedControls['aggregation']>('month');
   const [utciSun, setUtciSun] = useState(true);

@@ -270,6 +270,9 @@ export interface CompareExplorerSharedControls {
   setShowStats: (v: boolean) => void;
   showSettings: boolean;
   setShowSettings: (v: boolean) => void;
+  /** Merged Y domain for the top bar / range so left and right panes share the same axis (compare pair). */
+  barYDomain: { min: number; max: number } | null;
+  onBarYExtent: (e: { min: number; max: number; pane: 'primary' | 'secondary' } | 'clear') => void;
 }
 
 export interface CompareUtciSharedControls {

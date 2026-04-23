@@ -5,6 +5,7 @@ import { Search, Upload, ExternalLink, Database, CloudLightning, Info, Loader2 }
 import L from 'leaflet';
 import { parseEPW, ParsedEPW, attachParsedEpwSource } from '../lib/epwParser';
 import { CARTO_LIGHT_ALL_WATER_HEX } from '../lib/constants';
+import { loadNrcFutureSampleLocations } from '../lib/futureNrcSamples';
 import JSZip from 'jszip';
 import { get, set } from 'idb-keyval';
 
@@ -98,6 +99,8 @@ const FILE_TYPE_SUFFIX_RE =
 /** Extracts TMY3 / TMY2 / TMYX2011 / … from an EnergyPlus-style basename. */
 function fileTypeLabelFromBasename(basename: string): string {
   const base = basename.replace(/\.epw$/i, '');
+  const nrc = base.match(/_NRCv\d+_TMY_(GW[\d.]+)$/i);
+  if (nrc?.[1]) return `NRC ${nrc[1]}`;
   const m = base.match(FILE_TYPE_SUFFIX_RE);
   if (m) {
     const s = m[1];
@@ -468,74 +471,6 @@ function FitBoundsController({
   return null;
 }
 
-/**
- * One EPW DATA row with **35 fields** (indices 0–34) so `parseEPW` accepts it (`parts.length >= 30`
- * and columns through liquid precip quantity exist). Earlier samples were too short and parsed as empty.
- */
-function sampleEpwDataRow(year: number, month: number, day: number, hourEpw: number, dryBulb: number, dewPoint: number) {
-  const flags = '?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9?9';
-  const p: string[] = new Array(35);
-  p[0] = String(year);
-  p[1] = String(month);
-  p[2] = String(day);
-  p[3] = String(hourEpw);
-  p[4] = '0';
-  p[5] = flags;
-  p[6] = dryBulb.toFixed(1);
-  p[7] = dewPoint.toFixed(1);
-  p[8] = '80';
-  p[9] = '101325';
-  for (let i = 10; i <= 15; i++) p[i] = '0';
-  p[16] = '999999';
-  p[17] = '999999';
-  p[18] = '999999';
-  p[19] = '9999';
-  p[20] = '180';
-  p[21] = '2';
-  p[22] = '0';
-  p[23] = '0';
-  p[24] = '9999';
-  p[25] = '99999';
-  p[26] = '9';
-  p[27] = '999999999';
-  p[28] = '999';
-  p[29] = '0.999';
-  p[30] = '999';
-  p[31] = '99';
-  p[32] = '999';
-  p[33] = '999';
-  p[34] = '99';
-  return p.join(',') + '\n';
-}
-
-const generateSampleEPW = (name: string, year: number, baseTemp: number, amplitude: number) => {
-  const header = `LOCATION,${name},CA,USA,Custom,999999,37.7749,-122.4194,-8.0,2.0
-DESIGN CONDITIONS,1,Climate Design Data 2009 ASHRAE Handbook,,Heating,1,-5.4,-3.4,-14.7,0.9,-3.9,-12.3,1.2,-2.1,13.3,10.6,12.1,10.1,2.5,350,Cooling,7,8.8,28.2,16.8,25.9,16.1,23.9,15.5,18.0,25.1,16.9,23.3,16.3,4.1,300,Extreme,10.1,8.5,7.3,31.5,-9.6,33.5,-11.2,35.2,-12.7,37.1,-14.5,39.2
-TYPICAL/ACTUAL,TYPICAL,1980-2059,CMIP6-SSP585
-GROUND TEMPERATURES,3,0.5,,,12.5,12.2,12.4,13.5,15.2,17.1,18.5,19.1,18.8,17.7,16.0,14.1,2.0,,,13.1,12.8,12.9,13.6,14.8,16.3,17.5,18.1,18.0,17.2,16.0,14.5,4.0,,,13.8,13.5,13.5,13.9,14.7,15.8,16.7,17.3,17.4,16.9,16.0,14.9
-HOLIDAYS/DAYLIGHT SAVINGS,No,0,0,0
-COMMENTS 1,Typical Meteorological Year - Sample Data
-COMMENTS 2,Generated for demonstration purposes.
-DATA PERIODS,1,1,Data,Sunday, 1/ 1,12/31
-`;
-  let data = '';
-  for (let m = 1; m <= 12; m++) {
-    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
-    for (let d = 1; d <= daysInMonth; d++) {
-      for (let h = 1; h <= 24; h++) {
-        const seasonal = Math.sin(((m - 1) / 12) * Math.PI * 2 - Math.PI / 2) * 10;
-        const daily = Math.sin(((h - 1) / 24) * Math.PI * 2 - Math.PI / 2) * amplitude;
-        const temp = baseTemp + seasonal + daily + (Math.random() - 0.5) * 2;
-        data += sampleEpwDataRow(year, m, d, h, temp, temp - 2);
-      }
-    }
-  }
-  return header + data;
-};
-
-const SAMPLE_FUTURE_EPW = generateSampleEPW('SAN_FRANCISCO_FUTURE', 2050, 18, 6);
-const SAMPLE_HISTORICAL_EPW = generateSampleEPW('SAN_FRANCISCO_HISTORICAL', 2005, 14, 4);
-
 export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initialZoom }: MapSelectorProps) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -555,6 +490,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
   const [locating, setLocating] = useState(false);
   const [fitBoundsPoints, setFitBoundsPoints] = useState<[number, number][] | null>(null);
   const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0);
+  const [nrcSampleLoading, setNrcSampleLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   
@@ -572,12 +508,10 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     }
   }, [initialCenter, initialZoom]);
 
-  // If we are selecting a comparison, we should probably default to showing future weather if it's available
+  // If the user is adding a comparison file, assume they want another future file (not historical).
   useEffect(() => {
-    if (isSelectingCompare && futureLocations.length > 0) {
-      setShowFuture(true);
-    }
-  }, [isSelectingCompare, futureLocations.length]);
+    if (isSelectingCompare) setShowFuture(true);
+  }, [isSelectingCompare]);
 
   useEffect(() => {
     setSearchPin(null);
@@ -738,29 +672,37 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     }
   };
 
-  const loadSampleFuture = () => {
-    const sampleFuture: EPWLocation = {
-      id: 'future-sample',
-      name: 'San Francisco (Sample Future 2050)',
-      lat: 37.7749,
-      lng: -122.4194,
-      epwData: SAMPLE_FUTURE_EPW,
-      isFuture: true,
-      filename: 'SF_2050.epw'
-    };
-    const sampleHistorical: EPWLocation = {
-      id: 'historical-sample',
-      name: 'San Francisco (Sample Historical 2005)',
-      lat: 37.7749,
-      lng: -122.4194,
-      epwData: SAMPLE_HISTORICAL_EPW,
-      isFuture: true, // We mark it as future so it shows up in the same list for the sample
-      filename: 'SF_2005.epw'
-    };
-    setFutureLocations([sampleHistorical, sampleFuture]);
-    setShowFuture(true);
-    setMapCenter([37.7749, -122.4194]);
-    setMapZoom(10);
+  const loadNrcRealFutureSamples = async () => {
+    setErrorMsg(null);
+    setNrcSampleLoading(true);
+    try {
+      const locs = await loadNrcFutureSampleLocations(async (absoluteUrl: string) => {
+        const res = await fetch(`/api/proxy-binary?url=${encodeURIComponent(absoluteUrl)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.arrayBuffer();
+      });
+      setFutureLocations(locs);
+      setShowFuture(true);
+      const seen = new Set<string>();
+      const unique: [number, number][] = [];
+      for (const loc of locs) {
+        const k = `${roundCoord(loc.lat, 5)},${roundCoord(loc.lng, 5)}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        unique.push([loc.lat, loc.lng]);
+      }
+      if (unique.length > 0) {
+        setFitBoundsPoints(unique);
+        setFitBoundsTrigger(t => t + 1);
+      }
+    } catch (e) {
+      console.error(e);
+      setErrorMsg(
+        'Could not load NRC future samples from Climate One Building. Check your network and that /api/proxy-binary is available (see README for hosted deploys).'
+      );
+    } finally {
+      setNrcSampleLoading(false);
+    }
   };
 
   const activeLocations = useMemo(() => {
@@ -807,7 +749,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     if (activeGroupsWithOneBuilding.length === 0) {
       setErrorMsg(
         showFuture
-          ? 'Add a future-weather ZIP (or sample), or switch to Historical to search the global catalog.'
+          ? 'Add a future-weather ZIP, load the NRC samples from the start card, or switch to Historical to search the global catalog.'
           : 'Weather stations are still loading — try again in a moment.'
       );
       return;
@@ -885,8 +827,12 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
 
           if (otherYears.length > 0) {
             const baseline =
-              otherYears.find(f => f.filename?.includes('2020') || f.filename?.includes('2005')) ||
-              otherYears[0];
+              otherYears.find(
+                f =>
+                  f.filename?.includes('2005') ||
+                  f.filename?.includes('2020') ||
+                  /_TMY_GW0\.5(?=\.epw)/i.test(f.filename || '')
+              ) || otherYears[0];
             if (baseline.epwData) {
               const parsedBaseline = parseEPW(baseline.epwData);
               attachParsedEpwSource(
@@ -943,7 +889,26 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       try {
         const text = event.target?.result as string;
         const parsed = parseEPW(text);
-        attachParsedEpwSource(parsed, file.name, fileTypeLabelFromBasename(file.name));
+        const label = fileTypeLabelFromBasename(file.name);
+        attachParsedEpwSource(parsed, file.name, label);
+
+        // If we're already in Future mode (or choosing a comparison file), treat uploads as future
+        // so reopening the selector stays on the future dataset.
+        if (showFuture || isSelectingCompare) {
+          setShowFuture(true);
+          setFutureLocations(prev => [
+            ...prev,
+            {
+              id: `future-upload-${Date.now()}`,
+              name: `${file.name}`,
+              lat: parsed.location.latitude,
+              lng: parsed.location.longitude,
+              epwData: text,
+              isFuture: true,
+              filename: file.name,
+            },
+          ]);
+        }
         onSelect(parsed);
       } catch (error) {
         console.error(error);
@@ -1043,7 +1008,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
                   ? 'bg-white text-orange-700 shadow-sm ring-1 ring-orange-200/80'
                   : 'text-gray-500 hover:text-orange-800 hover:bg-white/60'
               }`}
-              title="Future projections from uploaded ZIP or samples"
+              title="Future weather: upload a ZIP, cache it, or load NRC samples from Climate One Building"
             >
               <CloudLightning className="w-4 h-4 shrink-0" />
               <span className="truncate">Future</span>
@@ -1087,15 +1052,32 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             Future Weather Data
           </h3>
           <p className="text-sm text-gray-600 mb-4">
-            Zenodo projections are not pre-loaded due to size. You can upload the dataset once, and it will be cached in your browser.
+            Large Zenodo packs are not bundled. You can cache your own ZIP in the browser, or load{' '}
+            <strong className="font-semibold text-gray-800">real</strong> National Research Council Canada
+            future TMY files (Toronto Pearson, multiple warming levels) — served by{' '}
+            <a
+              className="text-orange-700 underline decoration-orange-200 hover:text-orange-900"
+              href="https://climate.onebuilding.org/sources/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Climate One Building
+            </a>
+            .
           </p>
           <div className="flex flex-col gap-3">
             <button 
-              onClick={loadSampleFuture}
-              className="flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200"
+              type="button"
+              disabled={nrcSampleLoading || loading}
+              onClick={() => void loadNrcRealFutureSamples()}
+              className="flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Info className="w-4 h-4" />
-              Try with Sample Data
+              {nrcSampleLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Info className="w-4 h-4" aria-hidden />
+              )}
+              Load real NRC samples (Toronto Pearson, 5 projections)
             </button>
             
             <div className="h-px bg-gray-100 my-1" />
