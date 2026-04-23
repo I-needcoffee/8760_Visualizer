@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useSyncExternalStore } from 'react';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
@@ -21,6 +21,21 @@ import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
+
+/** Tailwind `sm` (640px): below this, primary chrome cannot rely on hover. */
+function useIsMobileMaxSm() {
+  return useSyncExternalStore(
+    onChange => {
+      if (typeof window === 'undefined') return () => {};
+      const mql = window.matchMedia('(max-width: 639px)');
+      const on = () => onChange();
+      mql.addEventListener('change', on);
+      return () => mql.removeEventListener('change', on);
+    },
+    () => (typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false),
+    () => false
+  );
+}
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
@@ -204,7 +219,9 @@ export function SunPath({
     () => gradientsForVariable(colorVar, variables, gradients),
     [colorVar, variables, gradients]
   );
-  const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
+  const isMobile = useIsMobileMaxSm();
+  /** Mobile cannot hover; tutorial mode also pins the strip. */
+  const expandChromeStrip = !exportMode && (tutorialChromeAnchors || isMobile);
   /** Full header row (icon + controls): width drives dual pickers — inner column was collapsing to ~select width. */
   const sunHeaderRowRef = useRef<HTMLDivElement>(null);
   const [sunDualVarPickers, setSunDualVarPickers] = useState(false);
@@ -1126,8 +1143,8 @@ const filteredCompareData = (compareData || []).filter(d => {
         >
           <div
             ref={primaryChartSlotRef}
-            className={`relative flex min-h-[120px] min-w-0 flex-1 items-center justify-center ${
-              stackedComparison && compareData && !pairComparisonHorizontal ? 'min-h-[140px]' : ''
+            className={`relative flex min-w-0 flex-1 items-center justify-center min-h-[120px] max-sm:aspect-square max-sm:min-h-0 max-sm:w-full max-sm:shrink-0 ${
+              stackedComparison && compareData && !pairComparisonHorizontal ? 'min-h-[140px] max-sm:min-h-0' : ''
             }`}
           >
             <svg ref={svgRef} className="block h-full max-h-full w-full max-w-full" preserveAspectRatio="xMidYMid meet" />
@@ -1135,8 +1152,8 @@ const filteredCompareData = (compareData || []).filter(d => {
           {stackedComparison && compareData && (
             <div
               ref={compareChartSlotRef}
-              className={`relative flex min-h-[120px] min-w-0 flex-1 items-center justify-center ${
-                !pairComparisonHorizontal ? 'min-h-[140px]' : ''
+              className={`relative flex min-w-0 flex-1 items-center justify-center min-h-[120px] max-sm:aspect-square max-sm:min-h-0 max-sm:w-full max-sm:shrink-0 ${
+                !pairComparisonHorizontal ? 'min-h-[140px] max-sm:min-h-0' : ''
               }`}
             >
               <svg ref={compareSvgRef} className="block h-full max-h-full w-full max-w-full" preserveAspectRatio="xMidYMid meet" />
