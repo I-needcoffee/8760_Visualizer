@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
+import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
@@ -300,10 +301,14 @@ export function UtciExplorer({
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
   const paletteGradients = useMemo(() => gradientsForUtci(gradients), [gradients]);
-  const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
+  const isMobile = useIsMobileMaxSm();
+  const expandChromeStrip = !exportMode && (tutorialChromeAnchors || isMobile);
   const chartToolbarRevealClass = expandChromeStrip
     ? 'pointer-events-auto max-h-[52px] overflow-visible opacity-100 pt-1 transition-[max-height,opacity] duration-200 ease-out'
     : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[48px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100';
+  const removeBtnRevealClass = isMobile
+    ? 'pointer-events-auto absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 opacity-100'
+    : 'pointer-events-none absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 opacity-0 transition-opacity duration-200 ease-out group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100';
   // chart type switching handled by ChartTypeMenu
 
   const tutorialLive = useTutorialLiveOptional();
@@ -1145,7 +1150,11 @@ export function UtciExplorer({
                 </div>
               )}
               <div className="relative flex min-h-[24px] w-full items-center gap-1.5">
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 pr-0 transition-[padding] duration-200 ease-out group-hover:pr-9 focus-within:pr-9 sm:gap-2">
+                <div
+                  className={`flex min-w-0 flex-1 items-center gap-1.5 pr-0 transition-[padding] duration-200 ease-out sm:gap-2 ${
+                    isMobile ? 'pr-9' : 'group-hover:pr-9 focus-within:pr-9'
+                  }`}
+                >
                   <ChartTypeMenu
                     value="utci"
                     label="UTCI Comfort"
@@ -1164,7 +1173,7 @@ export function UtciExplorer({
                   </span>
                 </div>
                 {onRemove && (
-                  <div className="pointer-events-none absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 opacity-0 transition-opacity duration-200 ease-out group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                  <div className={removeBtnRevealClass}>
                     <button
                       type="button"
                       onClick={onRemove}

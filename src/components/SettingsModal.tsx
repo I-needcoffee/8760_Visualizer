@@ -3,7 +3,6 @@ import { X, Calendar, Clock, Palette, Sun, Moon, Settings, Filter } from 'lucide
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { GlobalFilterState } from './GlobalFilterPanel';
-import { UnitSystem } from '../App';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,8 +11,6 @@ interface SettingsModalProps {
   onChangeFilter: (filter: GlobalFilterState) => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
-  unitSystem: UnitSystem;
-  setUnitSystem: (unit: UnitSystem) => void;
   heatmapTextColor: string;
   setHeatmapTextColor: (color: string) => void;
   setShowGradientModal: (show: boolean) => void;
@@ -28,8 +25,6 @@ export function SettingsModal({
   onChangeFilter,
   theme,
   setTheme,
-  unitSystem,
-  setUnitSystem,
   heatmapTextColor,
   setHeatmapTextColor,
   setShowGradientModal
@@ -61,27 +56,6 @@ export function SettingsModal({
         </div>
 
         <div className="p-3 space-y-4">
-          {/* Unit System */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-sm flex items-center gap-2">
-              Unit System
-            </h3>
-            <div className={`flex items-center p-1 rounded-full inline-flex ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              <button
-                onClick={() => setUnitSystem('metric')}
-                className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${unitSystem === 'metric' ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-white' : 'bg-white shadow-sm text-gray-900') : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}
-              >
-                Metric
-              </button>
-              <button
-                onClick={() => setUnitSystem('imperial')}
-                className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${unitSystem === 'imperial' ? (theme === 'dark' ? 'bg-gray-600 shadow-sm text-white' : 'bg-white shadow-sm text-gray-900') : (theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}
-              >
-                Imperial
-              </button>
-            </div>
-          </div>
-
           {/* Time Filters */}
           <div className="space-y-4">
             <h3 className="font-semibold text-xs border-b pb-1.5 flex items-center gap-2">

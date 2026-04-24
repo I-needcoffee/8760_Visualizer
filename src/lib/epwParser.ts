@@ -8,6 +8,12 @@ export interface EPWMetadata {
   lng: number;
   timeZone: number;
   elevation: number;
+  /**
+   * From `HOLIDAYS/DAYLIGHT SAVINGS` first field. `unspecified` if that line is missing/ambiguous.
+   * Describes whether the *site* observes DST; hourly data are still typically on the standard
+   * `timeZone` offset unless your file’s documentation says otherwise.
+   */
+  daylightSavings: 'yes' | 'no' | 'unspecified';
 }
 
 export interface EPWDataRow {
@@ -18,6 +24,11 @@ export interface EPWDataRow {
   hour: number;
   minute: number;
   dayOfYear: number;
+  /**
+   * When DST display mode shifts `year`/`month`/`day`/`hour` to civil wall clock, this holds the
+   * original EPW **standard-time** calendar used for solar geometry (SunCalc / night shading).
+   */
+  solarStandardClock?: { year: number; month: number; day: number; hour: number };
   [key: string]: any;
 }
 
@@ -116,6 +127,19 @@ function parseSingleEPW(csvString: string): ParsedEPW {
 
   // Parse Header (LOCATION line)
   const headerParts = lines[locationLineIndex].split(',');
+  let daylightSavings: EPWMetadata['daylightSavings'] = 'unspecified';
+  for (let hi = 0; hi < lines.length; hi++) {
+    const hl = lines[hi] ?? '';
+    if (!/^HOLIDAYS\/DAYLIGHT SAVINGS/i.test(hl) && !/^HOLIDAYS,.*DAYLIGHT/i.test(hl)) continue;
+    const hp = hl.split(',');
+    const v = (hp[1] ?? '').trim();
+    if (/^y(es)?$/i.test(v) || v === '1' || v.toUpperCase() === 'Y') {
+      daylightSavings = 'yes';
+    } else if (/^n(o)?$/i.test(v) || v === '0' || v.toUpperCase() === 'N') {
+      daylightSavings = 'no';
+    }
+    break;
+  }
   
   const metadata: EPWMetadata = {
     city: headerParts[1]?.trim() || 'Unknown',
@@ -127,6 +151,7 @@ function parseSingleEPW(csvString: string): ParsedEPW {
     lng: parseFloat(headerParts[7]),
     timeZone: parseFloat(headerParts[8]),
     elevation: parseFloat(headerParts[9]),
+    daylightSavings,
   };
 
   const data: EPWDataRow[] = [];

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
@@ -8,7 +9,11 @@ import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { dataExplorerDiffValuesForAggregation } from '../lib/dataExplorerDiffAggregation';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
-import { isSolarNightEpwStation, solarNightOverlayRgba } from '../lib/solarNightHeatmap';
+import {
+  isSolarNightEpwStation,
+  solarNightOverlayRgba,
+  solarNightParamsFromHeatmapDatum,
+} from '../lib/solarNightHeatmap';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareWindSharedControls } from '../App';
@@ -168,10 +173,14 @@ export function WindExplorer({
     () => gradientsForVariable(colorVar, variables, gradients),
     [colorVar, variables, gradients]
   );
-  const expandChromeStrip = !!(tutorialChromeAnchors && !exportMode);
+  const isMobile = useIsMobileMaxSm();
+  const expandChromeStrip = !exportMode && (tutorialChromeAnchors || isMobile);
   const chartToolbarRevealClass = expandChromeStrip
     ? 'pointer-events-auto max-h-[52px] overflow-visible opacity-100 pt-1 transition-[max-height,opacity] duration-200 ease-out'
     : 'pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-200 ease-out group-hover:pointer-events-auto group-hover:max-h-[48px] group-hover:opacity-100 focus-within:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100';
+  const removeBtnRevealClass = isMobile
+    ? 'pointer-events-auto opacity-100'
+    : 'pointer-events-none opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100';
   // chart type switching handled by ChartTypeMenu
 
   const outerRef = useRef<HTMLDivElement>(null);
@@ -441,6 +450,7 @@ export function WindExplorer({
             wind = averageWindVector(values);
           }
           const { speed, direction } = wind;
+          const midM = values[Math.floor(values.length / 2)];
           heatmapData.push({
             x0: startDay,
             x1: endDay,
@@ -454,6 +464,7 @@ export function WindExplorer({
             sunMonth: month,
             sunDay: 15,
             sunHour: hour,
+            solarStandardClock: midM.solarStandardClock,
           });
         });
       });
@@ -494,6 +505,7 @@ export function WindExplorer({
             sunMonth: mid.month,
             sunDay: mid.day,
             sunHour: hour,
+            solarStandardClock: mid.solarStandardClock,
           });
         });
       });
@@ -526,6 +538,7 @@ export function WindExplorer({
           sunMonth: d.month,
           sunDay: d.day,
           sunHour: d.hour,
+          solarStandardClock: d.solarStandardClock,
         };
       });
     }
@@ -585,13 +598,11 @@ export function WindExplorer({
         .style("stroke", "none")
         .style("pointer-events", "none")
         .style("opacity", d =>
-          isSolarNightEpwStation(metadata!.lat, metadata!.lng, {
-            year: d.sunYear,
-            month: d.sunMonth,
-            day: d.sunDay,
-            jsHour: d.sunHour,
-            timeZoneHours: metadata!.timeZone,
-          })
+          isSolarNightEpwStation(
+            metadata!.lat,
+            metadata!.lng,
+            solarNightParamsFromHeatmapDatum(d, metadata!.timeZone)
+          )
             ? 1
             : 0
         );
@@ -976,7 +987,7 @@ export function WindExplorer({
                   </VariableChartSelect>
                 </div>
                 {onRemove && (
-                  <div className="opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                  <div className={removeBtnRevealClass}>
                     <button
                       type="button"
                       onClick={onRemove}

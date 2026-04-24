@@ -47,3 +47,21 @@ export function isSolarNightEpwStation(
   const when = utcInstantFromEpwStationClock(params);
   return sunAltitudeDeg(lat, lng, when) <= 0;
 }
+
+/** Heatmap cell: use `solarStandardClock` when DST display shifted row hours (see `dstDisplay.ts`). */
+export function solarNightParamsFromHeatmapDatum(
+  d: {
+    sunYear: number;
+    sunMonth: number;
+    sunDay: number;
+    sunHour: number;
+    solarStandardClock?: { year: number; month: number; day: number; hour: number };
+  },
+  timeZoneHours: number
+): Parameters<typeof utcInstantFromEpwStationClock>[0] {
+  const c = d.solarStandardClock;
+  if (c) {
+    return { year: c.year, month: c.month, day: c.day, jsHour: c.hour, timeZoneHours };
+  }
+  return { year: d.sunYear, month: d.sunMonth, day: d.sunDay, jsHour: d.sunHour, timeZoneHours };
+}

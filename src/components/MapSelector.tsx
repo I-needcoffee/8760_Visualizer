@@ -379,6 +379,9 @@ interface MapSelectorProps {
   isSelectingCompare?: boolean;
   initialCenter?: [number, number];
   initialZoom?: number;
+  /** Last library the user picked (historical NREL vs future). Used when re-opening the map to add a comparison file. */
+  mapLibraryMode?: 'historical' | 'future';
+  onMapLibraryModeChange?: (mode: 'historical' | 'future') => void;
 }
 
 // Component to handle bounding box filtering
@@ -471,7 +474,14 @@ function FitBoundsController({
   return null;
 }
 
-export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initialZoom }: MapSelectorProps) {
+export function MapSelector({
+  onSelect,
+  isSelectingCompare,
+  initialCenter,
+  initialZoom,
+  mapLibraryMode = 'historical',
+  onMapLibraryModeChange,
+}: MapSelectorProps) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -508,10 +518,12 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
     }
   }, [initialCenter, initialZoom]);
 
-  // If the user is adding a comparison file, assume they want another future file (not historical).
+  // When re-opening the map to add a comparison, restore Historical vs Future from the last choice.
   useEffect(() => {
-    if (isSelectingCompare) setShowFuture(true);
-  }, [isSelectingCompare]);
+    if (isSelectingCompare) {
+      setShowFuture(mapLibraryMode === 'future');
+    }
+  }, [isSelectingCompare, mapLibraryMode]);
 
   useEffect(() => {
     setSearchPin(null);
@@ -640,8 +652,8 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       
       if (newFutureLocations.length > 0) {
         setFutureLocations(newFutureLocations);
-        // Don't auto-switch to future if we just loaded from cache on mount
-        // Only switch if it's a fresh upload
+        setShowFuture(true);
+        onMapLibraryModeChange?.('future');
       }
     } catch (error) {
       console.error(error);
@@ -664,6 +676,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       await set('future_weather_zip', arrayBuffer);
       await processZip(arrayBuffer);
       setShowFuture(true);
+      onMapLibraryModeChange?.('future');
     } catch (error) {
       console.error(error);
       setErrorMsg("Failed to upload ZIP file.");
@@ -683,6 +696,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
       });
       setFutureLocations(locs);
       setShowFuture(true);
+      onMapLibraryModeChange?.('future');
       const seen = new Set<string>();
       const unique: [number, number][] = [];
       for (const loc of locs) {
@@ -840,12 +854,14 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
                 baseline.filename || 'baseline.epw',
                 fileTypeLabelFromBasename(baseline.filename || '')
               );
+              onMapLibraryModeChange?.(showFuture ? 'future' : 'historical');
               onSelect(parsed, parsedBaseline);
               return;
             }
           }
         }
 
+        onMapLibraryModeChange?.(showFuture ? 'future' : 'historical');
         onSelect(parsed);
       } else if (variant.oneBuildingZipPath) {
         const fullUrl = `${ONE_BUILDING_USA_ZIP_PREFIX}${variant.oneBuildingZipPath}`;
@@ -861,6 +877,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
         const parsed = parseEPW(text);
         const innerBase = epwEntry[0].split('/').pop() || variant.filename;
         attachParsedEpwSource(parsed, innerBase, variant.label);
+        onMapLibraryModeChange?.(showFuture ? 'future' : 'historical');
         onSelect(parsed);
       } else if (loc.url) {
         const response = await fetch(`/api/proxy-epw?url=${encodeURIComponent(loc.url)}`);
@@ -868,6 +885,7 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
         const text = await response.text();
         const parsed = parseEPW(text);
         attachParsedEpwSource(parsed, variant.filename || epwBasenameFromUrl(loc.url), variant.label);
+        onMapLibraryModeChange?.(showFuture ? 'future' : 'historical');
         onSelect(parsed);
       }
     } catch (error) {
@@ -892,22 +910,24 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
         const label = fileTypeLabelFromBasename(file.name);
         attachParsedEpwSource(parsed, file.name, label);
 
-        // If we're already in Future mode (or choosing a comparison file), treat uploads as future
-        // so reopening the selector stays on the future dataset.
-        if (showFuture || isSelectingCompare) {
+        // In Future mode, keep the uploaded file on the map so the user can pick another file nearby.
+        if (showFuture) {
+          onMapLibraryModeChange?.('future');
           setShowFuture(true);
           setFutureLocations(prev => [
             ...prev,
             {
               id: `future-upload-${Date.now()}`,
               name: `${file.name}`,
-              lat: parsed.location.latitude,
-              lng: parsed.location.longitude,
+              lat: parsed.metadata.lat,
+              lng: parsed.metadata.lng,
               epwData: text,
               isFuture: true,
               filename: file.name,
             },
           ]);
+        } else {
+          onMapLibraryModeChange?.('historical');
         }
         onSelect(parsed);
       } catch (error) {
@@ -988,7 +1008,10 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             <button
               type="button"
               aria-pressed={!showFuture}
-              onClick={() => setShowFuture(false)}
+              onClick={() => {
+                setShowFuture(false);
+                onMapLibraryModeChange?.('historical');
+              }}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 ${
                 !showFuture
                   ? 'bg-gray-300 text-gray-900 shadow-md hover:bg-gray-600 hover:text-white'
@@ -1002,7 +1025,10 @@ export function MapSelector({ onSelect, isSelectingCompare, initialCenter, initi
             <button
               type="button"
               aria-pressed={showFuture}
-              onClick={() => setShowFuture(true)}
+              onClick={() => {
+                setShowFuture(true);
+                onMapLibraryModeChange?.('future');
+              }}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
                 showFuture
                   ? 'bg-white text-orange-700 shadow-sm ring-1 ring-orange-200/80'

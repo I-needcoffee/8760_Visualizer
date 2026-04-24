@@ -26,6 +26,7 @@ import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
 import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
 import { ParsedEPW } from './lib/epwParser';
+import { withDstDisplayRespectingToggle } from './lib/dstDisplay';
 import {
   exportFilenameLine,
   weatherFileTypeLine,
@@ -375,6 +376,17 @@ export default function App() {
   const [newGradientName, setNewGradientName] = useState('');
   const [newGradientColors, setNewGradientColors] = useState<string[]>(['#ff0000', '#0000ff']);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
+  const [dstDisplayEnabled, setDstDisplayEnabled] = useState(false);
+  const [mapLibraryMode, setMapLibraryMode] = useState<'historical' | 'future'>('historical');
+
+  /** When the EPW header says the site observes DST, default the display toggle on for this file set. */
+  useEffect(() => {
+    if (selectedFiles.length === 0) {
+      setDstDisplayEnabled(false);
+      return;
+    }
+    setDstDisplayEnabled(selectedFiles.some(f => f.metadata.daylightSavings === 'yes'));
+  }, [selectedFiles]);
   const [heatmapTextColor, setHeatmapTextColor] = useState<string>('#000000');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -400,6 +412,11 @@ export default function App() {
   };
 
   const allGradients = useMemo(() => [...GRADIENTS, ...customGradients], [customGradients]);
+
+  const displayFiles = useMemo(
+    () => selectedFiles.map(f => withDstDisplayRespectingToggle(f, dstDisplayEnabled)),
+    [selectedFiles, dstDisplayEnabled]
+  );
 
   /** Files represented in the current dashboard export (active file in single mode; baseline + compare in comparison). */
   const exportCaptionFiles = useMemo(() => {
@@ -825,6 +842,8 @@ export default function App() {
             isSelectingCompare={isSelectingFile && selectedFiles.length > 0} 
             initialCenter={selectedFiles.length > 0 ? [selectedFiles[0].metadata.lat, selectedFiles[0].metadata.lng] : undefined}
             initialZoom={selectedFiles.length > 0 ? 10 : undefined}
+            mapLibraryMode={mapLibraryMode}
+            onMapLibraryModeChange={setMapLibraryMode}
           />
         </div>
         <div className="shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
@@ -843,7 +862,7 @@ export default function App() {
       exportMode={exportMode}
       theme={theme}
       tutorialHoverHints={smUp && tutorialHoverHints}
-      tutorialEpwRows={selectedFiles[activeFileIndex]?.data}
+      tutorialEpwRows={displayFiles[activeFileIndex]?.data}
       tutorialFilter={globalFilter}
       tutorialUnitSystem={unitSystem}
       renderChart={config => {
@@ -854,7 +873,7 @@ export default function App() {
           config.type !== 'empty';
         return renderChartForFile(
           config,
-          selectedFiles[activeFileIndex],
+          displayFiles[activeFileIndex],
           undefined,
           false,
           false,
@@ -1325,8 +1344,6 @@ export default function App() {
               onChangeFilter={setGlobalFilter}
               theme={theme}
               setTheme={setTheme}
-              unitSystem={unitSystem}
-              setUnitSystem={setUnitSystem}
               heatmapTextColor={heatmapTextColor}
               setHeatmapTextColor={setHeatmapTextColor}
               setShowGradientModal={setShowGradientModal}
@@ -1336,7 +1353,7 @@ export default function App() {
           {selectedFiles.length >= 2 && viewMode === 'comparison' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <ComparisonModeLayout
-                files={selectedFiles}
+                files={displayFiles}
                 baselineIndex={differenceBaselineIndex}
                 compareIndex={differenceCompareIndex}
                 onBaselineIndex={setDifferenceBaselineIndex}
@@ -1366,7 +1383,7 @@ export default function App() {
                     <div className="col-span-1 row-span-2 min-h-0 min-w-0 flex flex-col">{singleModeLayoutEl}</div>
                     <Grid4x2StatsColumn
                       theme={theme}
-                      rows={selectedFiles[activeFileIndex]?.data}
+                      rows={displayFiles[activeFileIndex]?.data}
                       unitSystem={unitSystem}
                       exportMode={exportMode}
                     />
@@ -1385,7 +1402,15 @@ export default function App() {
           }`}
         >
           <div className="mx-auto w-full max-w-[1600px] px-1.5 py-2 sm:px-2.5 lg:px-3">
-            <SiteFooter theme={theme} exportMode={exportMode} exportCaptions={exportFooterCaptions} />
+            <SiteFooter
+              theme={theme}
+              exportMode={exportMode}
+              exportCaptions={exportFooterCaptions}
+              unitSystem={unitSystem}
+              onUnitSystemChange={setUnitSystem}
+              dstDisplayEnabled={dstDisplayEnabled}
+              onDstDisplayEnabledChange={setDstDisplayEnabled}
+            />
           </div>
         </div>
       </div>

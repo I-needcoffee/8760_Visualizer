@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import type { UnitSystem } from '../App';
 
 const CLIMATE_CANVAS = 'https://climatecanvas.app';
 const PAYPAL_URL = 'https://www.paypal.com/paypalme/coffee4tim';
@@ -23,10 +24,18 @@ export function SiteFooter({
   theme,
   exportMode,
   exportCaptions,
+  unitSystem,
+  onUnitSystemChange,
+  dstDisplayEnabled,
+  onDstDisplayEnabledChange,
 }: {
   theme: 'light' | 'dark';
   exportMode: boolean;
   exportCaptions?: SiteFooterExportCaption[];
+  unitSystem?: UnitSystem;
+  onUnitSystemChange?: (u: UnitSystem) => void;
+  dstDisplayEnabled?: boolean;
+  onDstDisplayEnabledChange?: (v: boolean) => void;
 }) {
   const [supportOpen, setSupportOpen] = useState(false);
 
@@ -47,28 +56,34 @@ export function SiteFooter({
     };
   }, [supportOpen]);
 
+  /** Light: white pill body; dark: low-contrast shell. */
   const pillShell =
     theme === 'dark'
       ? 'border-white/15 bg-gray-950/90 text-gray-300 shadow-hard-sm backdrop-blur-sm'
       : 'border-gray-200/90 bg-white/92 text-gray-700 shadow-hard-sm backdrop-blur-sm';
 
-  const linkClassNormal =
+  /** One scale for all footer footnote & pill labels; weight varies per control (selected = bold). */
+  const footnoteText = 'text-[8px] sm:text-[9px] leading-none';
+  const footerLinkClass =
     theme === 'dark'
-      ? 'font-medium text-gray-300 underline decoration-gray-500/60 underline-offset-2 hover:text-white'
-      : 'font-medium text-gray-800 underline decoration-gray-400/60 underline-offset-2 hover:text-gray-950';
+      ? 'font-normal text-gray-300 underline decoration-gray-500/60 underline-offset-2 hover:text-white'
+      : 'font-normal text-gray-800 underline decoration-gray-400/60 underline-offset-2 hover:text-gray-950';
 
   const exportLinkClass =
     'font-medium text-gray-900 underline decoration-gray-400/70 underline-offset-2 hover:text-gray-950';
 
-  const supportBtn =
-    theme === 'dark'
-      ? 'shrink-0 rounded-full bg-gray-700/90 px-2.5 py-0.5 text-[10px] font-semibold text-gray-200 shadow-[inset_0_0_0_1px_rgba(75,85,99,0.7)] transition-colors duration-200 hover:bg-gray-600 sm:text-[11px]'
-      : 'shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold text-gray-700 shadow-[inset_0_0_0_1px_rgba(229,231,235,0.95)] transition-colors duration-200 hover:bg-gray-200 sm:text-[11px]';
-
   const captionPlace =
-    exportMode ? 'text-[11px] font-medium leading-snug text-gray-900' : theme === 'dark' ? 'text-[11px] font-medium leading-snug text-gray-100' : 'text-[11px] font-medium leading-snug text-gray-900';
+    exportMode
+      ? 'text-[11px] font-medium leading-snug text-gray-900'
+      : theme === 'dark'
+        ? `${footnoteText} font-normal text-gray-100`
+        : `${footnoteText} font-normal text-gray-900`;
   const captionFile =
-    exportMode ? 'font-mono text-[10px] font-normal leading-snug text-gray-500' : theme === 'dark' ? 'font-mono text-[10px] font-normal leading-snug text-gray-400' : 'font-mono text-[10px] font-normal leading-snug text-gray-500';
+    exportMode
+      ? 'font-mono text-[10px] font-normal leading-snug text-gray-500'
+      : theme === 'dark'
+        ? `font-mono ${footnoteText} font-normal text-gray-400`
+        : `font-mono ${footnoteText} font-normal text-gray-500`;
 
   const modal =
     supportOpen &&
@@ -142,7 +157,7 @@ export function SiteFooter({
           aria-label="Export caption and attribution"
         >
           {showCaptions ? (
-            <div className="flex min-h-[2.25rem] min-w-0 flex-1 flex-col justify-center space-y-0.5 text-left">
+            <div className="flex min-h-6 min-w-0 flex-1 flex-col justify-center space-y-0.5 text-left">
               {exportCaptions!.map((row, i) => (
                 <div key={`${row.filename}-${i}`} className="flex min-w-0 flex-col gap-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
                   <span className={`min-w-0 truncate ${captionPlace}`}>{row.place}</span>
@@ -151,7 +166,7 @@ export function SiteFooter({
               ))}
             </div>
           ) : null}
-          <div className="flex min-h-[2.25rem] shrink-0 items-center text-[11px] leading-snug">
+          <div className="flex min-h-6 shrink-0 items-center text-[11px] leading-snug">
             <a href={CLIMATE_CANVAS} target="_blank" rel="noopener noreferrer" className={exportLinkClass}>
               Created at ClimateCanvas.app
             </a>
@@ -161,35 +176,135 @@ export function SiteFooter({
     );
   }
 
+  const showLeftControls = Boolean(
+    onUnitSystemChange && unitSystem !== undefined && onDstDisplayEnabledChange && dstDisplayEnabled !== undefined
+  );
+
+  /**
+   * Outer track height; p-0.5 vertical padding makes inner (selected white) = h-5.
+   * Support uses the same inner h-5 so it lines up with the white metric/imp segment.
+   */
+  const pillH = 'h-6';
+  const footnotePillInner = 'h-5';
+
+  /**
+   * Metric / Imp: grey trough; selected = white, unselected = light grey.
+   * Dark: selected white cap, unselected mid grey (reads as “unselected” on dark track).
+   */
+  const unitTrack =
+    theme === 'dark'
+      ? `inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,14rem)] items-stretch rounded-full border border-gray-600 bg-gray-800 p-0.5 shadow-none`
+      : `inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,14rem)] items-stretch rounded-full border border-gray-200 bg-gray-100 p-0.5 shadow-none`;
+  const unitSegBase = `flex min-w-0 flex-1 items-center justify-center rounded-full px-2 uppercase tracking-wide ${footnoteText} font-normal transition-[color,background-color,box-shadow,font-weight] duration-200 sm:px-2.5`;
+
   return (
     <>
       <footer
-        className={`flex w-full flex-wrap items-end justify-end gap-x-4 gap-y-2 ${showCaptions ? 'sm:justify-between' : ''}`}
-        aria-label="Site attribution"
+        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-2 min-h-6 ${showCaptions || showLeftControls ? 'justify-between' : 'justify-end'}`}
+        aria-label="Site attribution and display options"
       >
+        {showLeftControls ? (
+          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 min-h-6">
+            <div className={unitTrack} title="Unit system for numbers in charts" role="group" aria-label="Unit system">
+              <button
+                type="button"
+                onClick={() => onUnitSystemChange?.('metric')}
+                className={`${unitSegBase} ${
+                  unitSystem === 'metric'
+                    ? theme === 'dark'
+                      ? 'bg-white text-gray-900 shadow-sm font-bold'
+                      : 'bg-white text-gray-900 shadow-sm font-bold'
+                    : theme === 'dark'
+                      ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                      : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Metric
+              </button>
+              <button
+                type="button"
+                onClick={() => onUnitSystemChange?.('imperial')}
+                className={`${unitSegBase} ${
+                  unitSystem === 'imperial'
+                    ? theme === 'dark'
+                      ? 'bg-white text-gray-900 shadow-sm font-bold'
+                      : 'bg-white text-gray-900 shadow-sm font-bold'
+                    : theme === 'dark'
+                      ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                      : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Imp.
+              </button>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={dstDisplayEnabled}
+              title="US-style DST display: between 2nd Sunday in March and 1st Sunday in November, shift each hourly row +1h on the civil clock (EPW rows are usually standard offset; underlying sample time is unchanged for sun math). You can use this for any file as an approximation."
+              onClick={() => onDstDisplayEnabledChange?.(!dstDisplayEnabled)}
+              className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 items-stretch overflow-hidden rounded-full border p-0 ${pillShell}`}
+            >
+              <span
+                className={`flex min-w-0 flex-1 items-center truncate pl-2 pr-1 text-left ${footnoteText} font-normal sm:pl-2 ${
+                  theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                }`}
+              >
+                Daylight Savings Time
+              </span>
+              <span className="flex shrink-0 items-center justify-center pr-1.5 pl-0.5" aria-hidden>
+                <span
+                  className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
+                    dstDisplayEnabled
+                      ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
+                      : theme === 'dark'
+                        ? 'border-gray-500 bg-white'
+                        : 'border-gray-400 bg-white'
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        ) : null}
         {showCaptions ? (
-          <div className="min-w-0 flex-1 space-y-0.5 text-left">
+          <div className="min-w-0 flex-1 min-h-6 flex items-center">
+            <div className="w-full space-y-0.5 text-left">
             {exportCaptions!.map((row, i) => (
               <div key={`${row.filename}-${i}`} className="flex min-w-0 flex-col gap-0 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-2">
                 <span className={`min-w-0 truncate ${captionPlace}`}>{row.place}</span>
                 <span className={`min-w-0 truncate ${captionFile}`}>{row.filename}</span>
               </div>
             ))}
+            </div>
           </div>
         ) : null}
-        <div className="pointer-events-none ml-auto shrink-0 max-w-[min(100vw-1rem,22rem)] text-[10px] leading-snug sm:text-[11px]">
+        <div className="pointer-events-none ml-auto flex min-h-6 min-w-0 max-w-[min(100vw-1rem,22rem)] items-center leading-none">
           <div
-            className={`pointer-events-auto flex flex-wrap items-center gap-x-2 gap-y-1 rounded-full border px-2.5 py-1 sm:px-3 ${pillShell}`}
+            className={`pointer-events-auto flex h-6 min-w-0 max-w-full items-center overflow-hidden rounded-full border p-0.5 ${pillShell}`}
           >
-            <a href={CLIMATE_CANVAS} target="_blank" rel="noopener noreferrer" className={`min-w-0 ${linkClassNormal}`}>
+            <a
+              href={CLIMATE_CANVAS}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex min-h-0 min-w-0 flex-1 items-center self-stretch truncate rounded-l-full px-2 ${footnoteText} ${footerLinkClass} sm:px-2.5 ${
+                theme === 'dark' ? '' : 'bg-white'
+              }`}
+            >
               Created at ClimateCanvas.app
             </a>
-            <span className="text-gray-400 select-none" aria-hidden>
-              ·
-            </span>
-            <button type="button" onClick={() => setSupportOpen(true)} className={supportBtn}>
-              Support
-            </button>
+            <div className="flex shrink-0 items-center pl-0.5 pr-0.5">
+              <button
+                type="button"
+                onClick={() => setSupportOpen(true)}
+                className={`inline-flex ${footnotePillInner} min-h-0 max-w-full items-center justify-center border-l pl-1.5 pr-2 text-left ${footnoteText} font-normal transition-colors duration-200 sm:pl-1.5 sm:pr-2 ${
+                  theme === 'dark'
+                    ? 'ml-0.5 rounded-l-full rounded-r-full border-white/10 bg-gray-800/50 text-gray-200 hover:bg-gray-800/70 hover:text-white'
+                    : 'ml-0.5 rounded-l-full rounded-r-full border-gray-200/90 bg-gray-100 text-gray-800 shadow-sm hover:bg-gray-200/90'
+                }`}
+              >
+                Support
+              </button>
+            </div>
           </div>
         </div>
       </footer>

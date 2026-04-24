@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
@@ -21,21 +22,6 @@ import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
-
-/** Tailwind `sm` (640px): below this, primary chrome cannot rely on hover. */
-function useIsMobileMaxSm() {
-  return useSyncExternalStore(
-    onChange => {
-      if (typeof window === 'undefined') return () => {};
-      const mql = window.matchMedia('(max-width: 639px)');
-      const on = () => onChange();
-      mql.addEventListener('change', on);
-      return () => mql.removeEventListener('change', on);
-    },
-    () => (typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false),
-    () => false
-  );
-}
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
@@ -242,6 +228,9 @@ export function SunPath({
   const chartToolbarRevealClass = expandChromeStrip
     ? 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-[52px] opacity-100 pointer-events-auto'
     : 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[48px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100 focus-within:pointer-events-auto';
+  const removeBtnRevealClass = isMobile
+    ? 'absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 opacity-100 pointer-events-auto'
+    : 'absolute right-0 top-1/2 flex shrink-0 -translate-y-1/2 opacity-0 pointer-events-none transition-opacity duration-200 ease-out group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto';
   // chart type switching handled by ChartTypeMenu
   const [tempFilterEnabled, setTempFilterEnabled] = useState(false);
   const [tempFilterType, setTempFilterType] = useState<'helpful' | 'harmful'>('helpful');
@@ -501,11 +490,11 @@ const filteredCompareData = (compareData || []).filter(d => {
           // Use the middle date of the period for sun position calculation
           const midDate = values[Math.floor(values.length / 2)].date;
           const pos = SunCalc.getPosition(midDate, locMeta.lat, locMeta.lng);
-          const altitude = pos.altitude * 180 / Math.PI;
-          
+          const altitude = (pos.altitude * 180) / Math.PI;
+
           if (altitude > 0) {
-            const azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360;
-            
+            const azimuth = ((pos.azimuth * 180) / Math.PI + 180) % 360;
+
             let val: number;
             let rVal: number;
             if (showDifference && compareData) {
@@ -849,7 +838,11 @@ const filteredCompareData = (compareData || []).filter(d => {
           ) : (
             <>
               <div ref={sunHeaderRowRef} className="relative flex w-full min-h-[24px] items-center gap-1.5">
-                <div className="flex min-h-0 min-w-0 flex-1 items-center gap-1.5 self-stretch pr-0 transition-[padding] duration-200 ease-out group-hover:pr-9 focus-within:pr-9 sm:gap-2">
+                <div
+                  className={`flex min-h-0 min-w-0 flex-1 items-center gap-1.5 self-stretch pr-0 transition-[padding] duration-200 ease-out sm:gap-2 ${
+                    isMobile ? 'pr-9' : 'group-hover:pr-9 focus-within:pr-9'
+                  }`}
+                >
                   <ChartTypeMenu
                     value="sunpath"
                     label="Sun Path"
@@ -919,7 +912,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                   </div>
                 </div>
                 {onRemove && (
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 flex shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 ease-out group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
+                  <div className={removeBtnRevealClass}>
                     <button
                       type="button"
                       onClick={onRemove}
