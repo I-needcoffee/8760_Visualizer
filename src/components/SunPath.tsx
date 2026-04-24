@@ -22,7 +22,6 @@ import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
-import { epwStandardCalendarFields } from '../lib/dstDisplay';
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
@@ -187,7 +186,7 @@ export function SunPath({
   const radiusMin = sunpathShared?.radiusMin ?? iRadMin;
   const setRadiusMin = sunpathShared?.setRadiusMin ?? setIRadMin;
 
-  const [iRadMax, setIRadMax] = useState<number | string>(5);
+  const [iRadMax, setIRadMax] = useState<number | string>(12);
   const radiusMax = sunpathShared?.radiusMax ?? iRadMax;
   const setRadiusMax = sunpathShared?.setRadiusMax ?? setIRadMax;
 
@@ -328,6 +327,26 @@ const filteredCompareData = (compareData || []).filter(d => {
            isTempMatch;
   });
 
+  /** Radius scale domain: min/max of the radius column over the filtered global selection; in compare, union of both files. */
+  const radiusValueExtent = useMemo(() => {
+    const key = radiusVar;
+    const collect = (rows: EPWDataRow[]) =>
+      rows
+        .map(d => d[key] as number)
+        .filter((v): v is number => typeof v === 'number' && !Number.isNaN(v) && v !== null);
+
+    const primary = collect(filteredData);
+    const compare = compareData && filteredCompareData.length > 0 ? collect(filteredCompareData) : [];
+    const all = compare.length > 0 ? [...primary, ...compare] : primary;
+    if (all.length === 0) {
+      return { min: radiusVarDef.min, max: radiusVarDef.max };
+    }
+    const lo = d3.min(all) ?? 0;
+    const hi = d3.max(all) ?? 0;
+    if (hi > lo) return { min: lo, max: hi };
+    return { min: lo, max: lo + 1e-6 };
+  }, [filteredData, filteredCompareData, compareData, radiusVar, radiusVarDef]);
+
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
     const def = variables.find(v => v.id === colorVar) || variables[0] || EMPTY_VARIABLES_FALLBACK;
     let min = def.fixedMin !== undefined ? convertValue(def.fixedMin, def.unit) : convertValue(def.min, def.unit);
@@ -417,11 +436,13 @@ const filteredCompareData = (compareData || []).filter(d => {
     const sizeScale = Math.max(0.4, Math.min(2.4, Math.min(width, height) / refChartDim));
 
     const rMinUser = typeof radiusMin === 'number' ? radiusMin : parseFloat(String(radiusMin)) || 1;
-    const rMaxUser = typeof radiusMax === 'number' ? radiusMax : parseFloat(String(radiusMax)) || 5;
-    const rMinPx = Math.max(0.35, rMinUser * sizeScale);
-    const rMaxPxPoints = Math.max(rMinPx + 0.25, rMaxUser * sizeScale);
+    const rMaxUser = typeof radiusMax === 'number' ? radiusMax : parseFloat(String(radiusMax)) || 12;
+    /** Tighter on-chart point radii than legacy (½ scale) while min/max user inputs stay in steps of 1. */
+    const rPxTweak = 0.5;
+    const rMinPx = Math.max(0.2, rPxTweak * rMinUser * sizeScale);
+    const rMaxPxPoints = Math.max(rMinPx + 0.2, rPxTweak * rMaxUser * sizeScale);
 
-    const rMaxPxLayout = Math.min(28 * sizeScale, Math.max(4 * sizeScale, rMaxUser * sizeScale));
+    const rMaxPxLayout = Math.min(28 * sizeScale, Math.max(4 * sizeScale, rPxTweak * rMaxUser * sizeScale));
     const labelRim = 15 * sizeScale;
     const titleReserve = title ? 22 * sizeScale : 0;
     const sideReserve = 8 * sizeScale;
@@ -475,33 +496,22 @@ const filteredCompareData = (compareData || []).filter(d => {
         return { ...d, altitude, azimuth, _val: val, _rVal: rVal };
       }).filter(d => d.altitude > 0);
     } else {
-      // Aggregate by standard-time clock (matches `date` + sun position). Display DST shifts
-      // `row.hour` / `dayOfYear` without moving `date`; grouping on those would mix instants in one bin.
+      // “Average” sun path: group by the same row fields the table uses (day/week/month + hour of row).
+      // Sort each bin by `date` so the representative `midDate` and means stay aligned with the EPW order.
       let groups;
       if (aggregation === 'day') {
-        groups = d3.group(
-          currentData,
-          d => epwStandardCalendarFields(d as EPWDataRow).dayOfYear,
-          d => epwStandardCalendarFields(d as EPWDataRow).hour
-        );
+        groups = d3.group(currentData, d => d.dayOfYear, d => d.hour);
       } else if (aggregation === 'week') {
-        groups = d3.group(
-          currentData,
-          d => Math.floor((epwStandardCalendarFields(d as EPWDataRow).dayOfYear - 1) / 7),
-          d => epwStandardCalendarFields(d as EPWDataRow).hour
-        );
+        groups = d3.group(currentData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
       } else {
-        groups = d3.group(
-          currentData,
-          d => epwStandardCalendarFields(d as EPWDataRow).month,
-          d => epwStandardCalendarFields(d as EPWDataRow).hour
-        );
+        groups = d3.group(currentData, d => d.month, d => d.hour);
       }
 
       Array.from(groups).forEach(([period, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
-          // Use the middle date of the period for sun position calculation
-          const midDate = values[Math.floor(values.length / 2)].date;
+          const sorted = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
+          const byDate = sorted as EPWDataRow[];
+          const midDate = byDate[Math.floor(byDate.length / 2)]!.date;
           const pos = SunCalc.getPosition(midDate, locMeta.lat, locMeta.lng);
           const altitude = (pos.altitude * 180) / Math.PI;
 
@@ -511,32 +521,33 @@ const filteredCompareData = (compareData || []).filter(d => {
             let val: number;
             let rVal: number;
             if (showDifference && compareData) {
-              const primaryAvg = d3.mean(values, d => d[colorVar] as number) || 0;
-              const compareValues = values.map(v => {
-                const idx = currentData.indexOf(v);
-                return compareData[idx]?.[colorVar] as number;
-              }).filter(v => v !== null);
+              const primaryAvg = d3.mean(byDate, d => d[colorVar] as number) || 0;
+              const compareValues = byDate
+                .map(v => {
+                  const idx = currentData.findIndex(r => r.date.getTime() === v.date.getTime());
+                  return idx >= 0 ? (compareData[idx]?.[colorVar] as number) : null;
+                })
+                .filter((x): x is number => x !== null && !Number.isNaN(x));
               const compareAvg = d3.mean(compareValues) || 0;
               val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
-              rVal = d3.mean(values, d => d[radiusVar] as number) || 0; // Keep primary radius
+              rVal = d3.mean(byDate, d => d[radiusVar] as number) || 0;
             } else {
-              val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
-              rVal = d3.mean(values, d => d[radiusVar] as number) || 0;
+              val = convertValue(d3.mean(byDate, d => d[colorVar] as number) || 0, colorVarDef.unit);
+              rVal = d3.mean(byDate, d => d[radiusVar] as number) || 0;
             }
 
-            const rep = values[0] as EPWDataRow;
+            const rep = byDate[0]!;
             points.push({
               date: midDate,
               altitude,
               azimuth,
               _val: val,
               _rVal: rVal,
-              [radiusVar]: rVal, // Keep for tooltip/sorting compatibility
-              dryBulbTemperature: d3.mean(values as EPWDataRow[], (d: EPWDataRow) => d.dryBulbTemperature as number) || 0,
-              _count: values.length,
+              [radiusVar]: rVal,
+              dryBulbTemperature: d3.mean(byDate, d => d.dryBulbTemperature as number) || 0,
+              _count: byDate.length,
               _period: period,
-              /** Display hour (matches global time filter + shown EPW row); `hour` key is standard-time for grouping. */
-              _hour: rep.hour,
+              _hour: hour,
               month: rep.month
             });
           }
@@ -554,25 +565,20 @@ const filteredCompareData = (compareData || []).filter(d => {
       colorScale = sequentialHeatmapColorFn(gradientDef.colors, colorVarDef, cMin, cMax);
     }
 
-    // Radius scale (data → px), px range scales with chart so circles stay proportional
-    const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0] || EMPTY_VARIABLES_FALLBACK;
-    const rDomainMin =
-      typeof radiusVarDef.fixedMin === 'number' && Number.isFinite(radiusVarDef.fixedMin)
-        ? radiusVarDef.fixedMin
-        : radiusVarDef.min;
-    const rDomainMax =
-      typeof radiusVarDef.fixedMax === 'number' && Number.isFinite(radiusVarDef.fixedMax)
-        ? radiusVarDef.fixedMax
-        : radiusVarDef.max;
+    // Radius value → px: data domain is min/max of the selected radius field over the filtered range (compare = union of both).
     const pointRadiusScale = d3
       .scaleLinear()
-      .domain([rDomainMin, rDomainMax])
+      .domain([radiusValueExtent.min, radiusValueExtent.max])
       .range([rMinPx, rMaxPxPoints])
       .clamp(true);
     const haloExtra = Math.max(0.5, sizeScale);
 
-    // Draw smallest radii first so the largest points stay on top (readable halos).
-    points.sort((a, b) => ((a._rVal as number) || 0) - ((b._rVal as number) || 0));
+    // Draw lower color values first; higher _val (further on the color scale) paints on top.
+    const colorKey = (d: { _val?: number }) => {
+      const v = d._val as number;
+      return Number.isFinite(v) ? v : 0;
+    };
+    points.sort((a, b) => colorKey(a) - colorKey(b));
 
     // Split points into selected and unselected
     const isSelected = (d: any) => {
@@ -802,7 +808,7 @@ const filteredCompareData = (compareData || []).filter(d => {
   } else {
       renderChart(svgRef.current, data, null, false, pw, ph);
   }
-  }, [metadata, compareMetadata, data, compareData, showDifference, stackedComparison, pairComparisonHorizontal, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, slotSize.primary.w, slotSize.primary.h, slotSize.compare.w, slotSize.compare.h, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef]);
+  }, [metadata, compareMetadata, data, compareData, showDifference, stackedComparison, pairComparisonHorizontal, variables, colorVar, radiusVar, gradientId, radiusMin, radiusMax, aggregation, gradients, filter, slotSize.primary.w, slotSize.primary.h, slotSize.compare.w, slotSize.compare.h, unitSystem, theme, heatmapTextColor, tempFilterEnabled, tempFilterType, helpfulThreshold, harmfulThreshold, colorVarDef, radiusValueExtent]);
 
   /** Compare page: two-pane sun path — legend under both charts, centered (matches other compare cards). */
   const sunComparePairLegendInFooter = Boolean(
@@ -1081,15 +1087,21 @@ const filteredCompareData = (compareData || []).filter(d => {
                     type="number"
                     value={radiusMin}
                     onChange={(e) => setRadiusMin(e.target.value)}
+                    min={1}
+                    step={1}
                     className={`block w-1/2 rounded-full border p-2.5 text-sm outline-none transition-all focus:border-gray-500 focus:ring-gray-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
-                    placeholder="Min"
+                    placeholder="1"
+                    title="Minimum point radius (logical units, step 1)"
                   />
                   <input
                     type="number"
                     value={radiusMax}
                     onChange={(e) => setRadiusMax(e.target.value)}
+                    min={1}
+                    step={1}
                     className={`block w-1/2 rounded-full border p-2.5 text-sm outline-none transition-all focus:border-gray-500 focus:ring-gray-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-white'}`}
-                    placeholder="Max"
+                    placeholder="12"
+                    title="Maximum point radius (logical units, step 1)"
                   />
                 </div>
               </div>

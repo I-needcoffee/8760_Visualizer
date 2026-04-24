@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { UnitSystem } from '../App';
+import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 
 const CLIMATE_CANVAS = 'https://climatecanvas.app';
 const PAYPAL_URL = 'https://www.paypal.com/paypalme/coffee4tim';
@@ -38,6 +39,7 @@ export function SiteFooter({
   onDstDisplayEnabledChange?: (v: boolean) => void;
 }) {
   const [supportOpen, setSupportOpen] = useState(false);
+  const isMobile = useIsMobileMaxSm();
 
   useEffect(() => {
     if (!supportOpen) return;
@@ -180,22 +182,23 @@ export function SiteFooter({
     onUnitSystemChange && unitSystem !== undefined && onDstDisplayEnabledChange && dstDisplayEnabled !== undefined
   );
 
-  /**
-   * Outer track height; p-0.5 vertical padding makes inner (selected white) = h-5.
-   * Support uses the same inner h-5 so it lines up with the white metric/imp segment.
-   */
   const pillH = 'h-6';
-  const footnotePillInner = 'h-5';
+  /** Slightly below inner row height (h-5) so the chip sits with equal top/bottom inset. */
+  const supportChipH = 'h-4.5';
 
   /**
-   * Metric / Imp: grey trough; selected = white, unselected = light grey.
+   * Metric / Imperial: grey trough; selected = white, unselected = light grey.
    * Dark: selected white cap, unselected mid grey (reads as “unselected” on dark track).
    */
   const unitTrack =
     theme === 'dark'
-      ? `inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,14rem)] items-stretch rounded-full border border-gray-600 bg-gray-800 p-0.5 shadow-none`
-      : `inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,14rem)] items-stretch rounded-full border border-gray-200 bg-gray-100 p-0.5 shadow-none`;
-  const unitSegBase = `flex min-w-0 flex-1 items-center justify-center rounded-full px-2 uppercase tracking-wide ${footnoteText} font-normal transition-[color,background-color,box-shadow,font-weight] duration-200 sm:px-2.5`;
+      ? `inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,15rem)] items-stretch rounded-full border border-gray-600 bg-gray-800 p-0.5 shadow-none`
+      : `inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,15rem)] items-stretch rounded-full border border-gray-200 bg-gray-100 p-0.5 shadow-none`;
+  const unitSegBase = `flex min-w-0 flex-1 items-center justify-center rounded-full px-1.5 ${footnoteText} font-normal transition-[color,background-color,box-shadow,font-weight] duration-200 sm:px-2.5`;
+
+  const metricLabel = isMobile ? 'Met' : 'Metric';
+  const imperialLabel = isMobile ? 'Imp' : 'Imperial';
+  const dstLabel = isMobile ? 'DST' : 'Daylight savings time';
 
   return (
     <>
@@ -209,6 +212,7 @@ export function SiteFooter({
               <button
                 type="button"
                 onClick={() => onUnitSystemChange?.('metric')}
+                aria-label="Metric"
                 className={`${unitSegBase} ${
                   unitSystem === 'metric'
                     ? theme === 'dark'
@@ -219,11 +223,12 @@ export function SiteFooter({
                       : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                 }`}
               >
-                Metric
+                {metricLabel}
               </button>
               <button
                 type="button"
                 onClick={() => onUnitSystemChange?.('imperial')}
+                aria-label="Imperial"
                 className={`${unitSegBase} ${
                   unitSystem === 'imperial'
                     ? theme === 'dark'
@@ -234,13 +239,14 @@ export function SiteFooter({
                       : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                 }`}
               >
-                Imp.
+                {imperialLabel}
               </button>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={dstDisplayEnabled}
+              aria-label="Daylight savings time display"
               title="US-style DST display: between 2nd Sunday in March and 1st Sunday in November, shift each hourly row +1h on the civil clock (EPW rows are usually standard offset; underlying sample time is unchanged for sun math). You can use this for any file as an approximation."
               onClick={() => onDstDisplayEnabledChange?.(!dstDisplayEnabled)}
               className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 items-stretch overflow-hidden rounded-full border p-0 ${pillShell}`}
@@ -250,7 +256,7 @@ export function SiteFooter({
                   theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
                 }`}
               >
-                Daylight Savings Time
+                {dstLabel}
               </span>
               <span className="flex shrink-0 items-center justify-center pr-1.5 pl-0.5" aria-hidden>
                 <span
@@ -278,25 +284,25 @@ export function SiteFooter({
             </div>
           </div>
         ) : null}
-        <div className="pointer-events-none ml-auto flex min-h-6 min-w-0 max-w-[min(100vw-1rem,22rem)] items-center leading-none">
+        <div className="pointer-events-none ml-auto flex h-6 min-w-0 max-w-[min(100vw-1rem,22rem)] items-center self-center leading-none">
           <div
-            className={`pointer-events-auto flex h-6 min-w-0 max-w-full items-center overflow-hidden rounded-full border p-0.5 ${pillShell}`}
+            className={`pointer-events-auto box-border flex h-6 min-w-0 max-w-full items-center overflow-hidden rounded-full border p-0.5 ${pillShell}`}
           >
             <a
               href={CLIMATE_CANVAS}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex min-h-0 min-w-0 flex-1 items-center self-stretch truncate rounded-l-full px-2 ${footnoteText} ${footerLinkClass} sm:px-2.5 ${
+              className={`flex h-5 min-h-0 min-w-0 flex-1 items-center truncate rounded-l-full px-2 ${footnoteText} ${footerLinkClass} sm:px-2.5 ${
                 theme === 'dark' ? '' : 'bg-white'
               }`}
             >
               Created at ClimateCanvas.app
             </a>
-            <div className="flex shrink-0 items-center pl-0.5 pr-0.5">
+            <div className="flex h-5 shrink-0 items-center justify-center pl-0.5 pr-0.5">
               <button
                 type="button"
                 onClick={() => setSupportOpen(true)}
-                className={`inline-flex ${footnotePillInner} min-h-0 max-w-full items-center justify-center border-l pl-1.5 pr-2 text-left ${footnoteText} font-normal transition-colors duration-200 sm:pl-1.5 sm:pr-2 ${
+                className={`inline-flex ${supportChipH} min-h-0 max-w-full items-center justify-center border-l pl-1.5 pr-2 text-left ${footnoteText} font-normal transition-colors duration-200 sm:pl-1.5 sm:pr-2 ${
                   theme === 'dark'
                     ? 'ml-0.5 rounded-l-full rounded-r-full border-white/10 bg-gray-800/50 text-gray-200 hover:bg-gray-800/70 hover:text-white'
                     : 'ml-0.5 rounded-l-full rounded-r-full border-gray-200/90 bg-gray-100 text-gray-800 shadow-sm hover:bg-gray-200/90'
