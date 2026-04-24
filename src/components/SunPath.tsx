@@ -22,6 +22,7 @@ import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
+import { epwStandardCalendarFields } from '../lib/dstDisplay';
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
@@ -474,15 +475,27 @@ const filteredCompareData = (compareData || []).filter(d => {
         return { ...d, altitude, azimuth, _val: val, _rVal: rVal };
       }).filter(d => d.altitude > 0);
     } else {
-      // Aggregate data by hour of day, then by the selected period
-      // This creates an "average day" for the period
+      // Aggregate by standard-time clock (matches `date` + sun position). Display DST shifts
+      // `row.hour` / `dayOfYear` without moving `date`; grouping on those would mix instants in one bin.
       let groups;
       if (aggregation === 'day') {
-        groups = d3.group(currentData, d => d.dayOfYear, d => d.hour);
+        groups = d3.group(
+          currentData,
+          d => epwStandardCalendarFields(d as EPWDataRow).dayOfYear,
+          d => epwStandardCalendarFields(d as EPWDataRow).hour
+        );
       } else if (aggregation === 'week') {
-        groups = d3.group(currentData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
-      } else { // month
-        groups = d3.group(currentData, d => d.month, d => d.hour);
+        groups = d3.group(
+          currentData,
+          d => Math.floor((epwStandardCalendarFields(d as EPWDataRow).dayOfYear - 1) / 7),
+          d => epwStandardCalendarFields(d as EPWDataRow).hour
+        );
+      } else {
+        groups = d3.group(
+          currentData,
+          d => epwStandardCalendarFields(d as EPWDataRow).month,
+          d => epwStandardCalendarFields(d as EPWDataRow).hour
+        );
       }
 
       Array.from(groups).forEach(([period, hourGroups]) => {
@@ -511,6 +524,7 @@ const filteredCompareData = (compareData || []).filter(d => {
               rVal = d3.mean(values, d => d[radiusVar] as number) || 0;
             }
 
+            const rep = values[0] as EPWDataRow;
             points.push({
               date: midDate,
               altitude,
@@ -521,8 +535,9 @@ const filteredCompareData = (compareData || []).filter(d => {
               dryBulbTemperature: d3.mean(values as EPWDataRow[], (d: EPWDataRow) => d.dryBulbTemperature as number) || 0,
               _count: values.length,
               _period: period,
-              _hour: hour,
-              month: values[0].month
+              /** Display hour (matches global time filter + shown EPW row); `hour` key is standard-time for grouping. */
+              _hour: rep.hour,
+              month: rep.month
             });
           }
         });
@@ -541,8 +556,17 @@ const filteredCompareData = (compareData || []).filter(d => {
 
     // Radius scale (data → px), px range scales with chart so circles stay proportional
     const radiusVarDef = variables.find(v => v.id === radiusVar) || variables[0] || EMPTY_VARIABLES_FALLBACK;
-    const pointRadiusScale = d3.scaleLinear()
-      .domain([radiusVarDef.min, radiusVarDef.max])
+    const rDomainMin =
+      typeof radiusVarDef.fixedMin === 'number' && Number.isFinite(radiusVarDef.fixedMin)
+        ? radiusVarDef.fixedMin
+        : radiusVarDef.min;
+    const rDomainMax =
+      typeof radiusVarDef.fixedMax === 'number' && Number.isFinite(radiusVarDef.fixedMax)
+        ? radiusVarDef.fixedMax
+        : radiusVarDef.max;
+    const pointRadiusScale = d3
+      .scaleLinear()
+      .domain([rDomainMin, rDomainMax])
       .range([rMinPx, rMaxPxPoints])
       .clamp(true);
     const haloExtra = Math.max(0.5, sizeScale);

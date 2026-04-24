@@ -124,3 +124,32 @@ export function withDstDisplayRespectingToggle(f: ParsedEPW, userWantsDst: boole
     data: f.data.map(r => adjustRow(r, f.metadata, true)),
   };
 }
+
+/**
+ * Standard-time y/m/d/h and day-of-year for the **sample instant** (aligned with `row.date`).
+ * When DST *display* shifts `row.hour` (etc.), use `solarStandardClock` so clock-based
+ * groupBy matches sun geometry; otherwise one bin can mix different hours’ radiation values.
+ */
+export function epwStandardCalendarFields(row: EPWDataRow): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  dayOfYear: number;
+} {
+  if (row.solarStandardClock) {
+    const { year, month, day, hour } = row.solarStandardClock;
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(
+      (Date.UTC(year, month - 1, day) - Date.UTC(year, 0, 0)) / oneDay
+    );
+    return { year, month, day, hour, dayOfYear };
+  }
+  return {
+    year: row.year,
+    month: row.month,
+    day: row.day,
+    hour: row.hour,
+    dayOfYear: row.dayOfYear,
+  };
+}
