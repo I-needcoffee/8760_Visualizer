@@ -34,6 +34,16 @@ const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   fixedMax: 45,
 };
 
+/** Mean of a numeric EPW column, ignoring null/NaN (missing values are not averaged in). */
+function meanEpwColumn(rows: EPWDataRow[], col: string): number {
+  const vals: number[] = [];
+  for (const r of rows) {
+    const v = r[col] as unknown;
+    if (typeof v === 'number' && !Number.isNaN(v)) vals.push(v);
+  }
+  return vals.length ? (d3.mean(vals) ?? 0) : 0;
+}
+
 interface SunPathProps {
   metadata: EPWMetadata;
   /** When drawing the comparison panel, sun positions use this location. */
@@ -389,10 +399,12 @@ const filteredCompareData = (compareData || []).filter(d => {
   const stats = (() => {
     if (showDifference && compareData) {
       const diffs = filteredData.map(d => {
-        const idx = data.indexOf(d);
+        const idx = data.findIndex(r => r.date.getTime() === d.date.getTime());
         const primaryVal = d[colorVar] as number;
-        const compareVal = compareData[idx]?.[colorVar] as number;
-        if (primaryVal === null || compareVal === null) return null;
+        const compareVal = idx >= 0 ? (compareData[idx]?.[colorVar] as number) : undefined;
+        if (primaryVal === null || primaryVal === undefined || compareVal === null || compareVal === undefined) {
+          return null;
+        }
         return compareVal - primaryVal;
       }).filter(v => v !== null) as number[];
 
@@ -480,31 +492,42 @@ const filteredCompareData = (compareData || []).filter(d => {
         const pos = SunCalc.getPosition(d.date, locMeta.lat, locMeta.lng);
         const altitude = pos.altitude * 180 / Math.PI;
         const azimuth = (pos.azimuth * 180 / Math.PI + 180) % 360; // Convert to 0=N, 90=E
+        const t = d.date.getTime();
+        const primaryRow = (data.find(r => r.date.getTime() === t) as EPWDataRow | undefined) ?? (data[i] as EPWDataRow | undefined);
+        const compareRow =
+          compareData &&
+          ((compareData.find(c => c.date.getTime() === t) as EPWDataRow | undefined) ?? (compareData[i] as EPWDataRow | undefined));
         
         let val: number;
         let rVal: number;
-        if (showDifference && compareData) {
-          const primaryVal = d[colorVar] as number;
-          const compareVal = compareData[i]?.[colorVar] as number;
+        if (showDifference && compareData && primaryRow && compareRow) {
+          const primaryVal = primaryRow[colorVar] as number;
+          const compareVal = compareRow[colorVar] as number;
           val = convertValue(compareVal - primaryVal, colorVarDef.unit, true);
-          rVal = d[radiusVar] as number; // Keep primary radius in difference mode
         } else {
           val = convertValue(d[colorVar] as number, colorVarDef.unit);
-          rVal = d[radiusVar] as number;
+        }
+        {
+          // Difference mode: radii follow the **primary** file; otherwise the row on this chart.
+          const radiusFrom = showDifference && primaryRow ? primaryRow : d;
+          const raw = radiusFrom[radiusVar] as unknown;
+          rVal = typeof raw === 'number' && !Number.isNaN(raw) ? raw : 0;
         }
         
         return { ...d, altitude, azimuth, _val: val, _rVal: rVal };
       }).filter(d => d.altitude > 0);
     } else {
       // “Average” sun path: group by the same row fields the table uses (day/week/month + hour of row).
+      // In **difference** mode, bins are always from the **primary** `data` so both charts share the same samples for primary vs compare.
       // Sort each bin by `date` so the representative `midDate` and means stay aligned with the EPW order.
+      const groupData: EPWDataRow[] = showDifference && compareData ? data : currentData;
       let groups;
       if (aggregation === 'day') {
-        groups = d3.group(currentData, d => d.dayOfYear, d => d.hour);
+        groups = d3.group(groupData, d => d.dayOfYear, d => d.hour);
       } else if (aggregation === 'week') {
-        groups = d3.group(currentData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
+        groups = d3.group(groupData, d => Math.floor((d.dayOfYear - 1) / 7), d => d.hour);
       } else {
-        groups = d3.group(currentData, d => d.month, d => d.hour);
+        groups = d3.group(groupData, d => d.month, d => d.hour);
       }
 
       Array.from(groups).forEach(([period, hourGroups]) => {
@@ -521,19 +544,19 @@ const filteredCompareData = (compareData || []).filter(d => {
             let val: number;
             let rVal: number;
             if (showDifference && compareData) {
-              const primaryAvg = d3.mean(byDate, d => d[colorVar] as number) || 0;
+              const primaryAvg = meanEpwColumn(byDate, colorVar);
               const compareValues = byDate
                 .map(v => {
-                  const idx = currentData.findIndex(r => r.date.getTime() === v.date.getTime());
+                  const idx = data.findIndex(r => r.date.getTime() === v.date.getTime());
                   return idx >= 0 ? (compareData[idx]?.[colorVar] as number) : null;
                 })
                 .filter((x): x is number => x !== null && !Number.isNaN(x));
               const compareAvg = d3.mean(compareValues) || 0;
               val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
-              rVal = d3.mean(byDate, d => d[radiusVar] as number) || 0;
+              rVal = meanEpwColumn(byDate, radiusVar);
             } else {
-              val = convertValue(d3.mean(byDate, d => d[colorVar] as number) || 0, colorVarDef.unit);
-              rVal = d3.mean(byDate, d => d[radiusVar] as number) || 0;
+              val = convertValue(meanEpwColumn(byDate, colorVar), colorVarDef.unit);
+              rVal = meanEpwColumn(byDate, radiusVar);
             }
 
             const rep = byDate[0]!;
@@ -544,7 +567,7 @@ const filteredCompareData = (compareData || []).filter(d => {
               _val: val,
               _rVal: rVal,
               [radiusVar]: rVal,
-              dryBulbTemperature: d3.mean(byDate, d => d.dryBulbTemperature as number) || 0,
+              dryBulbTemperature: meanEpwColumn(byDate, 'dryBulbTemperature'),
               _count: byDate.length,
               _period: period,
               _hour: hour,
