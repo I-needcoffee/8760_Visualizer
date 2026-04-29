@@ -1,9 +1,12 @@
 import * as d3 from 'd3';
 import type { ChartType, UnitSystem } from '../App';
 import type { TutorialLiveSnapshot } from '../context/TutorialLiveContext';
-import type { GlobalFilterState } from '../components/GlobalFilterPanel';
+import type { GlobalFilterState } from './globalFilter';
+import { rowPassesGlobalFilters } from './globalFilter';
 import type { EPWDataRow } from './epwParser';
 import { EPW_COLUMNS } from './epwParser';
+import { explorerUsesDailyAvgBarExtents, meanDailyLowHighForRows } from './explorerBarExtents';
+import { EXPLORER_MONTH_LABELS_SHORT } from './explorerChartSvgLayout';
 
 export type TutorialQuickStat = { label: string; value: string };
 
@@ -12,13 +15,7 @@ export type TutorialQuickStatBlock = { heading?: string; rows: TutorialQuickStat
 const COLUMN = Object.fromEntries(EPW_COLUMNS.map(c => [c.id, c])) as Record<string, (typeof EPW_COLUMNS)[number]>;
 
 function filterRows(rows: EPWDataRow[], filter: GlobalFilterState): EPWDataRow[] {
-  return rows.filter(d => {
-    const isMonthMatch =
-      filter.startMonth <= filter.endMonth
-        ? d.month >= filter.startMonth && d.month <= filter.endMonth
-        : d.month >= filter.startMonth || d.month <= filter.endMonth;
-    return isMonthMatch && d.hour >= filter.startHour && d.hour <= filter.endHour;
-  });
+  return rows.filter(d => rowPassesGlobalFilters(d, filter));
 }
 
 function numericSeries(rows: EPWDataRow[], columnId: string): number[] {
@@ -54,6 +51,13 @@ function formatValue(v: number, unit: string, unitSystem: UnitSystem): string {
   const abs = Math.abs(n);
   const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
   return `${n.toFixed(decimals)}${u ? ` ${u}` : ''}`;
+}
+
+/** Numeric token only (before unit suffix) for compact month strips. */
+function compactNumberForMonthStrip(v: number, unit: string, unitSystem: UnitSystem): string {
+  const full = formatValue(v, unit, unitSystem);
+  const sp = full.indexOf(' ');
+  return sp === -1 ? full : full.slice(0, sp);
 }
 
 function coreStats(vals: number[], unit: string, unitSystem: UnitSystem): TutorialQuickStat[] {
@@ -96,6 +100,75 @@ function windSpeedBlock(rows: EPWDataRow[], unitSystem: UnitSystem): TutorialQui
     heading: 'Wind speed (same hours as the chart)',
     rows: coreStats(vals, unit, unitSystem),
   };
+}
+
+/** One cell per calendar month when guided panel matches Data Explorer month aggregation. */
+export type TutorialMonthlyExplorerCell = {
+  abbr: string;
+  title: string;
+  /** Stacked values (numbers only): high → average → low. */
+  high: string;
+  avg: string;
+  low: string;
+};
+
+/** Returns 12 cells when chart is month aggregation; otherwise `null`. */
+export function computeExplorerMonthlyByMonth(opts: {
+  rows: EPWDataRow[] | undefined;
+  filter: GlobalFilterState;
+  unitSystem: UnitSystem;
+  slotVariableId?: string;
+  live: TutorialLiveSnapshot;
+}): TutorialMonthlyExplorerCell[] | null {
+  const { rows, filter, unitSystem, slotVariableId, live } = opts;
+  if (live.aggregation !== 'month' || !rows?.length) return null;
+
+  const columnId = live.colorVarId || slotVariableId || 'dryBulbTemperature';
+  const meta = COLUMN[columnId];
+  if (!meta) return null;
+
+  const unit = meta.unit ?? '';
+  const category = meta.category ?? '';
+  const useDaily = explorerUsesDailyAvgBarExtents(columnId, category);
+  const filtered = filterRows(rows, filter);
+
+  return [...EXPLORER_MONTH_LABELS_SHORT].map((abbr, mi) => {
+    const month = mi + 1;
+    const mrows = filtered.filter(r => r.month === month);
+    if (!mrows.length) {
+      const dash = '—';
+      return { abbr, title: `${abbr}: no samples in filtered range`, high: dash, avg: dash, low: dash };
+    }
+
+    const nums = numericSeries(mrows, columnId);
+    if (!nums.length) {
+      const dash = '—';
+      return { abbr, title: `${abbr}: no numeric values`, high: dash, avg: dash, low: dash };
+    }
+
+    const avgR = d3.mean(nums)!;
+    let lowR = d3.min(nums)!;
+    let highR = d3.max(nums)!;
+    if (useDaily) {
+      const ext = meanDailyLowHighForRows(mrows, columnId);
+      if (ext) {
+        lowR = ext.low;
+        highR = ext.high;
+      }
+    }
+
+    const lowS = compactNumberForMonthStrip(lowR, unit, unitSystem);
+    const avgS = compactNumberForMonthStrip(avgR, unit, unitSystem);
+    const highS = compactNumberForMonthStrip(highR, unit, unitSystem);
+
+    return {
+      abbr,
+      title: `${abbr}: high · avg · low (${meta.name ?? columnId}, filtered)`,
+      high: highS,
+      avg: avgS,
+      low: lowS,
+    };
+  });
 }
 
 export function computeTutorialGuideQuickStats(opts: {

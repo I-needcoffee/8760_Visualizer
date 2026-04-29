@@ -13,7 +13,11 @@ import { UtciExplorer } from './components/UtciExplorer';
 import { Grid4x2ComfortExportOutline } from './components/Grid4x2ComfortExportOutline';
 import { Grid4x2StatsColumn } from './components/QuickStatsSidebar';
 import { SiteFooter, type SiteFooterExportCaption } from './components/SiteFooter';
-import { GlobalFilterState } from './components/GlobalFilterPanel';
+import {
+  DEFAULT_GLOBAL_FILTER,
+  type GlobalFilterState,
+  type HeatmapCellStatistic,
+} from './lib/globalFilter';
 import { SettingsModal } from './components/SettingsModal';
 import { toPng, toJpeg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
@@ -396,12 +400,12 @@ export default function App() {
     root.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
   }, [theme]);
 
-  const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>({
-    startMonth: 1,
-    endMonth: 12,
-    startHour: 0,
-    endHour: 23
-  });
+  const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>(() => ({
+    ...DEFAULT_GLOBAL_FILTER,
+  }));
+
+  /** Heatmaps: statistic taken within each aggregation cell (“Ave” = mean). Shared app-wide via footer toggle. */
+  const [heatmapCellStatistic, setHeatmapCellStatistic] = useState<HeatmapCellStatistic>('mean');
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [exportMode, setExportModeState] = useState(false);
@@ -499,6 +503,12 @@ export default function App() {
   }, [tutorialHoverHints]);
   const [slotsByLayout, setSlotsByLayout] = useState<Record<LayoutMode, ChartConfig[]>>(initialSlotsByLayout);
   const slots = slotsByLayout[layoutMode];
+
+  /** Low/Ave/High applies to 12×24 explorer-style heatmaps only; comparison mode always includes those cards. */
+  const dashboardHasHeatmap1224 = useMemo(() => {
+    if (viewMode === 'comparison') return true;
+    return slots.some(s => s.type === 'explorer' || s.type === 'wind' || s.type === 'utci');
+  }, [viewMode, slots]);
 
   useEffect(() => {
     if (layoutMode !== 'stacked') return;
@@ -638,6 +648,9 @@ export default function App() {
           format: [img.width, img.height]
         });
         pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
+        const canvasUrl = 'https://climatecanvas.app';
+        const footerStripH = Math.min(64, Math.max(36, img.height * 0.07));
+        pdf.link(0, img.height - footerStripH, img.width, footerStripH, { url: canvasUrl });
         pdf.save(`climate-dashboard-${selectedFiles[0]?.metadata.city || 'export'}.pdf`);
       }
     } catch (error) {
@@ -720,6 +733,7 @@ export default function App() {
             onChangeType={onChangeTypeHandler}
             gradients={allGradients}
             filter={globalFilter}
+            heatmapCellStatistic={heatmapCellStatistic}
             unitSystem={unitSystem}
             heatmapTextColor={heatmapTextColor}
             theme={theme}
@@ -749,6 +763,7 @@ export default function App() {
             onChangeType={onChangeTypeHandler}
             gradients={allGradients}
             filter={globalFilter}
+            heatmapCellStatistic={heatmapCellStatistic}
             unitSystem={unitSystem}
             heatmapTextColor={heatmapTextColor}
             theme={theme}
@@ -802,6 +817,7 @@ export default function App() {
             onChangeType={onChangeTypeHandler}
             gradients={allGradients}
             filter={globalFilter}
+            heatmapCellStatistic={heatmapCellStatistic}
             unitSystem={unitSystem}
             heatmapTextColor={heatmapTextColor}
             theme={theme}
@@ -1335,13 +1351,14 @@ export default function App() {
           backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : '#fcfbf8',
         }}
       >
-        <div className={`mx-auto flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 pt-1.5 sm:px-2.5 sm:pt-2.5 lg:px-3 lg:pt-3 w-full max-w-[1600px] ${exportMode ? 'bg-white' : ''}`}>
+        <div className={`mx-auto flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 pt-1.5 pb-1.5 sm:px-2.5 sm:pt-2.5 sm:pb-2.5 lg:px-3 lg:pt-3 lg:pb-3 w-full max-w-[1600px] ${exportMode ? 'bg-white' : ''}`}>
           {showSettingsModal && (
             <SettingsModal
               isOpen={showSettingsModal}
               onClose={() => setShowSettingsModal(false)}
               filter={globalFilter}
               onChangeFilter={setGlobalFilter}
+              unitSystem={unitSystem}
               theme={theme}
               setTheme={setTheme}
               heatmapTextColor={heatmapTextColor}
@@ -1401,15 +1418,19 @@ export default function App() {
             exportMode ? 'border-gray-200 bg-white' : theme === 'dark' ? 'border-gray-800/80 bg-inherit' : 'border-gray-200/80 bg-inherit'
           }`}
         >
-          <div className="mx-auto w-full max-w-[1600px] px-1.5 py-2 sm:px-2.5 lg:px-3">
+          <div className="mx-auto w-full max-w-[1600px] px-1.5 py-1 sm:px-2.5 lg:px-3">
             <SiteFooter
               theme={theme}
               exportMode={exportMode}
               exportCaptions={exportFooterCaptions}
               unitSystem={unitSystem}
               onUnitSystemChange={setUnitSystem}
+              heatmapCellStatistic={heatmapCellStatistic}
+              onHeatmapCellStatisticChange={setHeatmapCellStatistic}
               dstDisplayEnabled={dstDisplayEnabled}
               onDstDisplayEnabledChange={setDstDisplayEnabled}
+              showHeatmapCellToggle={dashboardHasHeatmap1224}
+              exportNotesDst={exportMode && dstDisplayEnabled}
             />
           </div>
         </div>

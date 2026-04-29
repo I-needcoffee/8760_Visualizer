@@ -13,7 +13,8 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareUtciSharedControls } from '../App';
 import { UnitSystem } from '../App';
 
-import { GlobalFilterState } from './GlobalFilterPanel';
+import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
+import { aggregateCellStatistic, rowPassesGlobalFilters } from '../lib/globalFilter';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
@@ -35,6 +36,7 @@ import {
   explorerHeatmapXOfDay,
   explorerMonthLabelCenterDays,
   explorerSvgHeightPx,
+  EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS,
 } from '../lib/explorerChartSvgLayout';
 
 interface UtciExplorerProps {
@@ -46,6 +48,7 @@ interface UtciExplorerProps {
   onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
+  heatmapCellStatistic?: HeatmapCellStatistic;
   unitSystem: UnitSystem;
   heatmapTextColor: string;
   theme: 'light' | 'dark';
@@ -246,6 +249,7 @@ export function UtciExplorer({
   onChangeType,
   gradients,
   filter,
+  heatmapCellStatistic = 'mean',
   unitSystem,
   heatmapTextColor,
   theme,
@@ -301,6 +305,23 @@ export function UtciExplorer({
   const showStatsModal = showStats && (!pairSuppressHeader || pairModalHost);
   const showSettingsModal = showSettings && (!pairSuppressHeader || pairModalHost);
   const paletteGradients = useMemo(() => gradientsForUtci(gradients), [gradients]);
+
+  const utciLegendFootnote = useMemo(() => {
+    if (showDifference && compareData) {
+      return 'Compare lines: baseline vs comparison; shading shows the gap.';
+    }
+    if (colorMode === 'comfortTime') {
+      return 'Bar shows comfort-time share in each period (filtered).';
+    }
+    if (colorMode === 'categories') {
+      return 'Strip: stress categories.';
+    }
+    if (aggregation !== 'hour') {
+      return 'Bars span hourly UTCI minimum to maximum.';
+    }
+    return '';
+  }, [aggregation, colorMode, showDifference, compareData]);
+
   const isMobile = useIsMobileMaxSm();
   const expandChromeStrip = !exportMode && (tutorialChromeAnchors || isMobile);
   const chartToolbarRevealClass = expandChromeStrip
@@ -535,7 +556,7 @@ export function UtciExplorer({
           let avgUtciVal: number;
           let comfortRatio: number;
           if (showDifference && compareData) {
-            const primaryAvg = d3.mean(values, d => d.utci) || 0;
+            const primaryStat = aggregateCellStatistic(values.map(d => d.utci), heatmapCellStatistic);
             const compareValues = values.map(v => {
               const idx = data.indexOf(v);
               const cD = compareData[idx];
@@ -555,12 +576,12 @@ export function UtciExplorer({
               };
               return getUtci(cD);
             }).filter(v => v !== null) as number[];
-            const compareAvg = d3.mean(compareValues) || 0;
-            avgUtciVal = compareAvg - primaryAvg;
+            const compareStat = aggregateCellStatistic(compareValues, heatmapCellStatistic);
+            avgUtciVal = compareStat - primaryStat;
             comfortRatio = 0;
           } else {
-            avgUtciVal = d3.mean(values, d => d.utci) || 0;
-            comfortRatio = d3.mean(values, d => d.isComfortable) || 0;
+            avgUtciVal = aggregateCellStatistic(values.map(d => d.utci), heatmapCellStatistic);
+            comfortRatio = aggregateCellStatistic(values.map(d => d.isComfortable), heatmapCellStatistic);
           }
           
           heatmapData.push({
@@ -584,8 +605,8 @@ export function UtciExplorer({
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = week * 7 + 1;
           const endDay = Math.min((week + 1) * 7 + 1, 366);
-          const avgUtci = d3.mean(values, d => d.utci) || 0;
-          const comfortRatio = d3.mean(values, d => d.isComfortable) || 0;
+          const avgUtci = aggregateCellStatistic(values.map(d => d.utci), heatmapCellStatistic);
+          const comfortRatio = aggregateCellStatistic(values.map(d => d.isComfortable), heatmapCellStatistic);
           const month = values[0].month;
           heatmapData.push({
             x0: startDay,
@@ -739,13 +760,7 @@ export function UtciExplorer({
       .style("font-size", `${heatmapHourAxisPx}px`)
       .text(h => formatHourRow(h));
 
-    const isSelected = (d: any) => {
-      const isMonthMatch = filter.startMonth <= filter.endMonth
-        ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-        : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-      const isHourMatch = d.hour >= filter.startHour && d.hour <= filter.endHour;
-      return isMonthMatch && isHourMatch;
-    };
+    const isSelected = (d: UtciDataRow) => rowPassesGlobalFilters(d, filter);
 
     // Aggregate data
     let aggregatedData: { x0: number, x1: number, valueAll: number, valueSelected: number | null, comfortRatioAll: number, comfortRatioSelected: number | null, minSelected?: number, maxSelected?: number, month: number }[] = [];
@@ -977,18 +992,11 @@ export function UtciExplorer({
   } else {
       renderUtci(svgRef.current, utciData, null, false);
   }
-  }, [utciData, compareUtciData, compareData, showDifference, aggregation, colorMode, gradientId, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, utciMin, utciMax]);
+  }, [utciData, compareUtciData, compareData, showDifference, aggregation, colorMode, gradientId, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, utciMin, utciMax, heatmapCellStatistic]);
 
   // Calculate local stats for filtered data
   const stats = (() => {
-    const filteredData = utciData.filter(d => {
-      const isMonthMatch = filter.startMonth <= filter.endMonth
-        ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-        : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-      return isMonthMatch && 
-             d.hour >= filter.startHour && 
-             d.hour <= filter.endHour;
-    });
+    const filteredData = utciData.filter(d => rowPassesGlobalFilters(d, filter));
 
     if (showDifference && compareData) {
       const diffs = filteredData.map(d => {
@@ -1149,12 +1157,8 @@ export function UtciExplorer({
                   Baseline · {paneCity}
                 </div>
               )}
-              <div className="relative flex min-h-[24px] w-full items-center gap-1.5">
-                <div
-                  className={`flex min-w-0 flex-1 items-center gap-1.5 pr-0 transition-[padding] duration-200 ease-out sm:gap-2 ${
-                    isMobile ? 'pr-9' : 'group-hover:pr-9 focus-within:pr-9'
-                  }`}
-                >
+              <div className="flex w-full items-center justify-between gap-1.5">
+                <div className="flex min-h-5 min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                   <ChartTypeMenu
                     value="utci"
                     label="UTCI Comfort"
@@ -1166,7 +1170,7 @@ export function UtciExplorer({
                   />
                   <span
                     id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
-                    className={`min-w-0 flex-1 truncate text-[10px] font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                    className={`min-w-0 flex-1 truncate text-[10px] font-medium leading-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
                     title={`Outdoor Comfort · ${utciLegendTitle}`}
                   >
                     Outdoor Comfort · {utciLegendTitle}
@@ -1368,7 +1372,10 @@ export function UtciExplorer({
       </CardModal>
 
       {!pairSuppressFooterLegend && (
-        <div id={tutorialLegendDomId} className="w-full min-w-0 flex-shrink-0 px-2 pt-1">
+        <div
+          id={tutorialLegendDomId}
+          className={`${EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS} min-w-0`}
+        >
           {showDifference && compareData ? (
             <InteractiveLegend
               variable={{
@@ -1385,9 +1392,17 @@ export function UtciExplorer({
               theme={theme}
               fontScale={LEGEND_STRIP_SCALE}
               isDifference={true}
+              footnote={utciLegendFootnote}
             />
           ) : colorMode === 'categories' ? (
-            <UtciCategoryLegendStrip theme={theme} />
+            <>
+              <UtciCategoryLegendStrip theme={theme} />
+              <p
+                className="m-0 mt-0.5 text-[8px] leading-snug font-normal text-gray-400 dark:text-gray-500"
+              >
+                {utciLegendFootnote}
+              </p>
+            </>
           ) : colorMode === 'gradient' ? (
             <InteractiveLegend
               variable={{
@@ -1403,9 +1418,17 @@ export function UtciExplorer({
               gradients={gradients}
               theme={theme}
               fontScale={LEGEND_STRIP_SCALE}
+              footnote={utciLegendFootnote}
             />
           ) : (
-            <UtciComfortTimeLegendStrip theme={theme} />
+            <>
+              <UtciComfortTimeLegendStrip theme={theme} />
+              <p
+                className="m-0 mt-0.5 text-[8px] leading-snug font-normal text-gray-400 dark:text-gray-500"
+              >
+                {utciLegendFootnote}
+              </p>
+            </>
           )}
         </div>
       )}

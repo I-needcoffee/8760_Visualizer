@@ -7,7 +7,8 @@ import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import type { ChartType, CompareWindRoseSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
-import { GlobalFilterState } from './GlobalFilterPanel';
+import type { GlobalFilterState } from '../lib/globalFilter';
+import { rowPassesGlobalFilters } from '../lib/globalFilter';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderCaption';
@@ -163,12 +164,7 @@ export function WindRose({
   // Filter data based on global filter and comfort filters
   const getFilteredData = (targetData: EPWDataRow[]) => {
     return targetData.filter(d => {
-      const isMonthMatch = filter.startMonth <= filter.endMonth
-        ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-        : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-      
-      const isTimeMatch = isMonthMatch && d.hour >= filter.startHour && d.hour <= filter.endHour;
-      if (!isTimeMatch) return false;
+      if (!rowPassesGlobalFilters(d, filter)) return false;
 
       let isTempMatch = true;
       if (tempFilterEnabled) {

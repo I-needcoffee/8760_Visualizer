@@ -32,6 +32,9 @@ export function explorerMonthLabelCenterDays(): readonly number[] {
   return centers;
 }
 
+/** Legend row directly under the card header — tight padding only (no min-height; avoids excess whitespace). */
+export const EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS = 'w-full shrink-0 px-2 pt-1';
+
 /** Uniform gutter between adjacent heatmap cells (matches vertical and horizontal spacing). */
 export const EXPLORER_HEATMAP_CELL_GAP_PX = 1;
 

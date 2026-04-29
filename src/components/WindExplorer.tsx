@@ -19,7 +19,8 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareWindSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
-import { GlobalFilterState } from './GlobalFilterPanel';
+import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
+import { aggregateCellStatistic, explorerBarStatisticY, rowPassesGlobalFilters } from '../lib/globalFilter';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderCaption';
@@ -42,6 +43,7 @@ import {
   explorerHeatmapXOfDay,
   explorerMonthLabelCenterDays,
   explorerSvgHeightPx,
+  EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS,
 } from '../lib/explorerChartSvgLayout';
 
 interface WindExplorerProps {
@@ -54,6 +56,7 @@ interface WindExplorerProps {
   onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
+  heatmapCellStatistic?: HeatmapCellStatistic;
   unitSystem: UnitSystem;
   heatmapTextColor: string;
   theme: 'light' | 'dark';
@@ -124,7 +127,9 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
 }
 
 export function WindExplorer({ 
-  data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter,
+  heatmapCellStatistic = 'mean',
+  unitSystem, heatmapTextColor, theme, 
   setShowGradientModal, exportMode, metadata, comparePane, paneCity,
   pairSuppressHeader,
   pairModalHost,
@@ -312,10 +317,8 @@ export function WindExplorer({
   // Calculate local stats for filtered data
   const filteredData = useMemo((): EPWDataRow[] => {
     return data.filter(d => {
-      const isMonthMatch = filter.startMonth <= filter.endMonth
-        ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-        : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-      
+      if (!rowPassesGlobalFilters(d, filter)) return false;
+
       let isTempMatch = true;
       if (tempFilterEnabled) {
         const temp = convertValue(d.dryBulbTemperature, '°C');
@@ -336,11 +339,7 @@ export function WindExplorer({
         }
       }
 
-      return isMonthMatch && 
-             d.hour >= filter.startHour && 
-             d.hour <= filter.endHour &&
-             isTempMatch &&
-             isSpeedMatch;
+      return isTempMatch && isSpeedMatch;
     });
   }, [data, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
 
@@ -369,6 +368,16 @@ export function WindExplorer({
   }, [variables, colorVar, showDifference, compareData, data, unitSystem, aggregation, convertValue, filteredData]);
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
+
+  const windExplorerLegendFootnote = useMemo(() => {
+    if (showDifference && compareData) {
+      return 'Compare lines: baseline vs comparison averages; shading shows the gap.';
+    }
+    if (aggregation !== 'hour') {
+      return 'Bars span hourly minimum to maximum.';
+    }
+    return '';
+  }, [showDifference, compareData, aggregation]);
 
   useEffect(() => {
     if (!svgRef.current || !filteredData.length || dimensions.width === 0) {
@@ -427,6 +436,12 @@ export function WindExplorer({
     let heatmapData: any[] = [];
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+    const aggVarSeries = (values: EPWDataRow[]) =>
+      aggregateCellStatistic(
+        values.map(r => r[colorVar] as number).filter(x => typeof x === 'number' && !Number.isNaN(x)),
+        heatmapCellStatistic
+      );
+
     if (aggregation === 'month') {
       const groups = d3.group(rows, d => d.month, d => d.hour);
       Array.from(groups).forEach(([month, hourGroups]) => {
@@ -437,16 +452,15 @@ export function WindExplorer({
           let val: number;
           let wind: { speed: number, direction: number };
           if (showDifference && compareData) {
-            const primaryAvg = d3.mean(values, d => d[colorVar] as number) || 0;
-            const compareValues = values.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
+            const p = aggVarSeries(values);
+            const cmpVals = values
+              .map(v => compareData[data.indexOf(v)]?.[colorVar] as number)
+              .filter((x): x is number => x != null && typeof x === 'number' && !Number.isNaN(x));
+            const c = aggregateCellStatistic(cmpVals, heatmapCellStatistic);
+            val = convertValue(c - p, colorVarDef.unit, true);
             wind = averageWindVector(values, compareData, data, showDifference);
           } else {
-            val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            val = convertValue(aggVarSeries(values), colorVarDef.unit);
             wind = averageWindVector(values);
           }
           const { speed, direction } = wind;
@@ -477,16 +491,15 @@ export function WindExplorer({
           let val: number;
           let wind: { speed: number, direction: number };
           if (showDifference && compareData) {
-            const primaryAvg = d3.mean(values, d => d[colorVar] as number) || 0;
-            const compareValues = values.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
+            const p = aggVarSeries(values);
+            const cmpVals = values
+              .map(v => compareData[data.indexOf(v)]?.[colorVar] as number)
+              .filter((x): x is number => x != null && typeof x === 'number' && !Number.isNaN(x));
+            const c = aggregateCellStatistic(cmpVals, heatmapCellStatistic);
+            val = convertValue(c - p, colorVarDef.unit, true);
             wind = averageWindVector(values, compareData, data, showDifference);
           } else {
-            val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            val = convertValue(aggVarSeries(values), colorVarDef.unit);
             wind = averageWindVector(values);
           }
           const { speed, direction } = wind;
@@ -513,14 +526,16 @@ export function WindExplorer({
       // day or hour
       heatmapData = rows.map(d => {
         const i = data.indexOf(d);
+        const pv = aggregateCellStatistic([d[colorVar] as number], heatmapCellStatistic);
+        const cmpRaw = compareData?.[i]?.[colorVar];
+        const cv = aggregateCellStatistic(
+          cmpRaw != null && typeof cmpRaw === 'number' ? [cmpRaw as number] : [],
+          heatmapCellStatistic
+        );
         const val =
           showDifference && compareData
-            ? convertValue(
-                (compareData[i]?.[colorVar] as number || 0) - (d[colorVar] as number || 0),
-                colorVarDef.unit,
-                true
-              )
-            : convertValue(d[colorVar] as number, colorVarDef.unit);
+            ? convertValue(cv - pv, colorVarDef.unit, true)
+            : convertValue(pv, colorVarDef.unit);
         const comp =
           showDifference && compareData
             ? `Diff\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`
@@ -781,18 +796,34 @@ export function WindExplorer({
         .attr("rx", pillR)
         .attr("ry", pillR);
 
-      // Average Indicator Circle
-      group.append("circle")
-        .attr("cx", xPos + barW / 2)
-        .attr("cy", yScaleBar(d.valueSelected))
-        .attr("r", Math.min(barW / 2, 4))
-        .style("fill", colorScale(d.valueSelected))
-        .style("stroke", "#000000")
-        .style("stroke-width", "1px");
+      const pv = d.valueSelected;
+      const minPv = minVal;
+      const maxPv = maxVal;
+      const dotVal = explorerBarStatisticY(heatmapCellStatistic, {
+        valueSelected: pv,
+        minSelected: minPv,
+        maxSelected: maxPv,
+      });
+
+      if (aggregation !== 'hour') {
+        group.append("circle")
+          .attr("cx", xPos + barW / 2)
+          .attr("cy", yScaleBar(dotVal))
+          .attr("r", Math.min(barW / 2, 4))
+          .style("fill", colorScale(dotVal))
+          .style("stroke", "#000000")
+          .style("stroke-width", "1px");
+      }
     });
 
-    fgGroups.append("title")
-      .text(d => `Avg: ${d.valueSelected.toFixed(1)} ${cUnit}\nRange: ${d.minSelected?.toFixed(1) ?? 'N/A'} to ${d.maxSelected?.toFixed(1) ?? 'N/A'} ${cUnit}`);
+    fgGroups.append("title").text(d => {
+      const dv = explorerBarStatisticY(heatmapCellStatistic, {
+        valueSelected: d.valueSelected,
+        minSelected: d.minSelected,
+        maxSelected: d.maxSelected,
+      });
+      return `${heatmapCellStatistic}: ${dv.toFixed(1)} ${cUnit}\nRange: ${d.minSelected?.toFixed(1) ?? 'N/A'} to ${d.maxSelected?.toFixed(1) ?? 'N/A'} ${cUnit}`;
+    });
 
     // Y Axis for Bar Chart
     const yAxisBar = d3.axisLeft(yScaleBar).ticks(5);
@@ -826,7 +857,7 @@ export function WindExplorer({
     // --- Wind Rose ---
     // Removed from WindExplorer
 
-  }, [data, compareData, showDifference, filteredData, variables, colorVar, gradientId, aggregation, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, metadata]);
+  }, [data, compareData, showDifference, filteredData, variables, colorVar, gradientId, aggregation, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, metadata, heatmapCellStatistic]);
 
   const stats = (() => {
     if (showDifference && compareData) {
@@ -957,7 +988,7 @@ export function WindExplorer({
                 </div>
               )}
               <div className="flex w-full items-center justify-between gap-1.5">
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+                <div className="flex min-h-5 min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                   <ChartTypeMenu
                     value="wind"
                     label="Wind Explorer"
@@ -991,9 +1022,24 @@ export function WindExplorer({
                     <button
                       type="button"
                       onClick={onRemove}
-                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full p-0 shadow-hard-sm transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-red-900/20 hover:text-red-400' : 'text-gray-400 hover:bg-red-50 hover:text-red-500'}`}
+                      className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-hard-sm transition-all active:scale-95 ${
+                        showDifference
+                          ? theme === 'dark'
+                            ? 'border border-red-800/50 bg-red-900/20 text-red-400 hover:bg-red-900/40'
+                            : 'border border-red-100 bg-red-50 text-red-600 hover:bg-red-100'
+                          : theme === 'dark'
+                            ? 'text-gray-400 hover:bg-red-900/20 hover:text-red-400'
+                            : 'text-gray-400 hover:bg-red-50 hover:text-red-500'
+                      }`}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      {showDifference ? (
+                        <>
+                          <X className="w-3 h-3" />
+                          <span>Hide</span>
+                        </>
+                      ) : (
+                        <X className="w-3.5 h-3.5" />
+                      )}
                     </button>
                   </div>
                 )}
@@ -1212,7 +1258,7 @@ export function WindExplorer({
       </CardModal>
 
       {!pairSuppressFooterLegend && (
-        <div className="w-full min-w-0 flex-shrink-0 px-2 pt-1">
+        <div className={`${EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS} min-w-0`}>
           <InteractiveLegend
             domId={tutorialLegendDomId}
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
@@ -1221,6 +1267,7 @@ export function WindExplorer({
             gradients={gradients}
             theme={theme}
             isDifference={showDifference}
+            footnote={windExplorerLegendFootnote}
           />
         </div>
       )}

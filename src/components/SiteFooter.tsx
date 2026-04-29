@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { UnitSystem } from '../App';
+import type { HeatmapCellStatistic } from '../lib/globalFilter';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 
 const CLIMATE_CANVAS = 'https://climatecanvas.app';
@@ -27,16 +28,27 @@ export function SiteFooter({
   exportCaptions,
   unitSystem,
   onUnitSystemChange,
+  heatmapCellStatistic,
+  onHeatmapCellStatisticChange,
   dstDisplayEnabled,
   onDstDisplayEnabledChange,
+  showHeatmapCellToggle = true,
+  exportNotesDst = false,
 }: {
   theme: 'light' | 'dark';
   exportMode: boolean;
   exportCaptions?: SiteFooterExportCaption[];
   unitSystem?: UnitSystem;
   onUnitSystemChange?: (u: UnitSystem) => void;
+  /** Heatmap cell aggregation: min / mean / max within each cell. */
+  heatmapCellStatistic?: HeatmapCellStatistic;
+  onHeatmapCellStatisticChange?: (v: HeatmapCellStatistic) => void;
   dstDisplayEnabled?: boolean;
   onDstDisplayEnabledChange?: (v: boolean) => void;
+  /** When false, hide Low / Ave / High (no 12×24 heatmaps on the dashboard). */
+  showHeatmapCellToggle?: boolean;
+  /** Export capture only: note DST in footer when the DST toggle is on. */
+  exportNotesDst?: boolean;
 }) {
   const [supportOpen, setSupportOpen] = useState(false);
   const isMobile = useIsMobileMaxSm();
@@ -155,22 +167,38 @@ export function SiteFooter({
     return (
       <>
         <footer
-          className={`flex w-full flex-wrap items-center gap-x-6 gap-y-2 ${showCaptions ? 'justify-between' : 'justify-end'}`}
+          className={`flex w-full flex-wrap items-center gap-x-4 gap-y-1 ${showCaptions ? 'justify-between' : 'justify-end'}`}
           aria-label="Export caption and attribution"
         >
           {showCaptions ? (
-            <div className="flex min-h-6 min-w-0 flex-1 flex-col justify-center space-y-0.5 text-left">
+            <div className="flex min-h-5 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left">
               {exportCaptions!.map((row, i) => (
                 <div key={`${row.filename}-${i}`} className="flex min-w-0 flex-col gap-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
                   <span className={`min-w-0 truncate ${captionPlace}`}>{row.place}</span>
                   <span className={`min-w-0 truncate ${captionFile}`}>{row.filename}</span>
                 </div>
               ))}
+              {exportNotesDst ? (
+                <span className="text-[9px] font-normal leading-none text-gray-500">
+                  Clock display: DST adjustment on
+                </span>
+              ) : null}
+            </div>
+          ) : exportNotesDst ? (
+            <div className="flex min-h-5 min-w-0 flex-1 items-center text-left">
+              <span className="text-[9px] font-normal leading-none text-gray-500">
+                Clock display: DST adjustment on
+              </span>
             </div>
           ) : null}
-          <div className="flex min-h-6 shrink-0 items-center text-[11px] leading-snug">
-            <a href={CLIMATE_CANVAS} target="_blank" rel="noopener noreferrer" className={exportLinkClass}>
-              Created at ClimateCanvas.app
+          <div className="flex min-h-5 shrink-0 items-center whitespace-nowrap text-[11px] leading-none">
+            <a
+              href={CLIMATE_CANVAS}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${exportLinkClass} whitespace-nowrap`}
+            >
+              Created with ClimateCanvas.app
             </a>
           </div>
         </footer>
@@ -203,11 +231,11 @@ export function SiteFooter({
   return (
     <>
       <footer
-        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-2 min-h-6 ${showCaptions || showLeftControls ? 'justify-between' : 'justify-end'}`}
+        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-1 ${showCaptions || showLeftControls ? 'justify-between' : 'justify-end'}`}
         aria-label="Site attribution and display options"
       >
         {showLeftControls ? (
-          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 min-h-6">
+          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <div className={unitTrack} title="Unit system for numbers in charts" role="group" aria-label="Unit system">
               <button
                 type="button"
@@ -242,6 +270,63 @@ export function SiteFooter({
                 {imperialLabel}
               </button>
             </div>
+            {showHeatmapCellToggle && onHeatmapCellStatisticChange && heatmapCellStatistic !== undefined ? (
+              <div
+                className={unitTrack}
+                title="Heatmaps: statistic within each colored cell over selected hours."
+                role="group"
+                aria-label="Heatmap cell statistic"
+              >
+                <button
+                  type="button"
+                  onClick={() => onHeatmapCellStatisticChange('low')}
+                  aria-label="Heatmap cells show low"
+                  className={`${unitSegBase} ${
+                    heatmapCellStatistic === 'low'
+                      ? theme === 'dark'
+                        ? 'bg-white text-gray-900 shadow-sm font-bold'
+                        : 'bg-white text-gray-900 shadow-sm font-bold'
+                      : theme === 'dark'
+                        ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                        : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {isMobile ? 'Lo' : 'Low'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onHeatmapCellStatisticChange('mean')}
+                  aria-label="Heatmap cells show average"
+                  className={`${unitSegBase} ${
+                    heatmapCellStatistic === 'mean'
+                      ? theme === 'dark'
+                        ? 'bg-white text-gray-900 shadow-sm font-bold'
+                        : 'bg-white text-gray-900 shadow-sm font-bold'
+                      : theme === 'dark'
+                        ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                        : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {isMobile ? 'Av' : 'Ave'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onHeatmapCellStatisticChange('high')}
+                  aria-label="Heatmap cells show high"
+                  className={`${unitSegBase} ${
+                    heatmapCellStatistic === 'high'
+                      ? theme === 'dark'
+                        ? 'bg-white text-gray-900 shadow-sm font-bold'
+                        : 'bg-white text-gray-900 shadow-sm font-bold'
+                      : theme === 'dark'
+                        ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                        : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {isMobile ? 'Hi' : 'High'}
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               role="switch"
@@ -296,7 +381,7 @@ export function SiteFooter({
                 theme === 'dark' ? '' : 'bg-white'
               }`}
             >
-              Created at ClimateCanvas.app
+              Created with ClimateCanvas.app
             </a>
             <div className="flex h-5 shrink-0 items-center justify-center pl-0.5 pr-0.5">
               <button

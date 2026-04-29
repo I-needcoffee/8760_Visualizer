@@ -4,7 +4,7 @@ import type { UnitSystem } from '../../App';
 import type { GlobalFilterState } from '../GlobalFilterPanel';
 import type { EPWDataRow } from '../../lib/epwParser';
 import { getTutorialGuideCopy } from '../../lib/tutorialCopy';
-import { computeTutorialGuideQuickStats } from '../../lib/tutorialGuideStats';
+import { computeExplorerMonthlyByMonth, computeTutorialGuideQuickStats } from '../../lib/tutorialGuideStats';
 import { useTutorialLive } from '../../context/TutorialLiveContext';
 
 export function TutorialGuidePanel({
@@ -21,6 +21,20 @@ export function TutorialGuidePanel({
   unitSystem: UnitSystem;
 }) {
   const { snapshot } = useTutorialLive();
+
+  const explorerMonthlyByMonth = useMemo(
+    () =>
+      slot.type === 'explorer'
+        ? computeExplorerMonthlyByMonth({
+            rows: epwRows,
+            filter,
+            unitSystem,
+            slotVariableId: slot.variable,
+            live: snapshot,
+          })
+        : null,
+    [slot.type, slot.variable, epwRows, filter, unitSystem, snapshot]
+  );
 
   const copy = useMemo(() => {
     if (slot.type === 'empty') {
@@ -91,6 +105,48 @@ export function TutorialGuidePanel({
           ))}
         </div>
       </section>
+
+      {explorerMonthlyByMonth ? (
+        <section className="mt-4 border-t border-gray-200/80 pt-3 dark:border-gray-700/80">
+          <h3 className={`mb-1 text-xs font-bold uppercase tracking-wider ${muted}`}>By month</h3>
+          <p className={`mb-2 text-[11px] leading-snug ${muted}`}>
+            High, average, and low for each calendar month (same filters as the chart). Where the explorer uses mean
+            daily min/max for bars, those extents feed high/low here too.
+          </p>
+          <div className="grid grid-cols-6 gap-x-1 gap-y-2">
+            {explorerMonthlyByMonth.slice(0, 6).map(cell => (
+              <div key={cell.abbr} className="min-w-0" title={cell.title}>
+                <div className="flex min-w-0 items-start justify-center gap-1">
+                  <div className={`w-[2rem] shrink-0 text-right text-[10px] font-semibold leading-none ${ink}`}>
+                    {cell.abbr}
+                  </div>
+                  <div className={`min-w-0 text-[8.5px] font-normal tabular-nums leading-[1.15] ${muted}`}>
+                    <div>{cell.high}</div>
+                    <div>{cell.avg}</div>
+                    <div>{cell.low}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 grid grid-cols-6 gap-x-1 gap-y-2">
+            {explorerMonthlyByMonth.slice(6, 12).map(cell => (
+              <div key={cell.abbr} className="min-w-0" title={cell.title}>
+                <div className="flex min-w-0 items-start justify-center gap-1">
+                  <div className={`w-[2rem] shrink-0 text-right text-[10px] font-semibold leading-none ${ink}`}>
+                    {cell.abbr}
+                  </div>
+                  <div className={`min-w-0 text-[8.5px] font-normal tabular-nums leading-[1.15] ${muted}`}>
+                    <div>{cell.high}</div>
+                    <div>{cell.avg}</div>
+                    <div>{cell.low}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </aside>
   );
 }

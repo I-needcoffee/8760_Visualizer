@@ -52,6 +52,8 @@ interface InteractiveLegendProps {
   isDifference?: boolean;
   /** Optional DOM id for onboarding / scroll targets (tutorial layout). */
   domId?: string;
+  /** Tiny caption under the gradient bar (heatmap color scale). */
+  footnote?: string;
 }
 
 export function InteractiveLegend({ 
@@ -63,6 +65,7 @@ export function InteractiveLegend({
   fontScale = 0.72,
   isDifference = false,
   domId,
+  footnote,
 }: InteractiveLegendProps & { theme?: 'light' | 'dark' }) {
   const gradientDef = gradients.find(g => g.id === gradientId) || gradients[0];
   
@@ -266,6 +269,11 @@ export function InteractiveLegend({
           );
         })}
       </div>
+      {footnote ? (
+        <p className="m-0 mt-0.5 text-[8px] leading-snug font-normal text-gray-400 dark:text-gray-500">
+          {footnote}
+        </p>
+      ) : null}
     </div>
   );
 }

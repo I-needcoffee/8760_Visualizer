@@ -11,7 +11,8 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareSunpathSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
-import { GlobalFilterState } from './GlobalFilterPanel';
+import type { GlobalFilterState } from '../lib/globalFilter';
+import { dryBulbCPassesGlobalTemperature, rowPassesGlobalFilters } from '../lib/globalFilter';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit, exportCaptionShort } from './ExportHeaderCaption';
@@ -296,10 +297,8 @@ export function SunPath({
 
   // Calculate local stats for filtered data
   const filteredData = data.filter(d => {
-    const isMonthMatch = filter.startMonth <= filter.endMonth
-      ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-      : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-    
+    if (!rowPassesGlobalFilters(d, filter)) return false;
+
     let isTempMatch = true;
     if (tempFilterEnabled) {
       const temp = convertValue(d.dryBulbTemperature as number, '°C');
@@ -310,17 +309,12 @@ export function SunPath({
       }
     }
 
-    return isMonthMatch && 
-           d.hour >= filter.startHour && 
-           d.hour <= filter.endHour &&
-           isTempMatch;
+    return isTempMatch;
   });
 
 const filteredCompareData = (compareData || []).filter(d => {
-    const isMonthMatch = filter.startMonth <= filter.endMonth
-      ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-      : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-    
+    if (!rowPassesGlobalFilters(d, filter)) return false;
+
     let isTempMatch = true;
     if (tempFilterEnabled) {
       const temp = convertValue(d.dryBulbTemperature as number, '°C');
@@ -331,10 +325,7 @@ const filteredCompareData = (compareData || []).filter(d => {
       }
     }
 
-    return isMonthMatch && 
-           d.hour >= filter.startHour && 
-           d.hour <= filter.endHour &&
-           isTempMatch;
+    return isTempMatch;
   });
 
   /** Radius scale domain: min/max of the radius column over the filtered global selection; in compare, union of both files. */
@@ -610,6 +601,11 @@ const filteredCompareData = (compareData || []).filter(d => {
       const isMonthMatch = filter.startMonth <= filter.endMonth
         ? (m >= filter.startMonth && m <= filter.endMonth)
         : (m >= filter.startMonth || m <= filter.endMonth);
+
+      /** Workspace dry-bulb isolation vs EPW °C — aggregated points carry mean °C like other charts. */
+      const isIsolationTemp =
+        filter.temperatureMode === 'off' ||
+        dryBulbCPassesGlobalTemperature(d.dryBulbTemperature as number | null | undefined, filter);
       
       let isTempMatch = true;
       if (tempFilterEnabled) {
@@ -623,7 +619,13 @@ const filteredCompareData = (compareData || []).filter(d => {
         }
       }
 
-      return isMonthMatch && h >= filter.startHour && h <= filter.endHour && isTempMatch;
+      return (
+        isMonthMatch &&
+        h >= filter.startHour &&
+        h <= filter.endHour &&
+        isIsolationTemp &&
+        isTempMatch
+      );
     };
 
     const selectedPoints = points.filter(isSelected);

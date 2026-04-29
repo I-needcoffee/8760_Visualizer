@@ -5,6 +5,7 @@ import { WindRoseGlyph } from './WindRoseGlyph';
 import { ChartType, ChartConfig, LayoutMode, UnitSystem } from '../App';
 import type { EPWDataRow } from '../lib/epwParser';
 import type { GlobalFilterState } from './GlobalFilterPanel';
+import { DEFAULT_GLOBAL_FILTER } from '../lib/globalFilter';
 import { TutorialCardChromeHints } from './tutorial/TutorialCardChromeHints';
 import { TutorialGuidePanel } from './tutorial/TutorialGuidePanel';
 
@@ -267,7 +268,7 @@ export function SingleModeLayout({
                         theme={theme}
                         slot={slot}
                         epwRows={tutorialEpwRows}
-                        filter={tutorialFilter ?? { startMonth: 1, endMonth: 12, startHour: 0, endHour: 23 }}
+                        filter={tutorialFilter ?? DEFAULT_GLOBAL_FILTER}
                         unitSystem={tutorialUnitSystem ?? 'metric'}
                       />
                     </>

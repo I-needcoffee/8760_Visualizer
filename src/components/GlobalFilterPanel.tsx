@@ -2,13 +2,9 @@ import { useState } from 'react';
 import { Calendar, Clock, ChevronDown, ChevronUp, Filter, Palette } from 'lucide-react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
+import type { GlobalFilterState } from '../lib/globalFilter';
 
-export interface GlobalFilterState {
-  startMonth: number; // 1-12
-  endMonth: number; // 1-12
-  startHour: number; // 0-23
-  endHour: number; // 0-23
-}
+export type { GlobalFilterState } from '../lib/globalFilter';
 
 interface GlobalFilterPanelProps {
   filter: GlobalFilterState;

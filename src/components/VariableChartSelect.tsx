@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 /** Chevron (12px) + two-space visual gap: total tail after the selected label. */
@@ -9,6 +9,10 @@ const CHEVRON_GAP_AFTER_TEXT_PX = 4;
  * Measured width = label + two spaces (gap) + chevron. Chevron is a flex sibling of the native
  * `select` so it stays vertically centered with the 10px control (`h-5`, `leading-none`).
  * Use `fillRow={false}` in tight toolbars so the control is not squeezed by `flex-1 basis-0`.
+ *
+ * The native `<select>` is positioned as a full-cover overlay (`opacity-[0]` + `appearance-none`).
+ * Purely programmatic `HTMLSelectElement#click()` does not reliably open the OS dropdown in Chromium;
+ * real clicks on the opaque hit target do.
  */
 export function VariableChartSelect({
   value,
@@ -30,6 +34,8 @@ export function VariableChartSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const gapMeasureRef = useRef<HTMLSpanElement>(null);
+  const uid = useId().replace(/:/g, '');
+  const selectId = domId ? `${domId}-select` : `var-chart-select-${uid}`;
   const [widthPx, setWidthPx] = useState<number | null>(null);
   const [isTruncated, setIsTruncated] = useState(false);
   const dark = theme === 'dark';
@@ -99,17 +105,27 @@ export function VariableChartSelect({
     return () => ro.disconnect();
   }, [recalc]);
 
-  const measureClass = `text-[10px] font-medium ${dark ? 'text-gray-400' : 'text-gray-600'}`;
+  const measureClass = `text-[10px] font-medium leading-none ${dark ? 'text-gray-400' : 'text-gray-600'}`;
 
   const truncateClass = isTruncated ? 'truncate' : 'whitespace-nowrap';
 
-  const selectClass = `box-border h-5 min-w-0 flex-1 max-w-full cursor-pointer appearance-none border-none bg-transparent py-0 pl-0 pr-0 text-left text-[10px] font-medium leading-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0 ${truncateClass} ${
-    dark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'
-  }`;
+  const visualClass = `${measureClass} ${truncateClass} min-w-0 flex-1 text-left`;
 
   const wrapOuter = fillRow
     ? 'relative flex min-w-0 flex-1 basis-0 max-w-full min-h-5 items-center justify-start'
     : 'relative flex min-w-0 flex-1 max-w-full min-h-5 items-center justify-start';
+
+  const hitLayerClass =
+    `absolute inset-0 z-[1] box-border cursor-pointer rounded-md appearance-none bg-transparent opacity-0 ` +
+    `focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-0 ` +
+    `text-[10px] font-medium leading-none`;
+
+  /** Closed control chrome (rounding / hover rim); native select sits opaque on top receiving real clicks. */
+  const layeredSurface = dark
+    ? 'pointer-events-none relative z-0 flex h-5 w-full min-w-0 max-w-full items-center gap-0 rounded-md px-px border border-transparent hover:border-white/15 hover:bg-white/5'
+    : 'pointer-events-none relative z-0 flex h-5 w-full min-w-0 max-w-full items-center gap-0 rounded-md px-px border border-transparent hover:border-gray-200 hover:bg-gray-50/90';
+
+  const selectTitle = `${selectedLabel}`;
 
   return (
     <div id={domId} ref={wrapRef} className={wrapOuter}>
@@ -127,31 +143,33 @@ export function VariableChartSelect({
       >
         {'  '}
       </span>
-      {/* Sizing this wrapper (not the full flex row) keeps a tight “text + 2 sp + chevron” track. */}
       <div
-        className="flex min-h-5 min-w-0 max-w-full shrink-0 items-center gap-0"
+        className="relative h-5 shrink-0"
         style={
           widthPx != null
             ? { width: `${widthPx}px`, maxWidth: '100%' }
             : { maxWidth: '100%' }
         }
       >
+        {/* Visual label + chevron sit under the opaque select so every click hits the native control. */}
+        <div className={`${layeredSurface} ${dark ? 'hover:text-gray-200' : 'hover:text-gray-900'}`}>
+          <span className={visualClass}>{selectedLabel}</span>
+          <ChevronDown
+            className={`h-3 w-3 shrink-0 ${dark ? 'text-gray-500' : 'text-gray-500'}`}
+            strokeWidth={2.25}
+            aria-hidden
+          />
+        </div>
         <select
+          id={selectId}
           value={value}
+          title={selectTitle}
+          aria-label={selectTitle}
           onChange={e => onChange(e.target.value)}
-          title={selectedLabel}
-          style={{ minWidth: 0, boxSizing: 'border-box' }}
-          className={selectClass}
+          className={hitLayerClass}
         >
           {children}
         </select>
-        <ChevronDown
-          className={`h-3 w-3 shrink-0 ${
-            dark ? 'text-gray-500' : 'text-gray-500'
-          }`}
-          strokeWidth={2.25}
-          aria-hidden
-        />
       </div>
     </div>
   );

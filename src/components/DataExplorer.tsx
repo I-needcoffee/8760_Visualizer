@@ -20,7 +20,8 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareExplorerSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
-import { GlobalFilterState } from './GlobalFilterPanel';
+import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
+import { aggregateCellStatistic, explorerBarStatisticY, rowPassesGlobalFilters } from '../lib/globalFilter';
 
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
@@ -28,6 +29,7 @@ import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderC
 import { VariableChartSelect } from './VariableChartSelect';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
+import { explorerUsesDailyAvgBarExtents, meanDailyLowHighForRows } from '../lib/explorerBarExtents';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -43,6 +45,7 @@ import {
   explorerHeatmapXOfDay,
   explorerMonthLabelCenterDays,
   explorerSvgHeightPx,
+  EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS,
 } from '../lib/explorerChartSvgLayout';
 
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
@@ -75,6 +78,8 @@ interface DataExplorerProps {
   onChangeType?: (type: ChartType) => void;
   gradients: GradientDef[];
   filter: GlobalFilterState;
+  /** Heatmaps: statistic within each cell (footer Low / Ave / High). Default mean. */
+  heatmapCellStatistic?: HeatmapCellStatistic;
   unitSystem: UnitSystem;
   heatmapTextColor: string;
   theme: 'light' | 'dark';
@@ -98,7 +103,9 @@ interface DataExplorerProps {
 }
 
 export function DataExplorer({ 
-  data, compareData, showDifference, stackedComparison, variables, defaultVariableId, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
+  data, compareData, showDifference, stackedComparison, variables, defaultVariableId, onRemove, onChangeType, gradients, filter,
+  heatmapCellStatistic = 'mean',
+  unitSystem, heatmapTextColor, theme, 
   setShowGradientModal,
   exportMode,
   metadata,
@@ -258,6 +265,20 @@ export function DataExplorer({
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
 
+  const explorerLegendFootnote = useMemo(() => {
+    const usesDaily = explorerUsesDailyAvgBarExtents(colorVar, colorVarDef.category);
+    if (showDifference && compareData) {
+      return 'Compare lines: baseline vs comparison averages; shading shows the gap.';
+    }
+    if (aggregation !== 'hour' && usesDaily) {
+      return 'Bars span mean daily low to daily high.';
+    }
+    if (aggregation !== 'hour') {
+      return 'Bars span hourly minimum to maximum.';
+    }
+    return '';
+  }, [aggregation, colorVar, colorVarDef.category, showDifference, compareData]);
+
   useEffect(() => {
     if (!svgRef.current || dimensions.width === 0) return;
 
@@ -310,6 +331,12 @@ export function DataExplorer({
     let heatmapData: any[] = [];
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+    const aggVarSeries = (rows: EPWDataRow[]) =>
+      aggregateCellStatistic(
+        rows.map(r => r[colorVar] as number).filter(x => typeof x === 'number' && !Number.isNaN(x)),
+        heatmapCellStatistic
+      );
+
     if (aggregation === 'month') {
       const groups = d3.group(data, d => d.month, d => d.hour);
       Array.from(groups).forEach(([month, hourGroups]) => {
@@ -319,16 +346,14 @@ export function DataExplorer({
           
           let val: number;
           if (showDifference && compareData) {
-            const primaryAvg = d3.mean(values, d => d[colorVar] as number) || 0;
-            // Find corresponding values in compareData
-            const compareValues = values.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
+            const p = aggVarSeries(values);
+            const cmpVals = values
+              .map(v => compareData[data.indexOf(v)]?.[colorVar] as number)
+              .filter((x): x is number => x != null && typeof x === 'number' && !Number.isNaN(x));
+            const c = aggregateCellStatistic(cmpVals, heatmapCellStatistic);
+            val = convertValue(c - p, colorVarDef.unit, true);
           } else {
-            val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            val = convertValue(aggVarSeries(values), colorVarDef.unit);
           }
 
           const midM = values[Math.floor(values.length / 2)];
@@ -359,15 +384,14 @@ export function DataExplorer({
 
           let val: number;
           if (showDifference && compareData) {
-            const primaryAvg = d3.mean(values, d => d[colorVar] as number) || 0;
-            const compareValues = values.map(v => {
-              const idx = data.indexOf(v);
-              return compareData[idx]?.[colorVar] as number;
-            }).filter(v => v !== null);
-            const compareAvg = d3.mean(compareValues) || 0;
-            val = convertValue(compareAvg - primaryAvg, colorVarDef.unit, true);
+            const p = aggVarSeries(values);
+            const cmpVals = values
+              .map(v => compareData[data.indexOf(v)]?.[colorVar] as number)
+              .filter((x): x is number => x != null && typeof x === 'number' && !Number.isNaN(x));
+            const c = aggregateCellStatistic(cmpVals, heatmapCellStatistic);
+            val = convertValue(c - p, colorVarDef.unit, true);
           } else {
-            val = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            val = convertValue(aggVarSeries(values), colorVarDef.unit);
           }
 
           const mid = values[Math.floor(values.length / 2)];
@@ -392,9 +416,18 @@ export function DataExplorer({
       heatmapData = data.map((d, i) => {
         let val: number;
         if (showDifference && compareData) {
-          val = convertValue((compareData[i]?.[colorVar] as number || 0) - (d[colorVar] as number || 0), colorVarDef.unit, true);
+          const pv = aggregateCellStatistic([d[colorVar] as number], heatmapCellStatistic);
+          const cmp = compareData[i]?.[colorVar];
+          const cv = aggregateCellStatistic(
+            cmp != null && typeof cmp === 'number' ? [cmp] : [],
+            heatmapCellStatistic
+          );
+          val = convertValue(cv - pv, colorVarDef.unit, true);
         } else {
-          val = convertValue(d[colorVar] as number, colorVarDef.unit);
+          val = convertValue(
+            aggregateCellStatistic([d[colorVar] as number], heatmapCellStatistic),
+            colorVarDef.unit
+          );
         }
         return {
           x0: d.dayOfYear,
@@ -547,20 +580,32 @@ export function DataExplorer({
       .style("font-size", `${heatmapHourAxisPx}px`)
       .text(h => formatHourRow(h));
 
-    const isSelected = (d: any) => {
-      const isMonthMatch = filter.startMonth <= filter.endMonth
-        ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-        : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-      const isHourMatch = d.hour >= filter.startHour && d.hour <= filter.endHour;
-      return isMonthMatch && isHourMatch;
-    };
+    const isSelected = (d: EPWDataRow) => rowPassesGlobalFilters(d, filter);
 
-    let aggregatedData: { x0: number, x1: number, valueAll: number, valueSelected: number | null, minSelected?: number, maxSelected?: number, compareValueAll?: number, compareValueSelected?: number | null, month: number }[] = [];
+    let aggregatedData: {
+      x0: number;
+      x1: number;
+      valueAll: number;
+      valueSelected: number | null;
+      minSelected?: number;
+      maxSelected?: number;
+      compareValueAll?: number;
+      compareValueSelected?: number | null;
+      compareMinSelected?: number;
+      compareMaxSelected?: number;
+      month: number;
+    }[] = [];
 
-    const calculateValues = (values: any[], selectedValues: any[]) => {
-      let valAll: number, valSelected: number | null = null;
+    const calculateValues = (values: EPWDataRow[], selectedValues: EPWDataRow[]) => {
+      let valAll: number,
+        valSelected: number | null = null;
       let minSelected: number | undefined, maxSelected: number | undefined;
-      let compareValAll: number | undefined, compareValSelected: number | null = null;
+      let compareValAll: number | undefined,
+        compareValSelected: number | null = null;
+      let compareMinSelected: number | undefined, compareMaxSelected: number | undefined;
+
+      const useDailyExtents =
+        explorerUsesDailyAvgBarExtents(colorVar, colorVarDef.category) && aggregation !== 'hour';
 
       if (showDifference && compareData) {
         valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
@@ -569,21 +614,83 @@ export function DataExplorer({
 
         if (selectedValues.length > 0) {
           valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          if (useDailyExtents) {
+            const ext = meanDailyLowHighForRows(selectedValues, colorVar);
+            if (ext) {
+              minSelected = convertValue(ext.low, colorVarDef.unit);
+              maxSelected = convertValue(ext.high, colorVarDef.unit);
+            } else {
+              minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+              maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            }
+          } else {
+            minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          }
 
           const compareValuesSel = selectedValues.map(v => compareData[data.indexOf(v)]?.[colorVar] as number).filter(v => v !== null);
           compareValSelected = convertValue(d3.mean(compareValuesSel) || 0, colorVarDef.unit);
+
+          const compareRowsAtSel = selectedValues
+            .map(v => compareData[data.indexOf(v)])
+            .filter((r): r is EPWDataRow => r != null);
+          if (compareRowsAtSel.length > 0) {
+            if (useDailyExtents) {
+              const ecmp = meanDailyLowHighForRows(compareRowsAtSel, colorVar);
+              if (ecmp) {
+                compareMinSelected = convertValue(ecmp.low, colorVarDef.unit);
+                compareMaxSelected = convertValue(ecmp.high, colorVarDef.unit);
+              } else {
+                compareMinSelected = convertValue(
+                  d3.min(compareRowsAtSel.map(r => r[colorVar] as number).filter(v => typeof v === 'number')) || 0,
+                  colorVarDef.unit
+                );
+                compareMaxSelected = convertValue(
+                  d3.max(compareRowsAtSel.map(r => r[colorVar] as number).filter(v => typeof v === 'number')) || 0,
+                  colorVarDef.unit
+                );
+              }
+            } else {
+              compareMinSelected = convertValue(
+                d3.min(compareRowsAtSel.map(r => r[colorVar] as number).filter(v => typeof v === 'number')) || 0,
+                colorVarDef.unit
+              );
+              compareMaxSelected = convertValue(
+                d3.max(compareRowsAtSel.map(r => r[colorVar] as number).filter(v => typeof v === 'number')) || 0,
+                colorVarDef.unit
+              );
+            }
+          }
         }
       } else {
         valAll = convertValue(d3.mean(values, d => d[colorVar] as number) || 0, colorVarDef.unit);
         if (selectedValues.length > 0) {
           valSelected = convertValue(d3.mean(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
-          maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          if (useDailyExtents) {
+            const ext = meanDailyLowHighForRows(selectedValues, colorVar);
+            if (ext) {
+              minSelected = convertValue(ext.low, colorVarDef.unit);
+              maxSelected = convertValue(ext.high, colorVarDef.unit);
+            } else {
+              minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+              maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            }
+          } else {
+            minSelected = convertValue(d3.min(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+            maxSelected = convertValue(d3.max(selectedValues, d => d[colorVar] as number) || 0, colorVarDef.unit);
+          }
         }
       }
-      return { valAll, valSelected, minSelected, maxSelected, compareValAll, compareValSelected };
+      return {
+        valAll,
+        valSelected,
+        minSelected,
+        maxSelected,
+        compareValAll,
+        compareValSelected,
+        compareMinSelected,
+        compareMaxSelected,
+      };
     };
 
     if (aggregation === 'hour') {
@@ -592,39 +699,85 @@ export function DataExplorer({
         const val = convertValue((d[colorVar] as number) || 0, colorVarDef.unit);
         const compareVal = showDifference && compareData ? convertValue((compareData[i]?.[colorVar] as number) || 0, colorVarDef.unit) : undefined;
         return {
-          x0: d.dayOfYear + d.hour / 24, x1: d.dayOfYear + (d.hour + 1) / 24,
-          valueAll: val, valueSelected: selected ? val : null, minSelected: selected ? val : undefined, maxSelected: selected ? val : undefined,
-          compareValueAll: compareVal, compareValueSelected: selected ? compareVal : null, month: d.month
+          x0: d.dayOfYear + d.hour / 24,
+          x1: d.dayOfYear + (d.hour + 1) / 24,
+          valueAll: val,
+          valueSelected: selected ? val : null,
+          minSelected: selected ? val : undefined,
+          maxSelected: selected ? val : undefined,
+          compareValueAll: compareVal,
+          compareValueSelected: selected ? compareVal : null,
+          compareMinSelected: selected && compareVal !== undefined ? compareVal : undefined,
+          compareMaxSelected: selected && compareVal !== undefined ? compareVal : undefined,
+          month: d.month,
         };
       });
     } else if (aggregation === 'day') {
       aggregatedData = Array.from(d3.group(data, d => d.dayOfYear), ([day, values]) => {
         const res = calculateValues(values, values.filter(isSelected));
-        return { x0: day, x1: day + 1, valueAll: res.valAll, valueSelected: res.valSelected, minSelected: res.minSelected, maxSelected: res.maxSelected, compareValueAll: res.compareValAll, compareValueSelected: res.compareValSelected, month: values[0].month };
+        return {
+          x0: day,
+          x1: day + 1,
+          valueAll: res.valAll,
+          valueSelected: res.valSelected,
+          minSelected: res.minSelected,
+          maxSelected: res.maxSelected,
+          compareValueAll: res.compareValAll,
+          compareValueSelected: res.compareValSelected,
+          compareMinSelected: res.compareMinSelected,
+          compareMaxSelected: res.compareMaxSelected,
+          month: values[0].month,
+        };
       });
     } else if (aggregation === 'week') {
       aggregatedData = Array.from(d3.group(data, d => Math.floor((d.dayOfYear - 1) / 7)), ([week, values]) => {
         const res = calculateValues(values, values.filter(isSelected));
-        return { x0: week * 7 + 1, x1: Math.min((week + 1) * 7 + 1, 366), valueAll: res.valAll, valueSelected: res.valSelected, minSelected: res.minSelected, maxSelected: res.maxSelected, compareValueAll: res.compareValAll, compareValueSelected: res.compareValSelected, month: values[0].month };
+        return {
+          x0: week * 7 + 1,
+          x1: Math.min((week + 1) * 7 + 1, 366),
+          valueAll: res.valAll,
+          valueSelected: res.valSelected,
+          minSelected: res.minSelected,
+          maxSelected: res.maxSelected,
+          compareValueAll: res.compareValAll,
+          compareValueSelected: res.compareValSelected,
+          compareMinSelected: res.compareMinSelected,
+          compareMaxSelected: res.compareMaxSelected,
+          month: values[0].month,
+        };
       });
-    } else { // month
+    } else {
       aggregatedData = Array.from(d3.group(data, d => d.month), ([month, values]) => {
         const res = calculateValues(values, values.filter(isSelected));
-        return { x0: values[0].dayOfYear, x1: values[values.length - 1].dayOfYear + 1, valueAll: res.valAll, valueSelected: res.valSelected, minSelected: res.minSelected, maxSelected: res.maxSelected, compareValueAll: res.compareValAll, compareValueSelected: res.compareValSelected, month: month };
+        return {
+          x0: values[0].dayOfYear,
+          x1: values[values.length - 1].dayOfYear + 1,
+          valueAll: res.valAll,
+          valueSelected: res.valSelected,
+          minSelected: res.minSelected,
+          maxSelected: res.maxSelected,
+          compareValueAll: res.compareValAll,
+          compareValueSelected: res.compareValSelected,
+          compareMinSelected: res.compareMinSelected,
+          compareMaxSelected: res.compareMaxSelected,
+          month: month,
+        };
       });
     }
 
-    let yMin = d3.min(aggregatedData, d => {
+    let yMin =
+      d3.min(aggregatedData, d => {
         const minP = d.minSelected ?? d.valueAll;
-        const minC = d.compareValueSelected ?? d.compareValueAll ?? minP;
+        const minC = (d.compareMinSelected ?? d.compareValueSelected ?? d.compareValueAll) ?? minP;
         return Math.min(minP, minC);
-    }) || 0;
-    
-    let yMax = d3.max(aggregatedData, d => {
+      }) || 0;
+
+    let yMax =
+      d3.max(aggregatedData, d => {
         const maxP = d.maxSelected ?? d.valueAll;
-        const maxC = d.compareValueSelected ?? d.compareValueAll ?? maxP;
+        const maxC = (d.compareMaxSelected ?? d.compareValueSelected ?? d.compareValueAll) ?? maxP;
         return Math.max(maxP, maxC);
-    }) || cMax;
+      }) || cMax;
 
     // Optional: Give it a bit of bottom margin if min is above 0, or zero-bound if we prefer
     if (yMin > 0 && colorVarDef.category !== "Temperature") yMin = 0;
@@ -716,22 +869,66 @@ export function DataExplorer({
         .join("circle")
         .attr("class", "dot-primary")
         .attr("cx", d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
-        .attr("cy", d => yScaleBar(d.valueSelected!))
+        .attr("cy", d =>
+          yScaleBar(
+            explorerBarStatisticY(heatmapCellStatistic, {
+              valueSelected: d.valueSelected!,
+              minSelected: d.minSelected,
+              maxSelected: d.maxSelected,
+            })
+          )
+        )
         .attr("r", 3)
-        .attr("fill", lineBaseline)
+        .attr("fill", d =>
+          colorScale(
+            explorerBarStatisticY(heatmapCellStatistic, {
+              valueSelected: d.valueSelected!,
+              minSelected: d.minSelected,
+              maxSelected: d.maxSelected,
+            })
+          )
+        )
         .append("title")
-        .text(d => `Primary: ${d.valueSelected!.toFixed(1)} ${cUnit}`);
+        .text(d =>
+          `Primary (${heatmapCellStatistic}): ${explorerBarStatisticY(heatmapCellStatistic, {
+            valueSelected: d.valueSelected!,
+            minSelected: d.minSelected,
+            maxSelected: d.maxSelected,
+          }).toFixed(1)} ${cUnit}`
+        );
 
       barChartG.selectAll(".dot-compare")
         .data(pairLineData)
         .join("circle")
         .attr("class", "dot-compare")
         .attr("cx", d => xScale(d.x0) + (xScale(d.x1) - xScale(d.x0)) / 2)
-        .attr("cy", d => yScaleBar(d.compareValueSelected!))
+        .attr("cy", d =>
+          yScaleBar(
+            explorerBarStatisticY(heatmapCellStatistic, {
+              valueSelected: d.compareValueSelected!,
+              minSelected: d.compareMinSelected,
+              maxSelected: d.compareMaxSelected,
+            })
+          )
+        )
         .attr("r", 3)
-        .attr("fill", lineComparison)
+        .attr("fill", d =>
+          colorScale(
+            explorerBarStatisticY(heatmapCellStatistic, {
+              valueSelected: d.compareValueSelected!,
+              minSelected: d.compareMinSelected,
+              maxSelected: d.compareMaxSelected,
+            })
+          )
+        )
         .append("title")
-        .text(d => `Comparison: ${d.compareValueSelected!.toFixed(1)} ${cUnit}`);
+        .text(d =>
+          `Comparison (${heatmapCellStatistic}): ${explorerBarStatisticY(heatmapCellStatistic, {
+            valueSelected: d.compareValueSelected!,
+            minSelected: d.compareMinSelected,
+            maxSelected: d.compareMaxSelected,
+          }).toFixed(1)} ${cUnit}`
+        );
 
     } else {
       // Draw standard Bar Chart
@@ -764,20 +961,31 @@ export function DataExplorer({
           .attr("rx", pillR)
           .attr("ry", pillR);
 
-        // Only show average indicator dot when there's a min-max range (not in hour mode)
+        // Indicator dot: matches footer Low/Ave/High (bars still span mean daily min–max when applicable).
         if (aggregation !== 'hour') {
+          const markY = explorerBarStatisticY(heatmapCellStatistic, {
+            valueSelected: val,
+            minSelected: minVal,
+            maxSelected: maxVal,
+          });
           group.append("circle")
             .attr("cx", xPos + barW / 2)
-            .attr("cy", yScaleBar(val))
+            .attr("cy", yScaleBar(markY))
             .attr("r", Math.min(barW / 2, 4))
-            .style("fill", colorScale(val))
+            .style("fill", colorScale(markY))
             .style("stroke", "#000000")
             .style("stroke-width", "1px");
         }
       });
 
-      fgGroups.append("title")
-        .text(d => `Selected Hours Avg: ${d.valueSelected!.toFixed(1)} ${cUnit}`);
+      fgGroups.append("title").text(d => {
+        const yv = explorerBarStatisticY(heatmapCellStatistic, {
+          valueSelected: d.valueSelected!,
+          minSelected: d.minSelected,
+          maxSelected: d.maxSelected,
+        });
+        return `Selected (${heatmapCellStatistic}): ${yv.toFixed(1)} ${cUnit}; bar span min–max`;
+      });
     }
 
     const yAxisBar = d3.axisLeft(yScaleBar).ticks(5);
@@ -826,18 +1034,12 @@ export function DataExplorer({
     pairSuppressHeader,
     comparePane,
     explorerShared?.barYDomain,
+    heatmapCellStatistic,
   ]);
 
   // Calculate local stats for filtered data
   const stats = (() => {
-    const filteredData = data.filter(d => {
-      const isMonthMatch = filter.startMonth <= filter.endMonth
-        ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-        : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-      return isMonthMatch && 
-             d.hour >= filter.startHour && 
-             d.hour <= filter.endHour;
-    });
+    const filteredData = data.filter(d => rowPassesGlobalFilters(d, filter));
 
     if (showDifference && compareData) {
       const diffs = filteredData.map(d => {
@@ -1102,7 +1304,7 @@ export function DataExplorer({
       )}
 
       {!pairSuppressFooterLegend && (
-        <div className="w-full min-w-0 flex-shrink-0 px-2 pt-1">
+        <div className={`${EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS} min-w-0`}>
           <InteractiveLegend
             domId={tutorialLegendDomId}
             variable={{ ...colorVarDef, min: cMin, max: cMax, unit: cUnit }}
@@ -1111,6 +1313,7 @@ export function DataExplorer({
             gradients={gradients}
             theme={theme}
             isDifference={showDifference}
+            footnote={explorerLegendFootnote}
           />
         </div>
       )}

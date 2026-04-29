@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { EPWDataRow, EPWVariable } from '../lib/epwParser';
-import { GlobalFilterState } from './GlobalFilterPanel';
+import type { GlobalFilterState } from '../lib/globalFilter';
+import { rowPassesGlobalFilters } from '../lib/globalFilter';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { UnitSystem } from '../App';
 import tc from 'jsthermalcomfort';
@@ -18,14 +19,7 @@ interface SummaryStatsProps {
 export function SummaryStats({ data, compareData, showDifference, variables, filter, unitSystem, theme }: SummaryStatsProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   // Filter data based on the global filter
-  const filteredData = data.filter(d => {
-    const isMonthMatch = filter.startMonth <= filter.endMonth
-      ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-      : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-    return isMonthMatch && 
-           d.hour >= filter.startHour && 
-           d.hour <= filter.endHour;
-  });
+  const filteredData = data.filter(d => rowPassesGlobalFilters(d, filter));
 
   if (filteredData.length === 0) {
     return null;
