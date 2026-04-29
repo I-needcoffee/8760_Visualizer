@@ -38,6 +38,7 @@ import {
   weatherPlaceCaption,
   weatherPlaceLine,
 } from './lib/weatherCaption';
+import { dryBulbExtentFromFiles } from './lib/dryBulbExtent';
 
 const TUTORIAL_HOVER_HINTS_KEY = 'climate-compare-tutorial-hover-hints';
 
@@ -421,6 +422,18 @@ export default function App() {
     () => selectedFiles.map(f => withDstDisplayRespectingToggle(f, dstDisplayEnabled)),
     [selectedFiles, dstDisplayEnabled]
   );
+
+  const dryBulbExtent = useMemo(() => dryBulbExtentFromFiles(selectedFiles), [selectedFiles]);
+
+  useEffect(() => {
+    const minC = dryBulbExtent.minC;
+    const maxC = dryBulbExtent.maxC;
+    setGlobalFilter(prev => ({
+      ...prev,
+      temperatureLoC: Math.min(maxC, Math.max(minC, prev.temperatureLoC)),
+      temperatureHiC: Math.min(maxC, Math.max(minC, prev.temperatureHiC)),
+    }));
+  }, [dryBulbExtent.minC, dryBulbExtent.maxC]);
 
   /** Files represented in the current dashboard export (active file in single mode; baseline + compare in comparison). */
   const exportCaptionFiles = useMemo(() => {
@@ -1364,6 +1377,8 @@ export default function App() {
               heatmapTextColor={heatmapTextColor}
               setHeatmapTextColor={setHeatmapTextColor}
               setShowGradientModal={setShowGradientModal}
+              dryBulbExtentMinC={dryBulbExtent.minC}
+              dryBulbExtentMaxC={dryBulbExtent.maxC}
             />
           )}
 

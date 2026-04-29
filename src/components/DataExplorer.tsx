@@ -337,26 +337,33 @@ export function DataExplorer({
         heatmapCellStatistic
       );
 
+    const heatmapFill = (v: number) =>
+      Number.isFinite(v) ? colorScale(v) : theme === 'dark' ? 'rgba(55,65,81,0.4)' : 'rgba(203,213,225,0.7)';
+
     if (aggregation === 'month') {
       const groups = d3.group(data, d => d.month, d => d.hour);
       Array.from(groups).forEach(([month, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = values[0].dayOfYear;
           const endDay = values[values.length - 1].dayOfYear + 1;
+          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter));
           
           let val: number;
-          if (showDifference && compareData) {
-            const p = aggVarSeries(values);
-            const cmpVals = values
+          if (selectedRows.length === 0) {
+            val = NaN;
+          } else if (showDifference && compareData) {
+            const p = aggVarSeries(selectedRows);
+            const cmpVals = selectedRows
               .map(v => compareData[data.indexOf(v)]?.[colorVar] as number)
               .filter((x): x is number => x != null && typeof x === 'number' && !Number.isNaN(x));
             const c = aggregateCellStatistic(cmpVals, heatmapCellStatistic);
             val = convertValue(c - p, colorVarDef.unit, true);
           } else {
-            val = convertValue(aggVarSeries(values), colorVarDef.unit);
+            val = convertValue(aggVarSeries(selectedRows), colorVarDef.unit);
           }
 
-          const midM = values[Math.floor(values.length / 2)];
+          const midM = (selectedRows[Math.floor(selectedRows.length / 2)] ?? values[0])!;
+          const valLine = Number.isFinite(val) ? val.toFixed(1) : '—';
           heatmapData.push({
             x0: startDay,
             x1: endDay,
@@ -364,7 +371,10 @@ export function DataExplorer({
             month: month,
             value: val,
             label: `${monthNames[month - 1]}`,
-            tooltip: `${monthNames[month - 1]} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`,
+            tooltip: Number.isFinite(val)
+              ? `${monthNames[month - 1]} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${valLine} ${cUnit}`
+              : `${monthNames[month - 1]}\nNo hours in dry-bulb band for this month/hour`,
+
             sunYear: values[0].year,
             sunMonth: month,
             sunDay: 15,
@@ -381,20 +391,23 @@ export function DataExplorer({
           const endDay = Math.min((week + 1) * 7 + 1, 366);
           // Approximate month for week
           const month = values[0].month;
+          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter));
 
           let val: number;
-          if (showDifference && compareData) {
-            const p = aggVarSeries(values);
-            const cmpVals = values
+          if (selectedRows.length === 0) {
+            val = NaN;
+          } else if (showDifference && compareData) {
+            const p = aggVarSeries(selectedRows);
+            const cmpVals = selectedRows
               .map(v => compareData[data.indexOf(v)]?.[colorVar] as number)
               .filter((x): x is number => x != null && typeof x === 'number' && !Number.isNaN(x));
             const c = aggregateCellStatistic(cmpVals, heatmapCellStatistic);
             val = convertValue(c - p, colorVarDef.unit, true);
           } else {
-            val = convertValue(aggVarSeries(values), colorVarDef.unit);
+            val = convertValue(aggVarSeries(selectedRows), colorVarDef.unit);
           }
 
-          const mid = values[Math.floor(values.length / 2)];
+          const mid = (selectedRows[Math.floor(selectedRows.length / 2)] ?? values[0])!;
           heatmapData.push({
             x0: startDay,
             x1: endDay,
@@ -402,7 +415,9 @@ export function DataExplorer({
             month: month,
             value: val,
             label: `W${week + 1}`,
-            tooltip: `Week ${week + 1} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`,
+            tooltip: Number.isFinite(val)
+              ? `Week ${week + 1} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`
+              : `Week ${week + 1}\nNo hours in dry-bulb band for this week/hour`,
             sunYear: mid.year,
             sunMonth: mid.month,
             sunDay: mid.day,
@@ -414,8 +429,11 @@ export function DataExplorer({
     } else {
       // day or hour
       heatmapData = data.map((d, i) => {
+        const pass = rowPassesGlobalFilters(d, filter);
         let val: number;
-        if (showDifference && compareData) {
+        if (!pass) {
+          val = NaN;
+        } else if (showDifference && compareData) {
           const pv = aggregateCellStatistic([d[colorVar] as number], heatmapCellStatistic);
           const cmp = compareData[i]?.[colorVar];
           const cv = aggregateCellStatistic(
@@ -429,6 +447,7 @@ export function DataExplorer({
             colorVarDef.unit
           );
         }
+        const valLine = Number.isFinite(val) ? val.toFixed(1) : '—';
         return {
           x0: d.dayOfYear,
           x1: d.dayOfYear + 1,
@@ -436,7 +455,9 @@ export function DataExplorer({
           month: d.month,
           value: val,
           label: d.date.toLocaleDateString(),
-          tooltip: `${d.date.toLocaleString()}\n${colorVarDef.name} ${showDifference ? 'Diff' : ''}: ${val.toFixed(1)} ${cUnit}`,
+          tooltip: Number.isFinite(val)
+            ? `${d.date.toLocaleString()}\n${colorVarDef.name} ${showDifference ? 'Diff' : ''}: ${valLine} ${cUnit}`
+            : `${d.date.toLocaleString()}\nOutside dry-bulb band`,
           sunYear: d.year,
           sunMonth: d.month,
           sunDay: d.day,
@@ -482,7 +503,7 @@ export function DataExplorer({
       .attr("height", d => rowInnerHeight(d.y))
       .attr("rx", 2) // Smaller corner radius
       .attr("ry", 2)
-      .style("fill", d => colorScale(d.value))
+      .style("fill", d => heatmapFill(d.value))
       .style("stroke", (aggregation === 'month' || aggregation === 'week') ? "rgba(0,0,0,0.1)" : "none")
       .style("stroke-width", "1px")
       .append("title")
@@ -530,7 +551,7 @@ export function DataExplorer({
           return (isMonthMatch && isHourMatch) ? 1 : 0.2;
         })
         .text(d =>
-          explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width > overlayMinWidth
+          Number.isFinite(d.value) && explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width > overlayMinWidth
             ? Math.round(d.value)
             : ""
         );

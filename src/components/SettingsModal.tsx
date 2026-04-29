@@ -4,6 +4,7 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import type { GlobalFilterState } from '../lib/globalFilter';
 import type { UnitSystem } from '../App';
+import { TemperatureIsolationRange } from './TemperatureIsolationRange';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,6 +17,9 @@ interface SettingsModalProps {
   heatmapTextColor: string;
   setHeatmapTextColor: (color: string) => void;
   setShowGradientModal: (show: boolean) => void;
+  /** Min/max dry-bulb (°C) in loaded EPW — slider rail endpoints. */
+  dryBulbExtentMinC: number;
+  dryBulbExtentMaxC: number;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -30,7 +34,9 @@ export function SettingsModal({
   setTheme,
   heatmapTextColor,
   setHeatmapTextColor,
-  setShowGradientModal
+  setShowGradientModal,
+  dryBulbExtentMinC,
+  dryBulbExtentMaxC,
 }: SettingsModalProps) {
   if (!isOpen) return null;
 
@@ -207,102 +213,20 @@ export function SettingsModal({
             </div>
           </div>
 
-          {/* Dry-bulb filter (stored in °C; inputs follow unit toggle) */}
+          {/* Dry-bulb isolation — dual slider + typed limits (stored °C) */}
           <div className={`space-y-3 border-t pt-4 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-100'}`}>
-            <div className="flex items-center justify-between font-medium text-sm">
-              <div className="flex items-center gap-2">
-                <Thermometer className="w-4 h-4 text-gray-900 dark:text-gray-100" />
-                <span>Temperature isolation</span>
-              </div>
-              <span className={`rounded-full border px-2 py-0.5 text-xs capitalize ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
-                {filter.temperatureMode === 'off' ? 'Off' : filter.temperatureMode}
-              </span>
+            <div className="flex items-center gap-2 font-medium text-sm">
+              <Thermometer className="w-4 h-4 text-gray-900 dark:text-gray-100" />
+              <span>Temperature isolation</span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  ['off', 'Off'],
-                  ['above', 'Above'],
-                  ['below', 'Below'],
-                  ['between', 'Between'],
-                ] as const
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => onChangeFilter({ ...filter, temperatureMode: mode })}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    filter.temperatureMode === mode
-                      ? theme === 'dark'
-                        ? 'border-gray-500 bg-gray-600 text-gray-100'
-                        : 'border-gray-400 bg-gray-200 text-gray-900'
-                      : theme === 'dark'
-                        ? 'border-gray-700 text-gray-400 hover:bg-gray-700'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {filter.temperatureMode !== 'off' && (
-              <div className={`flex flex-wrap items-end gap-3 text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                {(filter.temperatureMode === 'above' || filter.temperatureMode === 'between') && (
-                  <label className="flex flex-col gap-1">
-                    <span>{filter.temperatureMode === 'between' ? 'Minimum (≥)' : 'Floor (≥)'}</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={
-                          Math.round(
-                            (unitSystem === 'imperial' ? filter.temperatureLoC * (9 / 5) + 32 : filter.temperatureLoC) * 10
-                          ) / 10
-                        }
-                        onChange={e => {
-                          const parsed = Number(e.target.value);
-                          if (!Number.isFinite(parsed)) return;
-                          const nextC =
-                            unitSystem === 'imperial' ? ((parsed - 32) * 5) / 9 : parsed;
-                          onChangeFilter({ ...filter, temperatureLoC: nextC });
-                        }}
-                        className={`w-24 rounded-lg border px-2 py-1 font-mono text-sm outline-none ${theme === 'dark' ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
-                      />
-                      <span className="tabular-nums opacity-75">{unitSystem === 'imperial' ? '°F' : '°C'}</span>
-                    </div>
-                  </label>
-                )}
-                {(filter.temperatureMode === 'below' || filter.temperatureMode === 'between') && (
-                  <label className="flex flex-col gap-1">
-                    <span>{filter.temperatureMode === 'between' ? 'Maximum (≤)' : 'Ceiling (≤)'}</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={
-                          Math.round(
-                            (unitSystem === 'imperial' ? filter.temperatureHiC * (9 / 5) + 32 : filter.temperatureHiC) *
-                              10
-                          ) / 10
-                        }
-                        onChange={e => {
-                          const parsed = Number(e.target.value);
-                          if (!Number.isFinite(parsed)) return;
-                          const nextC =
-                            unitSystem === 'imperial' ? ((parsed - 32) * 5) / 9 : parsed;
-                          onChangeFilter({ ...filter, temperatureHiC: nextC });
-                        }}
-                        className={`w-24 rounded-lg border px-2 py-1 font-mono text-sm outline-none ${theme === 'dark' ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
-                      />
-                      <span className="tabular-nums opacity-75">{unitSystem === 'imperial' ? '°F' : '°C'}</span>
-                    </div>
-                  </label>
-                )}
-              </div>
-            )}
-            <p className={`text-[11px] leading-snug opacity-85 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-              Uses EPW dry-bulb °C internally. Applies together with months and hour filters row-by-row across charts.
-            </p>
+            <TemperatureIsolationRange
+              filter={filter}
+              onChangeFilter={onChangeFilter}
+              theme={theme}
+              unitSystem={unitSystem}
+              extentMinC={dryBulbExtentMinC}
+              extentMaxC={dryBulbExtentMaxC}
+            />
           </div>
 
           {/* Graphics Adjustments */}

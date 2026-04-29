@@ -546,18 +546,24 @@ export function UtciExplorer({
     let heatmapData: any[] = [];
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+    const emptyUtciFill = theme === 'dark' ? 'rgba(55,65,81,0.4)' : 'rgba(203,213,225,0.7)';
+
     if (aggregation === 'month') {
       const groups = d3.group(currentData, d => d.month, d => d.hour);
       Array.from(groups).forEach(([month, hourGroups]) => {
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = values[0].dayOfYear;
           const endDay = values[values.length - 1].dayOfYear + 1;
+          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter));
           
           let avgUtciVal: number;
           let comfortRatio: number;
-          if (showDifference && compareData) {
-            const primaryStat = aggregateCellStatistic(values.map(d => d.utci), heatmapCellStatistic);
-            const compareValues = values.map(v => {
+          if (selectedRows.length === 0) {
+            avgUtciVal = NaN;
+            comfortRatio = 0;
+          } else if (showDifference && compareData) {
+            const primaryStat = aggregateCellStatistic(selectedRows.map(d => d.utci), heatmapCellStatistic);
+            const compareValues = selectedRows.map(v => {
               const idx = data.indexOf(v);
               const cD = compareData[idx];
               if (!cD) return null;
@@ -580,8 +586,8 @@ export function UtciExplorer({
             avgUtciVal = compareStat - primaryStat;
             comfortRatio = 0;
           } else {
-            avgUtciVal = aggregateCellStatistic(values.map(d => d.utci), heatmapCellStatistic);
-            comfortRatio = aggregateCellStatistic(values.map(d => d.isComfortable), heatmapCellStatistic);
+            avgUtciVal = aggregateCellStatistic(selectedRows.map(d => d.utci), heatmapCellStatistic);
+            comfortRatio = aggregateCellStatistic(selectedRows.map(d => d.isComfortable), heatmapCellStatistic);
           }
           
           heatmapData.push({
@@ -590,12 +596,15 @@ export function UtciExplorer({
             y: hour,
             month: month,
             utci: avgUtciVal,
-            utciCategory: getUtciCategoryForValue(avgUtciVal),
+            utciCategory: Number.isFinite(avgUtciVal) ? getUtciCategoryForValue(avgUtciVal) : 'no thermal stress',
             isComfortable: comfortRatio,
             label: `${monthNames[month - 1]}`,
-            tooltip: colorMode === 'comfortTime'
-              ? `${monthNames[month - 1]} Avg\nComfort Time: ${(comfortRatio * 100).toFixed(1)}%\nUTCI: ${convertUtci(avgUtciVal).toFixed(1)}${utciUnit}`
-              : `${monthNames[month - 1]} Avg\nUTCI: ${convertUtci(avgUtciVal).toFixed(1)}${utciUnit}\n${getUtciCategoryForValue(avgUtciVal)}`
+            tooltip:
+              !Number.isFinite(avgUtciVal)
+                ? `${monthNames[month - 1]}\nNo hours in dry-bulb band`
+                : colorMode === 'comfortTime'
+                  ? `${monthNames[month - 1]} Avg\nComfort Time: ${(comfortRatio * 100).toFixed(1)}%\nUTCI: ${convertUtci(avgUtciVal).toFixed(1)}${utciUnit}`
+                  : `${monthNames[month - 1]} Avg\nUTCI: ${convertUtci(avgUtciVal).toFixed(1)}${utciUnit}\n${getUtciCategoryForValue(avgUtciVal)}`
           });
         });
       });
@@ -605,8 +614,15 @@ export function UtciExplorer({
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = week * 7 + 1;
           const endDay = Math.min((week + 1) * 7 + 1, 366);
-          const avgUtci = aggregateCellStatistic(values.map(d => d.utci), heatmapCellStatistic);
-          const comfortRatio = aggregateCellStatistic(values.map(d => d.isComfortable), heatmapCellStatistic);
+          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter));
+          const avgUtci =
+            selectedRows.length === 0
+              ? NaN
+              : aggregateCellStatistic(selectedRows.map(d => d.utci), heatmapCellStatistic);
+          const comfortRatio =
+            selectedRows.length === 0
+              ? 0
+              : aggregateCellStatistic(selectedRows.map(d => d.isComfortable), heatmapCellStatistic);
           const month = values[0].month;
           heatmapData.push({
             x0: startDay,
@@ -614,30 +630,38 @@ export function UtciExplorer({
             y: hour,
             month: month,
             utci: avgUtci,
-            utciCategory: getUtciCategoryForValue(avgUtci),
+            utciCategory: Number.isFinite(avgUtci) ? getUtciCategoryForValue(avgUtci) : 'no thermal stress',
             isComfortable: comfortRatio,
             label: `W${week + 1}`,
-            tooltip: colorMode === 'comfortTime'
-              ? `Week ${week + 1} Avg\nComfort Time: ${(comfortRatio * 100).toFixed(1)}%\nUTCI: ${convertUtci(avgUtci).toFixed(1)}${utciUnit}`
-              : `Week ${week + 1} Avg\nUTCI: ${convertUtci(avgUtci).toFixed(1)}${utciUnit}\n${getUtciCategoryForValue(avgUtci)}`
+            tooltip: !Number.isFinite(avgUtci)
+              ? `Week ${week + 1}\nNo hours in dry-bulb band`
+              : colorMode === 'comfortTime'
+                ? `Week ${week + 1} Avg\nComfort Time: ${(comfortRatio * 100).toFixed(1)}%\nUTCI: ${convertUtci(avgUtci).toFixed(1)}${utciUnit}`
+                : `Week ${week + 1} Avg\nUTCI: ${convertUtci(avgUtci).toFixed(1)}${utciUnit}\n${getUtciCategoryForValue(avgUtci)}`
           });
         });
       });
     } else {
       // day or hour
-      heatmapData = currentData.map(d => ({
-        x0: d.dayOfYear,
-        x1: d.dayOfYear + 1,
-        y: d.hour,
-        month: d.month,
-        utci: d.utci,
-        utciCategory: d.utciCategory,
-        isComfortable: d.isComfortable,
-        label: d.date.toLocaleDateString(),
-        tooltip: colorMode === 'comfortTime'
-          ? `${d.date.toLocaleString()}\nComfortable: ${d.isComfortable ? 'Yes' : 'No'}\nUTCI: ${convertUtci(d.utci).toFixed(1)}${utciUnit}`
-          : `${d.date.toLocaleString()}\nUTCI: ${convertUtci(d.utci).toFixed(1)}${utciUnit}\n${d.utciCategory}`
-      }));
+      heatmapData = currentData.map(d => {
+        const pass = rowPassesGlobalFilters(d, filter);
+        const utciVal = pass ? d.utci : NaN;
+        return {
+          x0: d.dayOfYear,
+          x1: d.dayOfYear + 1,
+          y: d.hour,
+          month: d.month,
+          utci: utciVal,
+          utciCategory: pass ? d.utciCategory : 'no thermal stress',
+          isComfortable: pass ? d.isComfortable : 0,
+          label: d.date.toLocaleDateString(),
+          tooltip: !pass
+            ? `${d.date.toLocaleString()}\nOutside dry-bulb band`
+            : colorMode === 'comfortTime'
+              ? `${d.date.toLocaleString()}\nComfortable: ${d.isComfortable ? 'Yes' : 'No'}\nUTCI: ${convertUtci(d.utci).toFixed(1)}${utciUnit}`
+              : `${d.date.toLocaleString()}\nUTCI: ${convertUtci(d.utci).toFixed(1)}${utciUnit}\n${d.utciCategory}`
+        };
+      });
     }
 
     const { cellGapPx, cellInnerHeightPx, rowInnerHeight, hourRowTop, hourRowCenter } =
@@ -668,6 +692,7 @@ export function UtciExplorer({
       .attr("rx", 2) // Smaller corner radius
       .attr("ry", 2)
       .style("fill", d => {
+        if (!Number.isFinite(d.utci)) return emptyUtciFill;
         if (colorMode === 'categories') {
           return UTCI_COLORS[d.utciCategory] || '#cccccc';
         } else {
@@ -711,6 +736,7 @@ export function UtciExplorer({
             overlayMinWidth
           )
             return "";
+          if (!Number.isFinite(d.utci)) return "";
           return colorMode === 'comfortTime'
             ? `${Math.round(d.isComfortable * 100)}%`
             : `${Math.round(convertUtci(d.utci))}`;
