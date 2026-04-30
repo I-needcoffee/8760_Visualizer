@@ -14,6 +14,8 @@ import type {
   CompareWindRoseSharedControls,
   UnitSystem,
 } from '../App';
+import type { CompareWindIemSharedControls } from '../lib/iem/windIemPrefsShared';
+import { useWindIemGlobalPrefs } from '../lib/iem/globalWindIemPrefsStore';
 import { variableLegendDomain } from '../lib/variableLegendDomain';
 import { GRADIENTS } from '../lib/constants';
 import { DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
@@ -424,6 +426,18 @@ export function ComparisonModeLayout({
     setShowSettings: setUtciSettings,
   };
 
+  const iemGlobal = useWindIemGlobalPrefs();
+  const compareWindIem: CompareWindIemSharedControls = useMemo(
+    () => ({
+      source: iemGlobal.source,
+      setSource: iemGlobal.setSource,
+      iemYearStart: iemGlobal.iemYearStart,
+      iemYearEnd: iemGlobal.iemYearEnd,
+      setIemYearRange: iemGlobal.setIemYearRange,
+    }),
+    [iemGlobal.source, iemGlobal.iemYearStart, iemGlobal.iemYearEnd, iemGlobal.setSource, iemGlobal.setIemYearRange]
+  );
+
   const [windAgg, setWindAgg] = useState<CompareWindSharedControls['aggregation']>('month');
   const [windVar, setWindVar] = useState(
     () => baseline.variables.find(v => v.id === 'windSpeed')?.id || baseline.variables[0]?.id || ''
@@ -443,6 +457,7 @@ export function ComparisonModeLayout({
     setShowStats: setWindStats,
     showSettings: windSettings,
     setShowSettings: setWindSettings,
+    iem: compareWindIem,
   };
 
   const [roseVar, setRoseVar] = useState(
@@ -461,6 +476,7 @@ export function ComparisonModeLayout({
     setNumBins: setRoseBins,
     showSettings: roseSettings,
     setShowSettings: setRoseSettings,
+    iem: compareWindIem,
   };
 
   const [sunAgg, setSunAgg] = useState<CompareSunpathSharedControls['aggregation']>('week');

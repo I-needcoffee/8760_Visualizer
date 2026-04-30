@@ -3,7 +3,7 @@ import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
-import { EPWDataRow, EPWVariable } from '../lib/epwParser';
+import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { InteractiveLegend, GradientDef } from './InteractiveLegend';
 import type { ChartType, CompareWindRoseSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
@@ -18,6 +18,10 @@ import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
+import { useWindIemGlobalPrefs } from '../lib/iem/globalWindIemPrefsStore';
+import { useResolvedIemWindRows } from '../hooks/useResolvedIemWindRows';
+import { useIemAsosWindSamples } from '../hooks/useIemAsosWindSamples';
+import { IemWindChartLoadingOverlay } from './IemWindSetupModal';
 
 interface WindRoseProps {
   data: EPWDataRow[];
@@ -34,6 +38,8 @@ interface WindRoseProps {
   theme: 'light' | 'dark';
   setShowGradientModal: (show: boolean) => void;
   exportMode?: boolean;
+  metadata?: EPWMetadata;
+  compareMetadata?: EPWMetadata;
   comparePane?: 'primary' | 'secondary';
   paneCity?: string;
   pairSuppressHeader?: boolean;
@@ -46,9 +52,25 @@ interface WindRoseProps {
 
 const COMPASS_POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
-export function WindRose({ 
-  data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter, unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode, comparePane, paneCity,
+export function WindRose({
+  data: epwData,
+  compareData: epwCompareRaw,
+  showDifference,
+  stackedComparison,
+  variables,
+  onRemove,
+  onChangeType,
+  gradients,
+  filter,
+  unitSystem,
+  heatmapTextColor,
+  theme,
+  setShowGradientModal,
+  exportMode,
+  metadata,
+  compareMetadata,
+  comparePane,
+  paneCity,
   pairSuppressHeader,
   pairModalHost,
   windRoseShared,
@@ -58,6 +80,24 @@ export function WindRose({
 }: WindRoseProps) {
   const roseRef = useRef<SVGSVGElement>(null);
   const compareRoseRef = useRef<SVGSVGElement>(null);
+
+  const globalIemPrefs = useWindIemGlobalPrefs();
+  const iemControls = windRoseShared?.iem ?? globalIemPrefs;
+  const skipCompareWindResolution = !(epwCompareRaw && epwCompareRaw.length > 0);
+
+  // For wind roses, preserve multi-year distributions by binning raw ASOS hourly samples across years.
+  const iemSamples = useIemAsosWindSamples(metadata, iemControls, false);
+  const iemSamplesCompare = useIemAsosWindSamples(compareMetadata ?? metadata, iemControls, skipCompareWindResolution);
+
+  const primWindResolved = useResolvedIemWindRows(epwData, metadata, iemControls, false);
+  const cmpWindResolved = useResolvedIemWindRows(epwCompareRaw ?? [], compareMetadata ?? metadata, iemControls, skipCompareWindResolution);
+
+  const data = iemControls.source === 'iem' ? iemSamples.samples : primWindResolved.rows;
+  const compareData =
+    iemControls.source === 'iem'
+      ? (skipCompareWindResolution ? epwCompareRaw : iemSamplesCompare.samples)
+      : (skipCompareWindResolution ? epwCompareRaw : cmpWindResolved.rows);
+
   const [iCv, setICv] = useState(variables.find(v => v.id === 'windSpeed')?.id || variables[0]?.id || '');
   const colorVar = windRoseShared?.colorVar ?? iCv;
   const setColorVar = windRoseShared?.setColorVar ?? setICv;
@@ -67,7 +107,7 @@ export function WindRose({
   const setGradientId = windRoseShared?.setGradientId ?? setIGrad;
 
   useEffect(() => {
-    if (showDifference && compareData) {
+    if (showDifference && epwCompareRaw) {
       if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
         setGradientId(DIFFERENCE_DIVERGING_ID);
         return;
@@ -75,7 +115,7 @@ export function WindRose({
     }
     const id = defaultGradientIdForVariable(colorVar, variables, gradients);
     setGradientId(id);
-  }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
+  }, [colorVar, variables, gradients, setGradientId, showDifference, epwCompareRaw]);
 
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = windRoseShared?.showSettings ?? iShowSettings;
@@ -228,6 +268,11 @@ export function WindRose({
   }, [variables, colorVar, showDifference, compareData, data, unitSystem]);
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
+
+  const iemWindFallbackOnly =
+    iemControls.source === 'iem' && iemSamples.kind === 'iem' && iemSamples.fallbackNote ? (
+      <p className="mt-1 text-[10px] italic text-amber-800/90 dark:text-amber-200/80">{iemSamples.fallbackNote}</p>
+    ) : null;
 
   useEffect(() => {
     if (!roseRef.current || !filteredData.length || dimensions.width === 0) return;
@@ -448,19 +493,21 @@ export function WindRose({
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } px-1.5 py-0.5`}>
         {exportMode ? (
-          <div className="flex min-h-[24px] min-w-0 items-center gap-2">
-            <ChartTypeMenu
-              value="windrose"
-              label="Wind Rose"
-              onChange={() => {}}
-              theme="light"
-              display="icon"
-              staticIcon
-            />
-            <ExportHeaderCaption
-              lines={[exportCaptionLinesWithUnit(colorVarDef.category, colorVarDef.name, cUnit)]}
-            />
-          </div>
+          <>
+            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
+              <ChartTypeMenu
+                value="windrose"
+                label="Wind Rose"
+                onChange={() => {}}
+                theme="light"
+                display="icon"
+                staticIcon
+              />
+              <ExportHeaderCaption
+                lines={[exportCaptionLinesWithUnit(colorVarDef.category, colorVarDef.name, cUnit)]}
+              />
+            </div>
+          </>
         ) : comparePane === 'secondary' ? (
           <>
             <div
@@ -490,6 +537,7 @@ export function WindRose({
                 <Settings2 className="h-3 w-3" />
               </button>
             </div>
+              {iemWindFallbackOnly}
           </>
         ) : (
           <>
@@ -568,6 +616,7 @@ export function WindRose({
                 )}
               </div>
             </div>
+              {iemWindFallbackOnly}
           </>
         )}
       </div>
@@ -719,6 +768,12 @@ export function WindRose({
 
       <div className="px-1 py-0.5 flex-1 min-h-0 flex flex-col gap-0 overflow-hidden min-w-0">
         <div className="relative flex min-h-0 min-w-0 w-full flex-1 items-center justify-center overflow-hidden">
+          {primWindResolved.loadingIem && iemControls.source === 'iem' ? (
+            <IemWindChartLoadingOverlay
+              theme={theme}
+              label="Compiling IEM ASOS wind for your year range…"
+            />
+          ) : null}
           <svg ref={roseRef} className="h-full w-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />
         </div>
         {stackedComparison && compareData && (

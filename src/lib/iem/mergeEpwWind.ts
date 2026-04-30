@@ -1,0 +1,171 @@
+import type { EPWDataRow, EPWMetadata } from '../epwParser';
+import type { ParsedIemWindRow } from './parseAsosCsv';
+
+function daysInUtcMonth(referenceYear: number, month1to12: number): number {
+  return new Date(Date.UTC(referenceYear, month1to12, 0)).getUTCDate();
+}
+
+function clampDayToUtcMonth(day: number, referenceYear: number, month1to12: number): number {
+  const dim = daysInUtcMonth(referenceYear, month1to12);
+  return Math.min(day, dim);
+}
+
+function floorHourUtc(ms: number): number {
+  return Math.floor(ms / (60 * 60 * 1000)) * (60 * 60 * 1000);
+}
+
+/**
+ * Build a UTC hourly map from asos rows (prefer last sample within each UTC hour bucket).
+ */
+export function hourlyUtcWindLookup(rows: ParsedIemWindRow[]): Map<number, Pick<ParsedIemWindRow, 'windMs' | 'windFromDeg'>> {
+  const buckets = new Map<number, ParsedIemWindRow>();
+
+  for (const row of rows) {
+    const h = floorHourUtc(row.validMs);
+    const prev = buckets.get(h);
+    if (!prev || row.validMs >= prev.validMs) {
+      buckets.set(h, row);
+    }
+  }
+
+  const map = new Map<number, Pick<ParsedIemWindRow, 'windMs' | 'windFromDeg'>>();
+  for (const [h, row] of buckets) {
+    map.set(h, { windMs: row.windMs, windFromDeg: row.windFromDeg });
+  }
+  return map;
+}
+
+/**
+ * For each EPW row, synthesize a UTC epoch using **`referenceCalendarYear`** and the EPW calendar
+ * in **station standard time** via `metadata.timeZone` — same convention as {@link utcInstantFromEpwStationClock}
+ * (`minute = 30` midpoint for hourly EPW slots).
+ *
+ * This lets TMY timelines align with ASOS extracted for a concrete calendar year (`referenceCalendarYear`).
+ */
+export function epwUtcMsForMergedWind(row: EPWDataRow, metadata: EPWMetadata, referenceCalendarYear: number, minuteMid = 30): number {
+  const dom = clampDayToUtcMonth(row.day, referenceCalendarYear, row.month);
+  return Date.UTC(
+    referenceCalendarYear,
+    row.month - 1,
+    dom,
+    row.hour - metadata.timeZone,
+    minuteMid,
+    0,
+    0
+  );
+}
+
+/** Shallow row copies with substituted wind Speed / Direction (degrees, m/s EPW-compatible). */
+export function mergeHourlyWindFromIemIntoEpw(
+  rows: EPWDataRow[],
+  metadata: EPWMetadata,
+  referenceCalendarYear: number,
+  asosRows: ParsedIemWindRow[]
+): EPWDataRow[] {
+  const lookup = hourlyUtcWindLookup(asosRows);
+  return rows.map(r => {
+    const utcHour = floorHourUtc(epwUtcMsForMergedWind(r, metadata, referenceCalendarYear));
+    const wind = lookup.get(utcHour);
+    if (!wind || (wind.windMs === null && wind.windFromDeg === null)) {
+      return r;
+    }
+
+    const next: EPWDataRow = { ...r };
+
+    // EPW semantics: numeric fields elsewhere may be number | null; preserve null if asos missing dimension.
+    if (wind.windMs !== null) {
+      next.windSpeed = wind.windMs;
+    }
+
+    // Calm-speed directions are often sentinel in METAR; keep EPW dir if asos dir missing only when speed nonzero.
+    if (wind.windFromDeg !== null) {
+      next.windDirection = wind.windFromDeg;
+    } else if (wind.windMs !== null && wind.windMs === 0) {
+      next.windDirection = 0;
+    }
+
+    return next;
+  });
+}
+
+/**
+ * Merges IEM ASOS wind from multiple calendar years onto the EPW timeline.
+ *
+ * Note: “average wind speed” for charts is usually the arithmetic mean of speeds, not the magnitude of
+ * the mean vector. A vector-mean across years can look artificially low when directions vary.
+ *
+ * We therefore compute:
+ * - windSpeed: arithmetic mean of available speeds at the matched UTC hour across years
+ * - windDirection: direction of the mean wind vector (circular mean), when directional samples exist
+ *
+ * A single year delegates to {@link mergeHourlyWindFromIemIntoEpw} for identical behaviour to the one-year path.
+ */
+export function mergeHourlyWindFromMultiYearIemIntoEpw(
+  rows: EPWDataRow[],
+  metadata: EPWMetadata,
+  years: number[],
+  asosRowsByYear: Map<number, ParsedIemWindRow[]>
+): EPWDataRow[] {
+  const unique = [...new Set(years)].filter(y => Number.isFinite(y)).sort((a, b) => a - b);
+  if (unique.length === 0) return rows;
+  if (unique.length === 1) {
+    const y = unique[0]!;
+    const asos = asosRowsByYear.get(y) ?? [];
+    return mergeHourlyWindFromIemIntoEpw(rows, metadata, y, asos);
+  }
+
+  const lookups = new Map<number, ReturnType<typeof hourlyUtcWindLookup>>();
+  for (const y of unique) {
+    lookups.set(y, hourlyUtcWindLookup(asosRowsByYear.get(y) ?? []));
+  }
+
+  return rows.map(r => {
+    let sumSpeed = 0;
+    let nSpeed = 0;
+    let sumU = 0;
+    let sumV = 0;
+    let nVec = 0;
+
+    for (const y of unique) {
+      const utcHour = floorHourUtc(epwUtcMsForMergedWind(r, metadata, y));
+      const wind = lookups.get(y)?.get(utcHour);
+      if (!wind) continue;
+      const { windMs, windFromDeg } = wind;
+      if (windMs === null && windFromDeg === null) continue;
+
+      if (windMs !== null) {
+        sumSpeed += windMs;
+        nSpeed++;
+      }
+
+      if (windMs !== null && windFromDeg !== null) {
+        const rad = windFromDeg * (Math.PI / 180);
+        sumU += -windMs * Math.sin(rad);
+        sumV += -windMs * Math.cos(rad);
+        nVec++;
+      }
+    }
+
+    if (nSpeed === 0 && nVec === 0) return r;
+
+    const avgSpeed = nSpeed > 0 ? sumSpeed / nSpeed : null;
+    const avgU = nVec > 0 ? sumU / nVec : 0;
+    const avgV = nVec > 0 ? sumV / nVec : 0;
+    let avgDir: number | null = null;
+    if (nVec > 0) {
+      let d = (Math.atan2(-avgU, -avgV) * 180) / Math.PI;
+      if (d < 0) d += 360;
+      avgDir = d;
+    }
+
+    const next: EPWDataRow = { ...r };
+    if (avgSpeed !== null) {
+      next.windSpeed = avgSpeed;
+      if (avgSpeed < 1e-6) next.windDirection = 0;
+    }
+    if (avgDir !== null) {
+      next.windDirection = avgDir;
+    }
+    return next;
+  });
+}

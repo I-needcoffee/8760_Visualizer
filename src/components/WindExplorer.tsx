@@ -28,6 +28,9 @@ import { VariableChartSelect } from './VariableChartSelect';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
+import { useWindIemGlobalPrefs } from '../lib/iem/globalWindIemPrefsStore';
+import { useResolvedIemWindRows } from '../hooks/useResolvedIemWindRows';
+import { IemWindChartLoadingOverlay } from './IemWindSetupModal';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -64,6 +67,8 @@ interface WindExplorerProps {
   exportMode?: boolean;
   /** Site location for solar diurnal shading on Solar-category 12×24 heatmaps. */
   metadata?: EPWMetadata;
+  /** LOCATION for the comparison file when merging IEM winds in difference/stacked layouts. */
+  compareMetadata?: EPWMetadata;
   comparePane?: 'primary' | 'secondary';
   paneCity?: string;
   pairSuppressHeader?: boolean;
@@ -126,11 +131,26 @@ function averageWindVector(values: EPWDataRow[], compareData?: EPWDataRow[], dat
   return { speed: avgSpeed, direction: avgDir };
 }
 
-export function WindExplorer({ 
-  data, compareData, showDifference, stackedComparison, variables, onRemove, onChangeType, gradients, filter,
+export function WindExplorer({
+  data: epwData,
+  compareData: epwCompareRaw,
+  showDifference,
+  stackedComparison,
+  variables,
+  onRemove,
+  onChangeType,
+  gradients,
+  filter,
   heatmapCellStatistic = 'mean',
-  unitSystem, heatmapTextColor, theme, 
-  setShowGradientModal, exportMode, metadata, comparePane, paneCity,
+  unitSystem,
+  heatmapTextColor,
+  theme,
+  setShowGradientModal,
+  exportMode,
+  metadata,
+  compareMetadata,
+  comparePane,
+  paneCity,
   pairSuppressHeader,
   pairModalHost,
   windShared,
@@ -140,6 +160,22 @@ export function WindExplorer({
 }: WindExplorerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
+
+  const globalIemPrefs = useWindIemGlobalPrefs();
+  const iemControls = windShared?.iem ?? globalIemPrefs;
+  const skipCompareWindResolution = !(epwCompareRaw && epwCompareRaw.length > 0);
+  const primWindResolved = useResolvedIemWindRows(epwData, metadata, iemControls, false);
+  const cmpWindResolved = useResolvedIemWindRows(
+    epwCompareRaw ?? [],
+    compareMetadata ?? metadata,
+    iemControls,
+    skipCompareWindResolution
+  );
+  const vizData = primWindResolved.rows;
+  const vizCompare = skipCompareWindResolution ? epwCompareRaw : cmpWindResolved.rows;
+  /** EPW timelines with optional IEM substitution for hourly wind vectors. */
+  const data = vizData;
+  const compareData = vizCompare;
   const [iAgg, setIAgg] = useState<'hour' | 'day' | 'week' | 'month'>('month');
   const aggregation = windShared?.aggregation ?? iAgg;
   const setAggregation = windShared?.setAggregation ?? setIAgg;
@@ -153,7 +189,7 @@ export function WindExplorer({
   const setGradientId = windShared?.setGradientId ?? setIGrad;
 
   useEffect(() => {
-    if (showDifference && compareData) {
+    if (showDifference && epwCompareRaw) {
       if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
         setGradientId(DIFFERENCE_DIVERGING_ID);
         return;
@@ -161,7 +197,7 @@ export function WindExplorer({
     }
     const id = defaultGradientIdForVariable(colorVar, variables, gradients);
     setGradientId(id);
-  }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
+  }, [colorVar, variables, gradients, setGradientId, showDifference, epwCompareRaw]);
 
   const [iShowSettings, setIShowSettings] = useState(false);
   const showSettings = windShared?.showSettings ?? iShowSettings;
@@ -378,6 +414,11 @@ export function WindExplorer({
     }
     return '';
   }, [showDifference, compareData, aggregation]);
+
+  const iemWindFallbackOnly =
+    iemControls.source === 'iem' && primWindResolved.iemFallbackNote ? (
+      <p className="mt-1 text-[10px] italic text-amber-800/90 dark:text-amber-200/80">{primWindResolved.iemFallbackNote}</p>
+    ) : null;
 
   useEffect(() => {
     if (!svgRef.current || !filteredData.length || dimensions.width === 0) {
@@ -901,19 +942,21 @@ export function WindExplorer({
       } px-1.5 py-0.5`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
-            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
-              <ChartTypeMenu
-                value="wind"
-                label="Wind Explorer"
-                onChange={() => {}}
-                theme="light"
-                display="icon"
-                staticIcon
-              />
-              <ExportHeaderCaption
-                lines={[exportCaptionLinesWithUnit(colorVarDef.category, colorVarDef.name, cUnit)]}
-              />
-            </div>
+            <>
+              <div className="flex min-h-[24px] min-w-0 items-center gap-2">
+                <ChartTypeMenu
+                  value="wind"
+                  label="Wind Explorer"
+                  onChange={() => {}}
+                  theme="light"
+                  display="icon"
+                  staticIcon
+                />
+                <ExportHeaderCaption
+                  lines={[exportCaptionLinesWithUnit(colorVarDef.category, colorVarDef.name, cUnit)]}
+                />
+              </div>
+            </>
           ) : comparePane === 'secondary' ? (
             <>
               <div
@@ -973,6 +1016,7 @@ export function WindExplorer({
                   />
                 </div>
               </div>
+              {iemWindFallbackOnly}
             </>
           ) : (
             <>
@@ -1092,6 +1136,7 @@ export function WindExplorer({
                   />
                 </div>
               </div>
+              {iemWindFallbackOnly}
             </>
           )}
         </div>
@@ -1277,6 +1322,12 @@ export function WindExplorer({
           className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden"
           ref={containerRef}
         >
+          {primWindResolved.loadingIem && iemControls.source === 'iem' ? (
+            <IemWindChartLoadingOverlay
+              theme={theme}
+              label="Compiling IEM ASOS wind for your year range…"
+            />
+          ) : null}
           <svg
             ref={svgRef}
             className="block h-full w-full max-h-full max-w-full"

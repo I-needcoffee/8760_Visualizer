@@ -39,6 +39,12 @@ import {
   weatherPlaceLine,
 } from './lib/weatherCaption';
 import { dryBulbExtentFromFiles } from './lib/dryBulbExtent';
+import type { CompareWindIemSharedControls } from './lib/iem/windIemPrefsShared';
+import { useWindIemGlobalPrefs } from './lib/iem/globalWindIemPrefsStore';
+import { IemWindSetupModal } from './components/IemWindSetupModal';
+import type { SiteFooterWindControlsProps } from './components/SiteFooterWindControls';
+
+export type { CompareWindIemSharedControls, WindFileSource } from './lib/iem/windIemPrefsShared';
 
 const TUTORIAL_HOVER_HINTS_KEY = 'climate-compare-tutorial-hover-hints';
 
@@ -309,6 +315,8 @@ export interface CompareWindSharedControls {
   setShowStats: (v: boolean) => void;
   showSettings: boolean;
   setShowSettings: (v: boolean) => void;
+  /** Compare layout: shared IEM ASOS wind source + reference year for both panes. */
+  iem?: CompareWindIemSharedControls;
 }
 
 export interface CompareWindRoseSharedControls {
@@ -320,6 +328,8 @@ export interface CompareWindRoseSharedControls {
   setNumBins: (n: number) => void;
   showSettings: boolean;
   setShowSettings: (v: boolean) => void;
+  /** Same prefs object instance as Wind Explorer (`CompareWindSharedControls.iem`). */
+  iem?: CompareWindIemSharedControls;
 }
 
 /** Shared sun path controls for compare layout (single card, dual charts). */
@@ -394,6 +404,8 @@ export default function App() {
   }, [selectedFiles]);
   const [heatmapTextColor, setHeatmapTextColor] = useState<string>('#000000');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  const windIemGlobal = useWindIemGlobalPrefs();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -516,6 +528,41 @@ export default function App() {
   }, [tutorialHoverHints]);
   const [slotsByLayout, setSlotsByLayout] = useState<Record<LayoutMode, ChartConfig[]>>(initialSlotsByLayout);
   const slots = slotsByLayout[layoutMode];
+
+  /** Wind source controls in the footer when a wind or wind-rose card is in the current layout. */
+  const dashboardHasWindCharts = useMemo(() => {
+    if (viewMode === 'comparison' && selectedFiles.length >= 2) return true;
+    return slots.some(s => s.type === 'wind' || s.type === 'windrose');
+  }, [viewMode, slots, selectedFiles.length]);
+
+  const windFooter = useMemo((): SiteFooterWindControlsProps | null => {
+    if (!dashboardHasWindCharts) return null;
+    return {
+      visible: true,
+      source: windIemGlobal.source,
+      yearStart: windIemGlobal.iemYearStart,
+      yearEnd: windIemGlobal.iemYearEnd,
+      onSelectTmy: () => windIemGlobal.setSource('epw'),
+      onSelectAsos: () => {
+        if (windIemGlobal.source === 'epw') {
+          windIemGlobal.setSource('iem');
+          windIemGlobal.openIemSetupModal(true);
+        } else {
+          windIemGlobal.openIemSetupModal(false);
+        }
+      },
+      onConfigureYears: () => windIemGlobal.openIemSetupModal(false),
+    };
+  }, [
+    dashboardHasWindCharts,
+    windIemGlobal.source,
+    windIemGlobal.iemYearStart,
+    windIemGlobal.iemYearEnd,
+    windIemGlobal.setSource,
+    windIemGlobal.openIemSetupModal,
+  ]);
+
+  const iemAttributionInExport = windIemGlobal.source === 'iem' && dashboardHasWindCharts;
 
   /** Low/Ave/High applies to 12×24 explorer-style heatmaps only; comparison mode always includes those cards. */
   const dashboardHasHeatmap1224 = useMemo(() => {
@@ -765,6 +812,7 @@ export default function App() {
         return (
           <WindExplorer
             metadata={fileData.metadata}
+            compareMetadata={compareFileData?.metadata}
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
@@ -793,6 +841,8 @@ export default function App() {
       case 'windrose':
         return (
           <WindRose
+            metadata={fileData.metadata}
+            compareMetadata={compareFileData?.metadata}
             data={fileData.data}
             compareData={compareFileData?.data}
             showDifference={isDiffMode}
@@ -877,7 +927,7 @@ export default function App() {
         </div>
         <div className="shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
           <div className="mx-auto max-w-[1600px]">
-            <SiteFooter theme={theme} exportMode={false} />
+            <SiteFooter theme={theme} exportMode={false} windFooter={null} iemWindDatasetActive={false} />
           </div>
         </div>
       </div>
@@ -1382,6 +1432,25 @@ export default function App() {
             />
           )}
 
+          {windIemGlobal.setupModalOpen ? (
+            <IemWindSetupModal
+              open
+              theme={theme}
+              initialStart={windIemGlobal.iemYearStart}
+              initialEnd={windIemGlobal.iemYearEnd}
+              onApply={(s, e) => {
+                windIemGlobal.setIemYearRange(s, e);
+                windIemGlobal.closeIemSetupModal();
+              }}
+              onCancel={() => {
+                if (windIemGlobal.setupModalRevertOnCancel) {
+                  windIemGlobal.setSource('epw');
+                }
+                windIemGlobal.closeIemSetupModal();
+              }}
+            />
+          ) : null}
+
           {selectedFiles.length >= 2 && viewMode === 'comparison' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <ComparisonModeLayout
@@ -1446,6 +1515,8 @@ export default function App() {
               onDstDisplayEnabledChange={setDstDisplayEnabled}
               showHeatmapCellToggle={dashboardHasHeatmap1224}
               exportNotesDst={exportMode && dstDisplayEnabled}
+              iemWindDatasetActive={iemAttributionInExport}
+              windFooter={windFooter}
             />
           </div>
         </div>

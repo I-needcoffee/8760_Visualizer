@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { IEM_HOME, WindIemDisclaimerFull } from './WindIemAttribution';
+import type { SiteFooterWindControlsProps } from './SiteFooterWindControls';
+import { windYearRangeShort } from './SiteFooterWindControls';
 import type { UnitSystem } from '../App';
 import type { HeatmapCellStatistic } from '../lib/globalFilter';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
@@ -34,6 +37,8 @@ export function SiteFooter({
   onDstDisplayEnabledChange,
   showHeatmapCellToggle = true,
   exportNotesDst = false,
+  iemWindDatasetActive = false,
+  windFooter,
 }: {
   theme: 'light' | 'dark';
   exportMode: boolean;
@@ -49,8 +54,13 @@ export function SiteFooter({
   showHeatmapCellToggle?: boolean;
   /** Export capture only: note DST in footer when the DST toggle is on. */
   exportNotesDst?: boolean;
+  /** Export / caption: IEM overlay active for wind. */
+  iemWindDatasetActive?: boolean;
+  /** Wind TMY vs ASOS + years (only when wind/wind-rose cards are on screen). */
+  windFooter?: SiteFooterWindControlsProps | null;
 }) {
   const [supportOpen, setSupportOpen] = useState(false);
+  const [iemDisclaimerOpen, setIemDisclaimerOpen] = useState(false);
   const isMobile = useIsMobileMaxSm();
 
   useEffect(() => {
@@ -63,12 +73,21 @@ export function SiteFooter({
   }, [supportOpen]);
 
   useEffect(() => {
-    if (supportOpen) document.body.style.overflow = 'hidden';
+    if (supportOpen || iemDisclaimerOpen) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = '';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [supportOpen]);
+  }, [supportOpen, iemDisclaimerOpen]);
+
+  useEffect(() => {
+    if (!iemDisclaimerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIemDisclaimerOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [iemDisclaimerOpen]);
 
   /** Light: white pill body; dark: low-contrast shell. */
   const pillShell =
@@ -160,6 +179,44 @@ export function SiteFooter({
       document.body
     );
 
+  const iemDisclaimerModal =
+    iemDisclaimerOpen &&
+    createPortal(
+      <div
+        className="fixed inset-0 z-[245] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="iem-disclaimer-title"
+        onMouseDown={e => {
+          if (e.target === e.currentTarget) setIemDisclaimerOpen(false);
+        }}
+      >
+        <div
+          className={`relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-4 shadow-hard-xl sm:p-5 ${
+            theme === 'dark' ? 'border-gray-600 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setIemDisclaimerOpen(false)}
+            className={`absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 ${
+              theme === 'dark' ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+            }`}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <h2 id="iem-disclaimer-title" className="pr-10 text-base font-semibold leading-snug">
+            Iowa Environmental Mesonet (IEM) wind data
+          </h2>
+          <div className="mt-3 pr-2">
+            <WindIemDisclaimerFull theme={theme} />
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+
   const showCaptions = Boolean(exportCaptions?.length);
 
   /** Export: plain attribution link, no pill/support; captions + link vertically centered as a row. */
@@ -183,11 +240,30 @@ export function SiteFooter({
                   Clock display: DST adjustment on
                 </span>
               ) : null}
+              {iemWindDatasetActive ? (
+                <span className="text-[8px] font-normal leading-snug text-gray-500">
+                  * Wind speed/direction from{' '}
+                  <a href={IEM_HOME} target="_blank" rel="noopener noreferrer" className={exportLinkClass}>
+                    Iowa Environmental Mesonet (IEM)
+                  </a>
+                  . This application is not affiliated with Iowa State University or IEM.
+                </span>
+              ) : null}
             </div>
           ) : exportNotesDst ? (
             <div className="flex min-h-5 min-w-0 flex-1 items-center text-left">
               <span className="text-[9px] font-normal leading-none text-gray-500">
                 Clock display: DST adjustment on
+              </span>
+            </div>
+          ) : iemWindDatasetActive ? (
+            <div className="flex min-h-5 min-w-0 flex-1 flex-col justify-center text-left">
+              <span className="text-[8px] font-normal leading-snug text-gray-500">
+                * Wind speed/direction from{' '}
+                <a href={IEM_HOME} target="_blank" rel="noopener noreferrer" className={exportLinkClass}>
+                  Iowa Environmental Mesonet (IEM)
+                </a>
+                . Not affiliated with Iowa State University or IEM.
               </span>
             </div>
           ) : null}
@@ -202,6 +278,7 @@ export function SiteFooter({
             </a>
           </div>
         </footer>
+        {iemDisclaimerModal}
       </>
     );
   }
@@ -230,12 +307,43 @@ export function SiteFooter({
 
   return (
     <>
+      <div className="flex w-full flex-col gap-0.5">
       <footer
-        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-1 ${showCaptions || showLeftControls ? 'justify-between' : 'justify-end'}`}
+        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-1 ${
+          showCaptions || showLeftControls || windFooter?.visible ? 'justify-between' : 'justify-end'
+        }`}
         aria-label="Site attribution and display options"
       >
         {showLeftControls ? (
           <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={dstDisplayEnabled}
+              aria-label="Daylight savings time display"
+              title="US-style DST display: between 2nd Sunday in March and 1st Sunday in November, shift each hourly row +1h on the civil clock (EPW rows are usually standard offset; underlying sample time is unchanged for sun math). You can use this for any file as an approximation."
+              onClick={() => onDstDisplayEnabledChange?.(!dstDisplayEnabled)}
+              className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 items-stretch overflow-hidden rounded-full border p-0 ${pillShell}`}
+            >
+              <span
+                className={`flex min-w-0 flex-1 items-center truncate pl-2 pr-1 text-left ${footnoteText} font-normal sm:pl-2 ${
+                  theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                }`}
+              >
+                {dstLabel}
+              </span>
+              <span className="flex shrink-0 items-center justify-center pr-1.5 pl-0.5" aria-hidden>
+                <span
+                  className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
+                    dstDisplayEnabled
+                      ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
+                      : theme === 'dark'
+                        ? 'border-gray-500 bg-white'
+                        : 'border-gray-400 bg-white'
+                  }`}
+                />
+              </span>
+            </button>
             <div className={unitTrack} title="Unit system for numbers in charts" role="group" aria-label="Unit system">
               <button
                 type="button"
@@ -327,34 +435,80 @@ export function SiteFooter({
                 </button>
               </div>
             ) : null}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={dstDisplayEnabled}
-              aria-label="Daylight savings time display"
-              title="US-style DST display: between 2nd Sunday in March and 1st Sunday in November, shift each hourly row +1h on the civil clock (EPW rows are usually standard offset; underlying sample time is unchanged for sun math). You can use this for any file as an approximation."
-              onClick={() => onDstDisplayEnabledChange?.(!dstDisplayEnabled)}
-              className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 items-stretch overflow-hidden rounded-full border p-0 ${pillShell}`}
-            >
-              <span
-                className={`flex min-w-0 flex-1 items-center truncate pl-2 pr-1 text-left ${footnoteText} font-normal sm:pl-2 ${
-                  theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
-                }`}
-              >
-                {dstLabel}
-              </span>
-              <span className="flex shrink-0 items-center justify-center pr-1.5 pl-0.5" aria-hidden>
-                <span
-                  className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
-                    dstDisplayEnabled
-                      ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
-                      : theme === 'dark'
-                        ? 'border-gray-500 bg-white'
-                        : 'border-gray-400 bg-white'
+            {windFooter?.visible ? (
+              <>
+                <div
+                  className={`inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,14rem)] shrink-0 items-stretch rounded-full border ${
+                    theme === 'dark'
+                      ? 'border-gray-600 bg-gray-800 p-0.5 shadow-none'
+                      : 'border-gray-200 bg-gray-100 p-0.5 shadow-none'
                   }`}
-                />
-              </span>
-            </button>
+                  title="Wind: typical meteorological year file vs Iowa Mesonet ASOS archive"
+                  role="group"
+                  aria-label="Wind data source"
+                >
+                  <button
+                    type="button"
+                    onClick={windFooter.onSelectTmy}
+                    aria-label="Wind from weather file (TMY)"
+                    className={`${unitSegBase} ${
+                      windFooter.source === 'epw'
+                        ? theme === 'dark'
+                          ? 'bg-white text-gray-900 shadow-sm font-bold'
+                          : 'bg-white text-gray-900 shadow-sm font-bold'
+                        : theme === 'dark'
+                          ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                          : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    TMY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={windFooter.onSelectAsos}
+                    aria-label="Wind from ASOS archive"
+                    className={`${unitSegBase} ${
+                      windFooter.source === 'iem'
+                        ? theme === 'dark'
+                          ? 'bg-white text-gray-900 shadow-sm font-bold'
+                          : 'bg-white text-gray-900 shadow-sm font-bold'
+                        : theme === 'dark'
+                          ? 'bg-gray-600/80 text-gray-300 hover:text-white'
+                          : 'bg-gray-50 text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    ASOS
+                  </button>
+                </div>
+                {windFooter.source === 'iem' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={windFooter.onConfigureYears}
+                      className={`max-w-[9rem] shrink-0 truncate text-left ${footnoteText} font-normal tabular-nums underline decoration-gray-400/60 underline-offset-2 ${
+                        theme === 'dark'
+                          ? 'text-gray-300 hover:text-gray-100'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                      title="Change ASOS year range"
+                    >
+                      {windYearRangeShort(windFooter.yearStart, windFooter.yearEnd)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIemDisclaimerOpen(true)}
+                      className={`max-w-[min(100vw-12rem,12rem)] shrink-0 text-left italic underline decoration-gray-400/50 underline-offset-2 ${footnoteText} ${
+                        theme === 'dark'
+                          ? 'text-gray-400 hover:text-gray-300'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      * IEM notice…
+                    </button>
+                  </>
+                ) : null}
+              </>
+            ) : null}
           </div>
         ) : null}
         {showCaptions ? (
@@ -399,7 +553,9 @@ export function SiteFooter({
           </div>
         </div>
       </footer>
+      </div>
       {modal}
+      {iemDisclaimerModal}
     </>
   );
 }

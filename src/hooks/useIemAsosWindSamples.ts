@@ -1,0 +1,141 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { EPWDataRow, EPWMetadata } from '../lib/epwParser';
+import { fetchParsedAsosWindYear } from '../lib/iem/fetchAsosYearWind';
+import { resolveNearestUsAsosForEpw } from '../lib/iem/resolveNearestUsAsosStation';
+import type { CompareWindIemSharedControls } from '../lib/iem/windIemPrefsShared';
+import type { ParsedIemWindRow } from '../lib/iem/parseAsosCsv';
+
+export type IemAsosSamplesState =
+  | {
+      kind: 'epw';
+      loading: false;
+      samples: EPWDataRow[];
+      fallbackNote: null;
+    }
+  | {
+      kind: 'iem';
+      loading: boolean;
+      samples: EPWDataRow[];
+      fallbackNote: string | null;
+    };
+
+function inclusiveYears(start: number, end: number): number[] {
+  const lo = Math.min(start, end);
+  const hi = Math.max(start, end);
+  const out: number[] = [];
+  for (let y = lo; y <= hi; y++) out.push(y);
+  return out;
+}
+
+function samplesToEpwRows(rows: ParsedIemWindRow[]): EPWDataRow[] {
+  return rows
+    .filter(r => Number.isFinite(r.validMs))
+    .map(r => {
+      const d = new Date(r.validMs);
+      // Treat ASOS rows as UTC; this is only used for season/hour filtering + rose binning.
+      const year = d.getUTCFullYear();
+      const month = d.getUTCMonth() + 1;
+      const day = d.getUTCDate();
+      const hour = d.getUTCHours();
+      return {
+        date: d,
+        year,
+        month,
+        day,
+        hour,
+        minute: d.getUTCMinutes(),
+        dayOfYear: 0,
+        windSpeed: r.windMs,
+        windDirection: r.windFromDeg,
+      } as EPWDataRow;
+    });
+}
+
+/**
+ * Fetch raw ASOS hourly wind samples (one row per hour) for the selected IEM year range.
+ * Unlike the EPW-merge path, this keeps the full distribution across years for wind rose binning.
+ */
+export function useIemAsosWindSamples(
+  metadata: EPWMetadata | undefined,
+  iem: Pick<CompareWindIemSharedControls, 'source' | 'iemYearStart' | 'iemYearEnd'>,
+  skip = false
+): IemAsosSamplesState {
+  const years = useMemo(() => inclusiveYears(iem.iemYearStart, iem.iemYearEnd), [iem.iemYearStart, iem.iemYearEnd]);
+
+  const [st, setSt] = useState<IemAsosSamplesState>(() => ({
+    kind: iem.source === 'iem' ? 'iem' : 'epw',
+    loading: false,
+    samples: [],
+    fallbackNote: null,
+  }));
+
+  useEffect(() => {
+    if (skip || iem.source !== 'iem') {
+      setSt({ kind: 'epw', loading: false, samples: [], fallbackNote: null });
+      return;
+    }
+
+    if (!metadata) {
+      setSt({
+        kind: 'iem',
+        loading: false,
+        samples: [],
+        fallbackNote:
+          'This chart has no EPW location metadata, so an Iowa Environmental Mesonet (IEM) ASOS match cannot be run.',
+      });
+      return;
+    }
+
+    if (!years.length) {
+      setSt({ kind: 'iem', loading: false, samples: [], fallbackNote: 'Choose at least one valid IEM year.' });
+      return;
+    }
+
+    let cancelled = false;
+    setSt({ kind: 'iem', loading: true, samples: [], fallbackNote: null });
+
+    (async () => {
+      try {
+        const res = await resolveNearestUsAsosForEpw(metadata);
+        if (cancelled) return;
+        if (res.kind !== 'eligible') {
+          setSt({
+            kind: 'iem',
+            loading: false,
+            samples: [],
+            fallbackNote:
+              res.kind === 'not_us_epw_location'
+                ? res.detail
+                : `No online ASOS station was found in the IEM ${res.network} catalogue for this map location.`,
+          });
+          return;
+        }
+
+        const all: ParsedIemWindRow[] = [];
+        for (const y of years) {
+          const yr = await fetchParsedAsosWindYear(res.stationId, y);
+          if (cancelled) return;
+          all.push(...yr);
+        }
+
+        setSt({ kind: 'iem', loading: false, samples: samplesToEpwRows(all), fallbackNote: null });
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setSt({
+          kind: 'iem',
+          loading: false,
+          samples: [],
+          fallbackNote: `Could not load IEM ASOS wind (${msg}).`,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [skip, iem.source, metadata, years]);
+
+  return st;
+}
+
