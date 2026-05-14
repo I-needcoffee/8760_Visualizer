@@ -93,6 +93,12 @@ const ONE_BUILDING_USA_INDEX =
 const ONE_BUILDING_USA_ZIP_PREFIX =
   'https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/USA_United_States_of_America/';
 
+/** Canadian NRC future-year archives mirrored on Climate One Building (browse by province). */
+const ONE_BUILDING_CANADA_FUTURE_ROOT =
+  'https://climate.onebuilding.org/WMO_Region_4_North_and_Central_America/CAN_Canada_Future/';
+/** U.S. future typical meteorological year (fTMY) EPW pack — separate research project from the Canadian NRC data. */
+const US_FUTURE_FTMY_ZENODO = 'https://zenodo.org/records/6939750';
+
 interface OneBuildingZipEntry {
   relPath: string;
   label: string;
@@ -1328,11 +1334,13 @@ export function MapSelector({
           <button
             type="button"
             aria-pressed={showFuture}
-            aria-label={showFuture ? 'Switch to typical-year weather map' : 'Open future weather data options'}
+            aria-label={
+              showFuture ? 'Return to the historic typical-year station map' : 'Open future weather data options'
+            }
             title={
               showFuture
-                ? 'Return to the global typical-year (TMY) station map'
-                : 'Future weather: upload a ZIP, cache it, or load NRC samples from Climate One Building'
+                ? 'Return to the historic typical-year (TMY) station map'
+                : 'Future weather: samples, country links, or ZIP'
             }
             onClick={() => {
               if (showFuture) {
@@ -1352,7 +1360,9 @@ export function MapSelector({
             {showFuture ? (
               <>
                 <Database className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                <span className="max-w-[10rem] truncate sm:max-w-none">Typical years</span>
+                <span className="min-w-0 text-center text-[10px] font-semibold leading-tight sm:text-sm">
+                  Return to Historic Map
+                </span>
               </>
             ) : (
               <>
@@ -1383,66 +1393,91 @@ export function MapSelector({
       </div>
 
       {showFuture && futureLocations.length === 0 && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[1000] bg-white p-6 rounded-2xl shadow-hard-lg border border-gray-200 max-w-md w-full pointer-events-auto">
-          <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-            <CloudLightning className="w-5 h-5 text-orange-600" />
-            Future Weather Data
+        <div className="pointer-events-auto absolute top-20 left-1/2 z-[1000] max-h-[calc(100dvh-5.5rem)] w-[min(100%,20rem)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white p-3.5 shadow-hard-lg sm:top-24 sm:max-h-[calc(100dvh-6.5rem)] sm:w-full sm:max-w-md">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-gray-900">
+            <CloudLightning className="h-4 w-4 shrink-0 text-orange-600" aria-hidden />
+            Future weather
           </h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Large Zenodo packs are not bundled. You can cache your own ZIP in the browser, or load{' '}
-            <strong className="font-semibold text-gray-800">real</strong> National Research Council Canada
-            future TMY files (Toronto Pearson, multiple warming levels) — served by{' '}
-            <a
-              className="text-orange-700 underline decoration-orange-200 hover:text-orange-900"
-              href="https://climate.onebuilding.org/sources/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Climate One Building
-            </a>
-            .
-          </p>
-          <div className="flex flex-col gap-3">
-            <button 
-              type="button"
-              disabled={nrcSampleLoading || loading}
-              onClick={() => void loadNrcRealFutureSamples()}
-              className="flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {nrcSampleLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Info className="w-4 h-4" aria-hidden />
-              )}
-              Load real NRC samples (Toronto Pearson, 5 projections)
-            </button>
-            
-            <div className="h-px bg-gray-100 my-1" />
 
-            <a 
-              href="https://zenodo.org/records/6939750" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-xl font-medium transition-colors text-sm"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Download from Zenodo
-            </a>
-            
-            <input 
-              type="file" 
-              accept=".zip" 
-              className="hidden" 
-              ref={zipInputRef}
-              onChange={handleZipUpload}
-            />
-            <button 
-              onClick={() => zipInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 rounded-full bg-orange-600 px-4 py-2 text-sm font-medium text-white shadow-hard-sm transition-colors hover:bg-orange-700"
-            >
-              <Upload className="w-4 h-4" />
-              Upload & Cache Dataset
-            </button>
+          <div className="mb-3 space-y-2 text-xs leading-snug text-gray-600">
+            <p>
+              Projected (future-year) weather arrives as ZIP archives. This view is separate from the usual
+              typical-year station map.
+            </p>
+            <p>
+              <strong className="font-semibold text-gray-800">Canada:</strong> future files from Canada&apos;s National
+              Research Council, listed on Climate One Building.
+            </p>
+            <p>
+              <strong className="font-semibold text-gray-800">United States:</strong> future TMY (fTMY) files from a
+              separate research effort, published on Zenodo.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Try the map</p>
+              <button
+                type="button"
+                disabled={nrcSampleLoading || loading}
+                onClick={() => void loadNrcRealFutureSamples()}
+                className="flex w-full items-center justify-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {nrcSampleLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Info className="h-3.5 w-3.5" aria-hidden />
+                )}
+                Load samples
+              </button>
+              <p className="mt-1 text-[11px] leading-snug text-gray-500">
+                Adds Canadian example sites (Toronto Pearson, several warming levels) without downloading archives
+                first.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Download data for your country
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <a
+                  href={ONE_BUILDING_CANADA_FUTURE_ROOT}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
+                  aria-label="Canada: download NRC future weather files from Climate One Building"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Canada — Climate One Building
+                </a>
+                <a
+                  href={US_FUTURE_FTMY_ZENODO}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
+                  aria-label="United States: download fTMY future weather files from Zenodo"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  United States — Zenodo
+                </a>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Use files you already saved
+              </p>
+              <input type="file" accept=".zip" className="hidden" ref={zipInputRef} onChange={handleZipUpload} />
+              <button
+                type="button"
+                onClick={() => zipInputRef.current?.click()}
+                className="flex w-full items-center justify-center gap-1.5 rounded-full bg-orange-600 px-3 py-1.5 text-xs font-medium text-white shadow-hard-sm transition-colors hover:bg-orange-700"
+              >
+                <Upload className="h-3.5 w-3.5" aria-hidden />
+                Upload ZIP
+              </button>
+            </div>
           </div>
         </div>
       )}
