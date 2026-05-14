@@ -1,4 +1,4 @@
-import { useState, useRef, ChangeEvent, useEffect, useMemo } from 'react';
+import { useState, useRef, ChangeEvent, useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Search, Upload, ExternalLink, Database, CloudLightning, Info, Loader2 } from 'lucide-react';
@@ -8,6 +8,15 @@ import { CARTO_LIGHT_ALL_WATER_HEX } from '../lib/constants';
 import { loadNrcFutureSampleLocations } from '../lib/futureNrcSamples';
 import JSZip from 'jszip';
 import { get, set } from 'idb-keyval';
+import {
+  ONE_BUILDING_TMYX_KML_SOURCES,
+  compareDatasetZipsForDisplay,
+  dedupeOneBuildingKmlPins,
+  labelDatasetZip,
+  parseOneBuildingKmlDocument,
+  type OneBuildingDatasetZip,
+  type OneBuildingKmlPin,
+} from '../lib/oneBuildingKmlCatalog';
 
 // Fix Leaflet icon issue in React
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -36,6 +45,10 @@ const futureIcon = new L.Icon({
   popupAnchor: [1, -16],
   shadowSize: [20, 20]
 });
+
+/** Below this zoom we skip fetching/rendering the full TMYx KML layer (large downloads + many markers). */
+const MIN_ZOOM_OB_KML = 5;
+const MAX_OB_KML_MARKERS_VISIBLE = 400;
 
 interface EPWLocation {
   id: string;
@@ -382,6 +395,9 @@ interface MapSelectorProps {
   /** Last library the user picked (historical NREL vs future). Used when re-opening the map to add a comparison file. */
   mapLibraryMode?: 'historical' | 'future';
   onMapLibraryModeChange?: (mode: 'historical' | 'future') => void;
+  /** Controlled from App + SiteFooter map toggle. */
+  showOneBuildingPins?: boolean;
+  onShowOneBuildingPinsChange?: (v: boolean) => void;
 }
 
 // Component to handle bounding box filtering
@@ -474,6 +490,196 @@ function FitBoundsController({
   return null;
 }
 
+/** Keeps React state in sync with the Leaflet map zoom (for KML fetch gating). */
+function MapZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  useMapEvents({
+    zoomend: () => onZoom(map.getZoom()),
+    moveend: () => onZoom(map.getZoom()),
+  });
+  useEffect(() => {
+    onZoom(map.getZoom());
+  }, [map, onZoom]);
+  return null;
+}
+
+function ObKmlBoundsListener({
+  pins,
+  enabled,
+  minZoom,
+  setVisiblePins,
+}: {
+  pins: OneBuildingKmlPin[];
+  enabled: boolean;
+  minZoom: number;
+  setVisiblePins: (p: OneBuildingKmlPin[]) => void;
+}) {
+  const map = useMapEvents({
+    moveend: () => updateVisible(),
+    zoomend: () => updateVisible(),
+  });
+
+  const updateVisible = () => {
+    if (!enabled) {
+      setVisiblePins([]);
+      return;
+    }
+    try {
+      const z = map.getZoom();
+      if (z < minZoom) {
+        setVisiblePins([]);
+        return;
+      }
+      const bounds = map.getBounds();
+      if (!bounds || !bounds.isValid()) return;
+      const paddedBounds = bounds.pad(0.12);
+      const visible = pins.filter(p => {
+        if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return false;
+        return paddedBounds.contains([p.lat, p.lng]);
+      });
+      setVisiblePins(visible.slice(0, MAX_OB_KML_MARKERS_VISIBLE));
+    } catch (e) {
+      console.warn('OB KML bounds update failed:', e);
+    }
+  };
+
+  useEffect(() => {
+    updateVisible();
+  }, [pins, enabled, minZoom]);
+
+  return null;
+}
+
+function listEpwPathsInZip(zip: JSZip): { path: string; basename: string }[] {
+  const out: { path: string; basename: string }[] = [];
+  for (const path of Object.keys(zip.files)) {
+    const entry = zip.files[path];
+    if (!entry || entry.dir) continue;
+    const base = path.split('/').pop() || path;
+    if (!base.toLowerCase().endsWith('.epw')) continue;
+    out.push({ path, basename: base });
+  }
+  return out.sort((a, b) =>
+    a.basename.localeCompare(b.basename, undefined, { sensitivity: 'base', numeric: true })
+  );
+}
+
+function ObKmlPinPopupContent({
+  pin,
+  usaIndexRows,
+  usaZipPrefix,
+  setLoading,
+  setErrorMsg,
+  onEpwSelected,
+}: {
+  pin: OneBuildingKmlPin;
+  usaIndexRows: OneBuildingZipEntry[] | null;
+  usaZipPrefix: string;
+  setLoading: (v: boolean) => void;
+  setErrorMsg: (msg: string | null) => void;
+  onEpwSelected: (parsed: ParsedEPW) => void;
+}) {
+  const onEpwSelectedRef = useRef(onEpwSelected);
+  onEpwSelectedRef.current = onEpwSelected;
+
+  const [selectedArchiveUrl, setSelectedArchiveUrl] = useState(pin.zipUrl);
+  const [epwLoading, setEpwLoading] = useState(false);
+
+  const archiveOptions = useMemo((): OneBuildingDatasetZip[] => {
+    const map = new Map<string, string>();
+    const fromPin =
+      pin.datasetZips && pin.datasetZips.length > 0
+        ? pin.datasetZips
+        : [{ zipUrl: pin.zipUrl, label: labelDatasetZip(pin.stationKey, pin.zipUrl) }];
+    for (const d of fromPin) map.set(d.zipUrl, d.label);
+    if (usaIndexRows) {
+      for (const ob of usaIndexRows) {
+        const url = `${usaZipPrefix}${ob.relPath}`;
+        if (!map.has(url)) map.set(url, ob.label);
+      }
+    }
+    const list: OneBuildingDatasetZip[] = [...map.entries()].map(([zipUrl, label]) => ({ zipUrl, label }));
+    list.sort(compareDatasetZipsForDisplay);
+    return list;
+  }, [pin.datasetZips, pin.zipUrl, pin.stationKey, usaIndexRows, usaZipPrefix]);
+
+  const loadSelectedArchive = async () => {
+    const url = selectedArchiveUrl;
+    if (!url) return;
+    setEpwLoading(true);
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/proxy-binary?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error('Failed to download archive');
+      const buf = await res.arrayBuffer();
+      const z = await JSZip.loadAsync(buf);
+      const epws = listEpwPathsInZip(z);
+      if (epws.length === 0) throw new Error('No EPW file found in this archive.');
+      const pick = epws[0]!;
+      const entry = z.files[pick.path];
+      if (!entry || entry.dir) throw new Error('EPW entry missing in archive.');
+      const text = await entry.async('string');
+      const parsed = parseEPW(text);
+      const label = fileTypeLabelFromBasename(pick.basename);
+      attachParsedEpwSource(parsed, pick.basename, label);
+      onEpwSelectedRef.current(parsed);
+    } catch (e) {
+      console.error(e);
+      setErrorMsg(e instanceof Error ? e.message : 'Could not load weather from this archive.');
+    } finally {
+      setEpwLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const btnPrimary =
+    'w-full rounded-full bg-sky-600 px-3 py-2 text-xs font-semibold text-white shadow-hard-sm transition-colors hover:bg-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+
+  return (
+    <div className="max-w-[min(280px,88vw)] space-y-2 p-2 text-center">
+      <h3 className="line-clamp-3 font-semibold leading-snug text-gray-900">{pin.name}</h3>
+      <p className="text-[11px] leading-snug text-sky-800">
+        OneBuilding TMYx (KML catalog){' '}
+        <span className="whitespace-nowrap">· climate.onebuilding.org</span>
+      </p>
+      <p className="text-left text-[10px] leading-snug text-gray-600">
+        TMY3, TMY2, and other dataset names appear when the KML lists another archive for this station, or when a US
+        site has extra zips on the merged OneBuilding USA index.
+      </p>
+      {archiveOptions.length > 1 ? (
+        <label className="block text-left text-[10px] font-medium uppercase tracking-wide text-gray-600">
+          Weather archive
+          <select
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-medium text-gray-900"
+            value={selectedArchiveUrl}
+            onChange={e => setSelectedArchiveUrl(e.target.value)}
+            disabled={epwLoading}
+          >
+            {archiveOptions.map(opt => (
+              <option key={opt.zipUrl} value={opt.zipUrl}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : archiveOptions[0] ? (
+        <p className="text-left text-[10px] leading-snug text-gray-600">
+          Archive: <span className="font-medium text-gray-800">{archiveOptions[0].label}</span>
+        </p>
+      ) : null}
+      <button
+        type="button"
+        disabled={epwLoading || !selectedArchiveUrl}
+        onClick={() => void loadSelectedArchive()}
+        className={btnPrimary}
+      >
+        {epwLoading ? 'Loading weather file…' : 'Load weather file'}
+      </button>
+    </div>
+  );
+}
+
 export function MapSelector({
   onSelect,
   isSelectingCompare,
@@ -481,6 +687,8 @@ export function MapSelector({
   initialZoom,
   mapLibraryMode = 'historical',
   onMapLibraryModeChange,
+  showOneBuildingPins = false,
+  onShowOneBuildingPinsChange,
 }: MapSelectorProps) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -503,6 +711,16 @@ export function MapSelector({
   const [nrcSampleLoading, setNrcSampleLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+
+  /** OneBuilding.org published TMYx location KMLs (global coverage); toggled from SiteFooter on map screen. */
+  const [liveMapZoom, setLiveMapZoom] = useState(initialZoom || 7);
+  const [obKmlPins, setObKmlPins] = useState<OneBuildingKmlPin[]>([]);
+  const [visibleObKmlPins, setVisibleObKmlPins] = useState<OneBuildingKmlPin[]>([]);
+  const [obKmlLoading, setObKmlLoading] = useState(false);
+  const [obKmlLoadProgress, setObKmlLoadProgress] = useState(0);
+  const [obKmlError, setObKmlError] = useState<string | null>(null);
+  const obKmlLoadedRef = useRef(false);
+  const obKmlFetchGenRef = useRef(0);
   
   // Default to Seattle region or initialCenter
   const [mapCenter, setMapCenter] = useState<[number, number]>(
@@ -510,11 +728,18 @@ export function MapSelector({
   );
   const [mapZoom, setMapZoom] = useState(initialZoom || 7);
 
+  useEffect(() => {
+    setLiveMapZoom(mapZoom);
+  }, [mapZoom]);
+
   // Sync with initialCenter if it changes
   useEffect(() => {
     if (initialCenter && !isNaN(initialCenter[0]) && !isNaN(initialCenter[1])) {
       setMapCenter(initialCenter);
-      if (initialZoom) setMapZoom(initialZoom);
+      if (initialZoom) {
+        setMapZoom(initialZoom);
+        setLiveMapZoom(initialZoom);
+      }
     }
   }, [initialCenter, initialZoom]);
 
@@ -557,6 +782,7 @@ export function MapSelector({
               typeof lng === 'number' && !isNaN(lng) && isFinite(lng)) {
             setMapCenter([lat, lng]);
             setMapZoom(8);
+            setLiveMapZoom(8);
           }
         },
         (error) => {
@@ -732,6 +958,71 @@ export function MapSelector({
     () => activeGroups.map(g => mergeOneBuildingIntoGroup(g, usaObZipByStation)),
     [activeGroups, usaObZipByStation]
   );
+
+  const onLiveMapZoom = useCallback((z: number) => {
+    setLiveMapZoom(z);
+  }, []);
+
+  useEffect(() => {
+    if (!showFuture) return;
+    onShowOneBuildingPinsChange?.(false);
+  }, [showFuture, onShowOneBuildingPinsChange]);
+
+  useEffect(() => {
+    if (showOneBuildingPins) return;
+    obKmlFetchGenRef.current += 1;
+    obKmlLoadedRef.current = false;
+    setObKmlPins([]);
+    setVisibleObKmlPins([]);
+    setObKmlLoading(false);
+    setObKmlLoadProgress(0);
+    setObKmlError(null);
+  }, [showOneBuildingPins]);
+
+  useEffect(() => {
+    if (!showOneBuildingPins || showFuture) return;
+    if (liveMapZoom < MIN_ZOOM_OB_KML) return;
+    if (obKmlLoadedRef.current) return;
+
+    const startGen = obKmlFetchGenRef.current;
+    let cancelled = false;
+
+    void (async () => {
+      setObKmlLoading(true);
+      setObKmlError(null);
+      setObKmlLoadProgress(0);
+      try {
+        const merged: OneBuildingKmlPin[] = [];
+        for (let i = 0; i < ONE_BUILDING_TMYX_KML_SOURCES.length; i++) {
+          if (cancelled || obKmlFetchGenRef.current !== startGen) return;
+          const src = ONE_BUILDING_TMYX_KML_SOURCES[i]!;
+          const res = await fetch(`/api/proxy-epw?url=${encodeURIComponent(src.url)}`);
+          if (!res.ok) throw new Error(`${src.label}: HTTP ${res.status}`);
+          const xml = await res.text();
+          merged.push(...parseOneBuildingKmlDocument(xml, src.id));
+          setObKmlLoadProgress(i + 1);
+        }
+        if (cancelled || obKmlFetchGenRef.current !== startGen) return;
+        const deduped = dedupeOneBuildingKmlPins(merged);
+        obKmlLoadedRef.current = true;
+        setObKmlPins(deduped);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled && obKmlFetchGenRef.current === startGen) {
+          setObKmlError(e instanceof Error ? e.message : 'Failed to load OneBuilding KML catalogs.');
+          obKmlLoadedRef.current = false;
+        }
+      } finally {
+        if (!cancelled && obKmlFetchGenRef.current === startGen) {
+          setObKmlLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showOneBuildingPins, showFuture, liveMapZoom]);
 
   useEffect(() => {
     if (showFuture) return;
@@ -967,6 +1258,40 @@ export function MapSelector({
         </div>
       )}
 
+      {showOneBuildingPins && !showFuture && liveMapZoom < MIN_ZOOM_OB_KML && !obKmlLoading ? (
+        <div className="pointer-events-none absolute top-[5.25rem] left-1/2 z-[1500] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-2.5 text-center text-xs font-medium text-amber-950 shadow-hard-md sm:top-[6rem] sm:text-sm">
+          please zoom in to see OneBuilding map locations.
+        </div>
+      ) : null}
+
+      {obKmlError ? (
+        <div className="absolute top-[5.25rem] left-1/2 z-[1500] flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-hard-md sm:top-[6rem]">
+          <span className="min-w-0 flex-1 leading-snug">
+            <span className="font-semibold">TMYx KML:</span> {obKmlError}
+          </span>
+          <button
+            type="button"
+            onClick={() => setObKmlError(null)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-bold leading-none text-amber-900 transition-colors hover:bg-amber-200/70"
+            aria-label="Dismiss KML error"
+          >
+            &times;
+          </button>
+        </div>
+      ) : null}
+
+      {obKmlLoading ? (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 z-[1500] flex -translate-x-1/2 items-center gap-2 rounded-full border border-sky-200 bg-white/95 px-4 py-2 text-xs font-medium text-sky-950 shadow-hard-md sm:text-sm">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-600" aria-hidden />
+          <span>
+            Loading OneBuilding TMYx KML…{' '}
+            <span className="tabular-nums font-semibold">
+              {obKmlLoadProgress}/{ONE_BUILDING_TMYX_KML_SOURCES.length}
+            </span>
+          </span>
+        </div>
+      ) : null}
+
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-3xl px-4 flex flex-col sm:flex-row gap-2 items-center pointer-events-none">
         <div className="relative flex-1 w-full pointer-events-auto bg-white p-2 rounded-full shadow-hard-md border border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div className="relative flex min-w-0 flex-1 flex-row items-center">
@@ -983,7 +1308,7 @@ export function MapSelector({
             )}
             <input
               type="text"
-              placeholder={`City, airport, landmark — Enter to zoom (${activeGroupsWithOneBuilding.length || '…'} ${showFuture ? 'future' : 'global'} stations)`}
+              placeholder="City, airport, or landmark"
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => {
@@ -1000,46 +1325,42 @@ export function MapSelector({
           <p id="map-search-hint" className="sr-only">
             Enter a city, airport, landmark, or address, then press Enter. The map zooms to that location and frames the two closest weather stations.
           </p>
-          <div
-            className="inline-flex h-11 w-fit max-w-[18rem] self-center items-stretch rounded-full border border-gray-200 bg-gray-100 p-1 shadow-hard-sm gap-0.5 shrink-0 sm:max-w-none sm:self-auto"
-            role="group"
-            aria-label="Weather dataset source"
-          >
-            <button
-              type="button"
-              aria-pressed={!showFuture}
-              onClick={() => {
+          <button
+            type="button"
+            aria-pressed={showFuture}
+            aria-label={showFuture ? 'Switch to typical-year weather map' : 'Open future weather data options'}
+            title={
+              showFuture
+                ? 'Return to the global typical-year (TMY) station map'
+                : 'Future weather: upload a ZIP, cache it, or load NRC samples from Climate One Building'
+            }
+            onClick={() => {
+              if (showFuture) {
                 setShowFuture(false);
                 onMapLibraryModeChange?.('historical');
-              }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 ${
-                !showFuture
-                  ? 'bg-gray-300 text-gray-900 shadow-md hover:bg-gray-600 hover:text-white'
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'
-              }`}
-              title="NREL global EPW database (typical years)"
-            >
-              <Database className="w-4 h-4 shrink-0 opacity-80" />
-              <span className="truncate">Historical</span>
-            </button>
-            <button
-              type="button"
-              aria-pressed={showFuture}
-              onClick={() => {
+              } else {
                 setShowFuture(true);
                 onMapLibraryModeChange?.('future');
-              }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
-                showFuture
-                  ? 'bg-white text-orange-700 shadow-sm ring-1 ring-orange-200/80'
-                  : 'text-gray-500 hover:text-orange-800 hover:bg-white/60'
-              }`}
-              title="Future weather: upload a ZIP, cache it, or load NRC samples from Climate One Building"
-            >
-              <CloudLightning className="w-4 h-4 shrink-0" />
-              <span className="truncate">Future</span>
-            </button>
-          </div>
+              }
+            }}
+            className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 self-center rounded-full border px-3 text-xs font-semibold shadow-hard-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 sm:h-10 sm:px-4 sm:text-sm ${
+              showFuture
+                ? 'border-orange-200 bg-white text-orange-800 ring-1 ring-orange-200/80 focus-visible:ring-orange-400'
+                : 'border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 focus-visible:ring-gray-400'
+            }`}
+          >
+            {showFuture ? (
+              <>
+                <Database className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                <span className="max-w-[10rem] truncate sm:max-w-none">Typical years</span>
+              </>
+            ) : (
+              <>
+                <CloudLightning className="h-4 w-4 shrink-0 text-orange-600" aria-hidden />
+                <span className="max-w-[10rem] truncate sm:max-w-none">Future weather</span>
+              </>
+            )}
+          </button>
         </div>
         
         <div className="flex items-center gap-2 pointer-events-auto">
@@ -1058,16 +1379,6 @@ export function MapSelector({
           >
             <Upload className="w-5 h-5" />
           </button>
-          
-          <a
-            href="https://climate.onebuilding.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center w-12 h-12 bg-white text-gray-600 rounded-full shadow-hard-md hover:bg-gray-50 transition-colors border border-gray-200"
-            title="OneBuilding EPW"
-          >
-            <ExternalLink className="w-5 h-5" />
-          </a>
         </div>
       </div>
 
@@ -1153,7 +1464,14 @@ export function MapSelector({
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             />
+            <MapZoomTracker onZoom={onLiveMapZoom} />
             <MapBoundsListener groups={activeGroupsWithOneBuilding} setVisibleGroups={setVisibleGroups} />
+            <ObKmlBoundsListener
+              pins={obKmlPins}
+              enabled={showOneBuildingPins && !showFuture}
+              minZoom={MIN_ZOOM_OB_KML}
+              setVisiblePins={setVisibleObKmlPins}
+            />
 
             {searchPin &&
               Number.isFinite(searchPin.lat) &&
@@ -1169,6 +1487,35 @@ export function MapSelector({
                   }}
                 />
               )}
+
+            {visibleObKmlPins.map(pin => (
+              <CircleMarker
+                key={pin.id}
+                center={[pin.lat, pin.lng]}
+                radius={6}
+                pathOptions={{
+                  color: '#0369a1',
+                  fillColor: '#bae6fd',
+                  fillOpacity: 0.92,
+                  weight: 1.5,
+                }}
+              >
+                <Popup className="rounded-2xl">
+                  <ObKmlPinPopupContent
+                    key={pin.id}
+                    pin={pin}
+                    usaIndexRows={usaObZipByStation?.get(pin.stationKey) ?? null}
+                    usaZipPrefix={ONE_BUILDING_USA_ZIP_PREFIX}
+                    setLoading={setLoading}
+                    setErrorMsg={setErrorMsg}
+                    onEpwSelected={parsed => {
+                      onMapLibraryModeChange?.('historical');
+                      onSelect(parsed);
+                    }}
+                  />
+                </Popup>
+              </CircleMarker>
+            ))}
 
             {visibleGroups.map(group => {
               if (typeof group.lat !== 'number' || isNaN(group.lat) || !isFinite(group.lat) ||

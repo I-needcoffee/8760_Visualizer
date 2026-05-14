@@ -49,11 +49,11 @@ export type { CompareWindIemSharedControls, WindFileSource } from './lib/iem/win
 const TUTORIAL_HOVER_HINTS_KEY = 'climate-compare-tutorial-hover-hints';
 
 function readTutorialHoverHintsEnabled(): boolean {
-  if (typeof window === 'undefined') return true;
+  if (typeof window === 'undefined') return false;
   try {
-    return window.localStorage.getItem(TUTORIAL_HOVER_HINTS_KEY) !== 'false';
+    return window.localStorage.getItem(TUTORIAL_HOVER_HINTS_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -393,6 +393,7 @@ export default function App() {
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
   const [dstDisplayEnabled, setDstDisplayEnabled] = useState(false);
   const [mapLibraryMode, setMapLibraryMode] = useState<'historical' | 'future'>('historical');
+  const [showOneBuildingMapPins, setShowOneBuildingMapPins] = useState(false);
 
   /** When the EPW header says the site observes DST, default the display toggle on for this file set. */
   useEffect(() => {
@@ -923,11 +924,22 @@ export default function App() {
             initialZoom={selectedFiles.length > 0 ? 10 : undefined}
             mapLibraryMode={mapLibraryMode}
             onMapLibraryModeChange={setMapLibraryMode}
+            showOneBuildingPins={showOneBuildingMapPins}
+            onShowOneBuildingPinsChange={setShowOneBuildingMapPins}
           />
         </div>
         <div className="shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
           <div className="mx-auto max-w-[1600px]">
-            <SiteFooter theme={theme} exportMode={false} windFooter={null} iemWindDatasetActive={false} />
+            <SiteFooter
+              theme={theme}
+              exportMode={false}
+              windFooter={null}
+              iemWindDatasetActive={false}
+              oneBuildingMapPins={{
+                visible: showOneBuildingMapPins,
+                onVisibleChange: setShowOneBuildingMapPins,
+              }}
+            />
           </div>
         </div>
       </div>
