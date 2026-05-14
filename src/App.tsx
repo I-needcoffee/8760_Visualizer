@@ -916,7 +916,7 @@ export default function App() {
             <X className="w-4 h-4" /> Cancel Selection
           </button>
         )}
-        <div className="relative min-h-0 flex-1">
+        <div className="relative z-0 min-h-0 flex-1">
           <MapSelector 
             onSelect={handleSelectEPW} 
             isSelectingCompare={isSelectingFile && selectedFiles.length > 0} 
@@ -928,7 +928,7 @@ export default function App() {
             onShowOneBuildingPinsChange={setShowOneBuildingMapPins}
           />
         </div>
-        <div className="shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
+        <div className="relative z-[5000] shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
           <div className="mx-auto max-w-[1600px]">
             <SiteFooter
               theme={theme}

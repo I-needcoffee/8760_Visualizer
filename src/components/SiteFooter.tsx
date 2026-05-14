@@ -18,10 +18,9 @@ export type SiteFooterOneBuildingMapPinsProps = {
   onVisibleChange: (v: boolean) => void;
 };
 
-const SUPPORT_MODAL_LINE_1 =
+const DONATE_MODAL_LINE_1 =
   'Created with the intent of spreading knowledge and climate resources.';
-const SUPPORT_MODAL_LINE_2 =
-  'Support for continued development and hosting is greatly appreciated.';
+const DONATE_MODAL_LINE_2 = 'Donations toward continued development are greatly appreciated.';
 
 export type SiteFooterExportCaption = {
   place: string;
@@ -29,7 +28,7 @@ export type SiteFooterExportCaption = {
 };
 
 /**
- * Bottom strip: optional export captions + Created at / Support (pill hidden in export mode).
+ * Bottom strip: optional export captions + Created at / Donate (pill hidden in export mode).
  */
 export function SiteFooter({
   theme,
@@ -68,26 +67,26 @@ export function SiteFooter({
   /** Map screen only: OneBuilding TMYx pin layer (matches DST pill control). */
   oneBuildingMapPins?: SiteFooterOneBuildingMapPinsProps | null;
 }) {
-  const [supportOpen, setSupportOpen] = useState(false);
+  const [donateModalOpen, setDonateModalOpen] = useState(false);
   const [iemDisclaimerOpen, setIemDisclaimerOpen] = useState(false);
   const isMobile = useIsMobileMaxSm();
 
   useEffect(() => {
-    if (!supportOpen) return;
+    if (!donateModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSupportOpen(false);
+      if (e.key === 'Escape') setDonateModalOpen(false);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [supportOpen]);
+  }, [donateModalOpen]);
 
   useEffect(() => {
-    if (supportOpen || iemDisclaimerOpen) document.body.style.overflow = 'hidden';
+    if (donateModalOpen || iemDisclaimerOpen) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = '';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [supportOpen, iemDisclaimerOpen]);
+  }, [donateModalOpen, iemDisclaimerOpen]);
 
   useEffect(() => {
     if (!iemDisclaimerOpen) return;
@@ -127,16 +126,16 @@ export function SiteFooter({
         ? `font-mono ${footnoteText} font-normal text-gray-400`
         : `font-mono ${footnoteText} font-normal text-gray-500`;
 
-  const modal =
-    supportOpen &&
+  const donateModal =
+    donateModalOpen &&
     createPortal(
       <div
-        className="fixed inset-0 z-[240] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="support-modal-title"
+        aria-labelledby="donate-modal-title"
         onMouseDown={e => {
-          if (e.target === e.currentTarget) setSupportOpen(false);
+          if (e.target === e.currentTarget) setDonateModalOpen(false);
         }}
       >
         <div
@@ -146,7 +145,7 @@ export function SiteFooter({
         >
           <button
             type="button"
-            onClick={() => setSupportOpen(false)}
+            onClick={() => setDonateModalOpen(false)}
             className={`absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 ${
               theme === 'dark' ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
             }`}
@@ -154,16 +153,16 @@ export function SiteFooter({
           >
             <X className="h-4 w-4" />
           </button>
-          <h2 id="support-modal-title" className="sr-only">
-            Support development
+          <h2 id="donate-modal-title" className="sr-only">
+            Donate
           </h2>
           <div
             className={`px-2 pr-12 text-center font-light sm:px-4 ${
               theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
             }`}
           >
-            <p className="text-sm leading-relaxed sm:text-base">{SUPPORT_MODAL_LINE_1}</p>
-            <p className="mt-3 text-sm leading-relaxed sm:text-base">{SUPPORT_MODAL_LINE_2}</p>
+            <p className="text-sm leading-relaxed sm:text-base">{DONATE_MODAL_LINE_1}</p>
+            <p className="mt-3 text-sm leading-relaxed sm:text-base">{DONATE_MODAL_LINE_2}</p>
           </div>
           <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:gap-3">
             <a
@@ -192,7 +191,7 @@ export function SiteFooter({
     iemDisclaimerOpen &&
     createPortal(
       <div
-        className="fixed inset-0 z-[245] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[20050] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="iem-disclaimer-title"
@@ -228,7 +227,7 @@ export function SiteFooter({
 
   const showCaptions = Boolean(exportCaptions?.length);
 
-  /** Export: plain attribution link, no pill/support; captions + link vertically centered as a row. */
+  /** Export: plain attribution link, no pill/donate; captions + link vertically centered as a row. */
   if (exportMode) {
     return (
       <>
@@ -300,7 +299,7 @@ export function SiteFooter({
 
   const pillH = 'h-6';
   /** Slightly below inner row height (h-5) so the chip sits with equal top/bottom inset. */
-  const supportChipH = 'h-4.5';
+  const donateChipH = 'h-4.5';
 
   /**
    * Metric / Imperial: grey trough; selected = white, unselected = light grey.
@@ -587,38 +586,38 @@ export function SiteFooter({
             </div>
           </div>
         ) : null}
-        <div className="pointer-events-none ml-auto flex h-6 min-w-0 max-w-[min(100vw-1rem,22rem)] items-center self-center leading-none">
+        <div className="relative z-20 ml-auto flex h-6 min-w-0 max-w-[min(100vw-1rem,22rem)] items-center self-center leading-none">
           <div
-            className={`pointer-events-auto box-border flex h-6 min-w-0 max-w-full items-center overflow-hidden rounded-full border p-0.5 ${pillShell}`}
+            className={`box-border flex h-6 min-w-0 max-w-full items-center overflow-hidden rounded-full border p-0.5 ${pillShell}`}
           >
             <a
               href={CLIMATE_CANVAS}
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex h-5 min-h-0 min-w-0 flex-1 items-center truncate rounded-l-full px-2 ${footnoteText} ${footerLinkClass} sm:px-2.5 ${
+              className={`relative z-0 flex h-5 min-h-0 min-w-0 flex-1 items-center truncate rounded-l-full px-2 ${footnoteText} ${footerLinkClass} sm:px-2.5 ${
                 theme === 'dark' ? '' : 'bg-white'
               }`}
             >
               Created with ClimateCanvas.app
             </a>
-            <div className="flex h-5 shrink-0 items-center justify-center pl-0.5 pr-0.5">
+            <div className="relative z-10 flex h-5 shrink-0 items-center justify-center pl-0.5 pr-0.5">
               <button
                 type="button"
-                onClick={() => setSupportOpen(true)}
-                className={`inline-flex ${supportChipH} min-h-0 max-w-full items-center justify-center border-l pl-1.5 pr-2 text-left ${footnoteText} font-normal transition-colors duration-200 sm:pl-1.5 sm:pr-2 ${
+                onClick={() => setDonateModalOpen(true)}
+                className={`inline-flex ${donateChipH} min-h-0 max-w-full items-center justify-center border-l pl-1.5 pr-2 text-left ${footnoteText} font-normal transition-colors duration-200 sm:pl-1.5 sm:pr-2 ${
                   theme === 'dark'
                     ? 'ml-0.5 rounded-l-full rounded-r-full border-white/10 bg-gray-800/50 text-gray-200 hover:bg-gray-800/70 hover:text-white'
                     : 'ml-0.5 rounded-l-full rounded-r-full border-gray-200/90 bg-gray-100 text-gray-800 shadow-sm hover:bg-gray-200/90'
                 }`}
               >
-                Support
+                Donate
               </button>
             </div>
           </div>
         </div>
       </footer>
       </div>
-      {modal}
+      {donateModal}
       {iemDisclaimerModal}
     </>
   );
