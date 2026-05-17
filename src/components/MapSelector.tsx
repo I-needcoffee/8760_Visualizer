@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { parseEPW, ParsedEPW, attachParsedEpwSource } from '../lib/epwParser';
 import { CARTO_LIGHT_ALL_WATER_HEX } from '../lib/constants';
 import { loadNrcFutureSampleLocations } from '../lib/futureNrcSamples';
+import { loadCachedOneBuildingKmlPins, saveCachedOneBuildingKmlPins } from '../lib/oneBuildingKmlCache';
 import JSZip from 'jszip';
 import { get, set } from 'idb-keyval';
 import {
@@ -726,6 +727,7 @@ export function MapSelector({
   const [obKmlLoadProgress, setObKmlLoadProgress] = useState(0);
   const [obKmlError, setObKmlError] = useState<string | null>(null);
   const obKmlLoadedRef = useRef(false);
+  const obKmlSessionFetchedRef = useRef(false);
   const obKmlFetchGenRef = useRef(0);
   
   // Default to Seattle region or initialCenter
@@ -977,46 +979,60 @@ export function MapSelector({
   useEffect(() => {
     if (showOneBuildingPins) return;
     obKmlFetchGenRef.current += 1;
-    obKmlLoadedRef.current = false;
-    setObKmlPins([]);
-    setVisibleObKmlPins([]);
     setObKmlLoading(false);
-    setObKmlLoadProgress(0);
-    setObKmlError(null);
+    setVisibleObKmlPins([]);
   }, [showOneBuildingPins]);
 
   useEffect(() => {
     if (!showOneBuildingPins || showFuture) return;
     if (liveMapZoom < MIN_ZOOM_OB_KML) return;
-    if (obKmlLoadedRef.current) return;
+    if (obKmlSessionFetchedRef.current) return;
 
     const startGen = obKmlFetchGenRef.current;
     let cancelled = false;
 
     void (async () => {
+      if (!obKmlLoadedRef.current) {
+        const cached = await loadCachedOneBuildingKmlPins();
+        if (cancelled || obKmlFetchGenRef.current !== startGen) return;
+        if (cached?.length) {
+          obKmlLoadedRef.current = true;
+          setObKmlPins(cached);
+        }
+      }
+
       setObKmlLoading(true);
       setObKmlError(null);
       setObKmlLoadProgress(0);
+      let completed = 0;
+
       try {
-        const merged: OneBuildingKmlPin[] = [];
-        for (let i = 0; i < ONE_BUILDING_TMYX_KML_SOURCES.length; i++) {
-          if (cancelled || obKmlFetchGenRef.current !== startGen) return;
-          const src = ONE_BUILDING_TMYX_KML_SOURCES[i]!;
-          const res = await fetch(`/api/proxy-epw?url=${encodeURIComponent(src.url)}`);
-          if (!res.ok) throw new Error(`${src.label}: HTTP ${res.status}`);
-          const xml = await res.text();
-          merged.push(...parseOneBuildingKmlDocument(xml, src.id));
-          setObKmlLoadProgress(i + 1);
-        }
+        const chunks = await Promise.all(
+          ONE_BUILDING_TMYX_KML_SOURCES.map(async src => {
+            const res = await fetch(`/api/proxy-epw?url=${encodeURIComponent(src.url)}`);
+            if (!res.ok) throw new Error(`${src.label}: HTTP ${res.status}`);
+            const xml = await res.text();
+            const rows = parseOneBuildingKmlDocument(xml, src.id);
+            if (!cancelled && obKmlFetchGenRef.current === startGen) {
+              completed += 1;
+              setObKmlLoadProgress(completed);
+            }
+            return rows;
+          })
+        );
         if (cancelled || obKmlFetchGenRef.current !== startGen) return;
-        const deduped = dedupeOneBuildingKmlPins(merged);
+        const deduped = dedupeOneBuildingKmlPins(chunks.flat());
         obKmlLoadedRef.current = true;
+        obKmlSessionFetchedRef.current = true;
         setObKmlPins(deduped);
+        void saveCachedOneBuildingKmlPins(deduped);
       } catch (e) {
         console.error(e);
         if (!cancelled && obKmlFetchGenRef.current === startGen) {
           setObKmlError(e instanceof Error ? e.message : 'Failed to load OneBuilding KML catalogs.');
-          obKmlLoadedRef.current = false;
+          if (!obKmlLoadedRef.current) {
+            setObKmlPins([]);
+          }
         }
       } finally {
         if (!cancelled && obKmlFetchGenRef.current === startGen) {

@@ -7,10 +7,29 @@ import type { EPWDataRow } from './epwParser';
 import { EPW_COLUMNS } from './epwParser';
 import { explorerUsesDailyAvgBarExtents, meanDailyLowHighForRows } from './explorerBarExtents';
 import { EXPLORER_MONTH_LABELS_SHORT } from './explorerChartSvgLayout';
+import {
+  computeUtciCategoryShares,
+  computeUtciComfortMatrix,
+  formatUtciCategoryLabel,
+  type UtciCategoryShare,
+  type UtciComfortMatrix,
+  UTCI_COMFORT_CATEGORY,
+} from './utciModel';
 
 export type TutorialQuickStat = { label: string; value: string };
 
 export type TutorialQuickStatBlock = { heading?: string; rows: TutorialQuickStat[] };
+
+export type TutorialUtciQuickStats = {
+  categoryShares: UtciCategoryShare[];
+  comfortPercent: number;
+  hoursCounted: number;
+  comfortMatrix: UtciComfortMatrix;
+};
+
+function formatPercent(v: number, digits = 1): string {
+  return Number.isFinite(v) ? `${v.toFixed(digits)} %` : '—';
+}
 
 const COLUMN = Object.fromEntries(EPW_COLUMNS.map(c => [c.id, c])) as Record<string, (typeof EPW_COLUMNS)[number]>;
 
@@ -224,21 +243,67 @@ export function computeTutorialGuideQuickStats(opts: {
   }
 
   if (chartType === 'utci') {
+    const includeSun = live.includeSun ?? true;
+    const includeWind = live.includeWind ?? true;
+    const { shares, comfortPercent, hoursCounted } = computeUtciCategoryShares(filtered, {
+      includeSun,
+      includeWind,
+    });
+
+    if (!hoursCounted) {
+      return [
+        {
+          heading: 'UTCI stress categories',
+          rows: [{ label: 'Filtered range', value: 'No hours match your month/hour filters.' }],
+        },
+      ];
+    }
+
+    const categoryRows: TutorialQuickStat[] = shares.map(s => ({
+      label: s.label,
+      value: formatPercent(s.percentage),
+    }));
+
     return [
-      blockForColumn(filtered, 'dryBulbTemperature', unitSystem, 'Air temperature (feeds the comfort model)'),
-      blockForColumn(filtered, 'relativeHumidity', unitSystem, 'Relative humidity (feeds the comfort model)'),
-      windSpeedBlock(filtered, unitSystem),
       {
-        heading: 'Modeled comfort (UTCI)',
-        rows: [
-          {
-            label: 'Summary on the card',
-            value: 'Use the Stats control on the chart for UTCI high, low, and average.',
-          },
-        ],
+        heading: 'Time in comfort (no thermal stress)',
+        rows: [{ label: 'Share of filtered hours', value: formatPercent(comfortPercent) }],
+      },
+      {
+        heading: 'UTCI stress categories (% of filtered hours)',
+        rows: categoryRows,
       },
     ];
   }
 
   return [blockForColumn(filtered, 'dryBulbTemperature', unitSystem)];
 }
+
+/** UTCI category breakdown + comfort table for guided Outdoor comfort panel. */
+export function computeTutorialUtciQuickStats(opts: {
+  rows: EPWDataRow[] | undefined;
+  filter: GlobalFilterState;
+  live: TutorialLiveSnapshot;
+}): TutorialUtciQuickStats | null {
+  const { rows, filter, live } = opts;
+  if (!rows?.length) return null;
+
+  const filtered = filterRows(rows, filter);
+  if (!filtered.length) return null;
+
+  const includeSun = live.includeSun ?? true;
+  const includeWind = live.includeWind ?? true;
+  const modelOpts = { includeSun, includeWind };
+
+  const { shares, comfortPercent, hoursCounted } = computeUtciCategoryShares(filtered, modelOpts);
+  const comfortMatrix = computeUtciComfortMatrix(rows, filter);
+
+  return {
+    categoryShares: shares,
+    comfortPercent,
+    hoursCounted,
+    comfortMatrix,
+  };
+}
+
+export { formatUtciCategoryLabel, UTCI_COMFORT_CATEGORY };

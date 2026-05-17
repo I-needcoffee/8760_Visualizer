@@ -17,6 +17,8 @@ export interface TutorialLiveSnapshot {
   utciColorMode?: TutorialUtciMode;
   includeSun?: boolean;
   includeWind?: boolean;
+  /** Guided comfort table: period row id to highlight on the UTCI heatmap/bars. */
+  utciFocusPeriodId?: string | null;
   windRoseBins?: number;
   radiusVarId?: string;
   radiusVarName?: string;
@@ -26,6 +28,12 @@ type Ctx = {
   enabled: boolean;
   snapshot: TutorialLiveSnapshot;
   report: (p: Partial<TutorialLiveSnapshot>) => void;
+  /** Guided UTCI panel: apply exposure + timeframe focus on the chart card. */
+  requestUtciSelection: (selection: {
+    periodId: string;
+    includeSun: boolean;
+    includeWind: boolean;
+  }) => void;
   clear: () => void;
 };
 
@@ -57,12 +65,33 @@ export function TutorialLiveProvider({
     },
     [enabled]
   );
+  const requestUtciSelection = useCallback(
+    (selection: { periodId: string; includeSun: boolean; includeWind: boolean }) => {
+      if (!enabled) return;
+      setSnapshot(prev => {
+        if (
+          prev.includeSun === selection.includeSun &&
+          prev.includeWind === selection.includeWind &&
+          prev.utciFocusPeriodId === selection.periodId
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          includeSun: selection.includeSun,
+          includeWind: selection.includeWind,
+          utciFocusPeriodId: selection.periodId,
+        };
+      });
+    },
+    [enabled]
+  );
   useEffect(() => {
     if (!enabled) clear();
   }, [enabled, clear]);
   const value = useMemo(
-    () => ({ enabled, snapshot, report, clear }),
-    [enabled, snapshot, report, clear]
+    () => ({ enabled, snapshot, report, requestUtciSelection, clear }),
+    [enabled, snapshot, report, requestUtciSelection, clear]
   );
   return <TutorialLiveContext.Provider value={value}>{children}</TutorialLiveContext.Provider>;
 }

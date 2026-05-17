@@ -7,7 +7,7 @@ import 'rc-slider/assets/index.css';
 import { EPWDataRow } from '../lib/epwParser';
 // @ts-ignore
 import tc from 'jsthermalcomfort';
-import { X, Settings2 } from 'lucide-react';
+import { Sun, Wind, X, Settings2 } from 'lucide-react';
 import { InteractiveLegend, GradientDef, getLegendBarHeightPx, getLegendLabelBasePx } from './InteractiveLegend';
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareUtciSharedControls } from '../App';
@@ -38,6 +38,14 @@ import {
   explorerSvgHeightPx,
   EXPLORER_LEGEND_ABOVE_CHART_WRAP_CLASS,
 } from '../lib/explorerChartSvgLayout';
+import {
+  getUtciCategoryForValue,
+  getUtciComfortPeriodById,
+  heatmapSlotInUtciComfortPeriod,
+  rowMatchesUtciComfortPeriod,
+  UTCI_COLORS,
+  utciPeriodHeatmapBounds,
+} from '../lib/utciModel';
 
 interface UtciExplorerProps {
   data: EPWDataRow[];
@@ -64,19 +72,6 @@ interface UtciExplorerProps {
   pairSuppressFooterLegend?: boolean;
 }
 
-const UTCI_COLORS: Record<string, string> = {
-  'extreme cold stress': '#000033',
-  'very strong cold stress': '#000099',
-  'strong cold stress': '#0000ff',
-  'moderate cold stress': '#0066ff',
-  'slight cold stress': '#00ccff',
-  'no thermal stress': '#00ff00',
-  'moderate heat stress': '#ffcc00',
-  'strong heat stress': '#ff6600',
-  'very strong heat stress': '#ff0000',
-  'extreme heat stress': '#800000'
-};
-
 // Create a continuous color scale for UTCI categories
 const UTCI_THRESHOLDS = [-40, -27, -13, 0, 9, 26, 32, 38, 46, 50];
 const UTCI_COLOR_VALUES = Object.values(UTCI_COLORS);
@@ -85,19 +80,6 @@ const utciCategoryScale = d3.scaleLinear<string>()
   .domain(UTCI_THRESHOLDS)
   .range(UTCI_COLOR_VALUES)
   .interpolate(d3.interpolateRgb);
-
-function getUtciCategoryForValue(val: number): string {
-  if (val < -40) return 'extreme cold stress';
-  if (val < -27) return 'very strong cold stress';
-  if (val < -13) return 'strong cold stress';
-  if (val < 0) return 'moderate cold stress';
-  if (val < 9) return 'slight cold stress';
-  if (val <= 26) return 'no thermal stress';
-  if (val <= 32) return 'moderate heat stress';
-  if (val <= 38) return 'strong heat stress';
-  if (val <= 46) return 'very strong heat stress';
-  return 'extreme heat stress';
-}
 
 /** Matches `InteractiveLegend` default `fontScale` so UTCI footer legends share the same footprint */
 export const UTCI_LEGEND_FONT_SCALE = 0.72;
@@ -345,6 +327,81 @@ export function UtciExplorer({
     });
   }, [tutorialEnabled, tutorialReport, aggregation, colorMode, includeSun, includeWind]);
 
+  const tutorialExposureSun = tutorialLive?.snapshot.includeSun;
+  const tutorialExposureWind = tutorialLive?.snapshot.includeWind;
+  const tutorialFocusPeriodId = tutorialLive?.snapshot.utciFocusPeriodId;
+  useEffect(() => {
+    if (!tutorialEnabled || utciShared) return;
+    const sun = tutorialExposureSun ?? true;
+    const wind = tutorialExposureWind ?? true;
+    if (sun !== includeSun) setIncludeSun(sun);
+    if (wind !== includeWind) setIncludeWind(wind);
+  }, [
+    tutorialEnabled,
+    utciShared,
+    tutorialExposureSun,
+    tutorialExposureWind,
+    includeSun,
+    includeWind,
+    setIncludeSun,
+    setIncludeWind,
+  ]);
+
+  const exposureBadge = (kind: 'sun' | 'wind', active: boolean) => {
+    const Icon = kind === 'sun' ? Sun : Wind;
+    const title =
+      kind === 'sun'
+        ? active
+          ? 'Solar radiation included in UTCI'
+          : 'Protected from sun (solar radiation excluded)'
+        : active
+          ? 'Wind speed included in UTCI'
+          : 'Protected from wind (calm 0.5 m/s used)';
+
+    return (
+      <span
+        title={title}
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
+          active
+            ? kind === 'sun'
+              ? theme === 'dark'
+                ? 'border-amber-600/70 bg-amber-950/50'
+                : 'border-amber-400 bg-amber-50'
+              : theme === 'dark'
+                ? 'border-sky-600/70 bg-sky-950/50'
+                : 'border-sky-400 bg-sky-50'
+            : theme === 'dark'
+              ? 'border-gray-600/50 bg-gray-800/40'
+              : 'border-gray-200/80 bg-gray-50/80'
+        }`}
+      >
+        <Icon
+          className={`h-3.5 w-3.5 ${
+            active
+              ? kind === 'sun'
+                ? theme === 'dark'
+                  ? 'text-amber-400'
+                  : 'text-amber-600'
+                : theme === 'dark'
+                  ? 'text-sky-400'
+                  : 'text-sky-600'
+              : theme === 'dark'
+                ? 'text-gray-500 opacity-[0.18]'
+                : 'text-gray-400 opacity-[0.18]'
+          }`}
+          aria-hidden
+        />
+      </span>
+    );
+  };
+
+  const exposureIndicators = (
+    <div className="flex shrink-0 items-center gap-1.5" aria-label="UTCI exposure inputs">
+      {exposureBadge('sun', includeSun)}
+      {exposureBadge('wind', includeWind)}
+    </div>
+  );
+
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 400 });
@@ -496,6 +553,26 @@ export function UtciExplorer({
 
     const renderUtci = (svgEl: any, currentData: any[], title: string | null, isCompare: boolean) => {
     if (!currentData || !currentData.length) return;
+
+    const focusPeriod =
+      !isCompare && tutorialEnabled && tutorialFocusPeriodId
+        ? getUtciComfortPeriodById(tutorialFocusPeriodId)
+        : undefined;
+
+    const heatmapCellInGlobal = (month: number, hour: number) => {
+      const isMonthMatch =
+        filter.startMonth <= filter.endMonth
+          ? month >= filter.startMonth && month <= filter.endMonth
+          : month >= filter.startMonth || month <= filter.endMonth;
+      return isMonthMatch && hour >= filter.startHour && hour <= filter.endHour;
+    };
+
+    const heatmapCellOpacity = (month: number, hour: number) => {
+      if (!heatmapCellInGlobal(month, hour)) return 0.2;
+      if (!focusPeriod) return 1;
+      return heatmapSlotInUtciComfortPeriod(month, hour, focusPeriod, filter) ? 1 : 0.28;
+    };
+
     const width = EXPLORER_SVG_BASE_WIDTH;
     const margin = EXPLORER_SVG_MARGIN;
     const innerWidth = explorerInnerWidth();
@@ -699,15 +776,9 @@ export function UtciExplorer({
           return colorScale(colorMode === 'comfortTime' ? d.isComfortable : d.utci);
         }
       })
-      .style("stroke", (aggregation === 'month' || aggregation === 'week') ? "rgba(0,0,0,0.1)" : "none")
+      .style("stroke", aggregation === 'month' || aggregation === 'week' ? 'rgba(0,0,0,0.1)' : 'none')
       .style("stroke-width", "1px")
-      .style("opacity", d => {
-        const isMonthMatch = filter.startMonth <= filter.endMonth
-          ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-          : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-        const isHourMatch = d.y >= filter.startHour && d.y <= filter.endHour;
-        return (isMonthMatch && isHourMatch) ? 1 : 0.2;
-      })
+      .style("opacity", d => heatmapCellOpacity(d.month, d.y))
       .append("title")
       .text(d => d.tooltip);
 
@@ -722,13 +793,7 @@ export function UtciExplorer({
         .style("font-size", `${aggregation === 'month' ? overlayFontMonthPx : overlayFontWeekPx}px`)
         .style("font-weight", "500")
         .style("pointer-events", "none")
-        .style("opacity", d => {
-          const isMonthMatch = filter.startMonth <= filter.endMonth
-            ? (d.month >= filter.startMonth && d.month <= filter.endMonth)
-            : (d.month >= filter.startMonth || d.month <= filter.endMonth);
-          const isHourMatch = d.y >= filter.startHour && d.y <= filter.endHour;
-          return (isMonthMatch && isHourMatch) ? 1 : 0.2;
-        })
+        .style("opacity", d => heatmapCellOpacity(d.month, d.y))
         // Only show text if the cell is wide enough
         .text(d => {
           if (
@@ -765,6 +830,25 @@ export function UtciExplorer({
       }
     }
 
+    if (focusPeriod) {
+      const focusBounds = utciPeriodHeatmapBounds(data, focusPeriod, filter);
+      if (focusBounds) {
+        const span = explorerHeatmapSpanXPx(innerWidth, focusBounds.startDay, focusBounds.endDay);
+        heatmapCellsG
+          .append("rect")
+          .attr("x", span.x)
+          .attr("y", hourRowTop(focusBounds.startHour))
+          .attr("width", span.width)
+          .attr("height", hourRowTop(focusBounds.endHour + 1) - hourRowTop(focusBounds.startHour))
+          .attr("fill", "none")
+          .attr("stroke", "#1f2937")
+          .attr("stroke-width", 3)
+          .attr("rx", 2)
+          .attr("ry", 2)
+          .style("pointer-events", "none");
+      }
+    }
+
     const formatHourRow = (h: number) => {
       if (h === 0) return "12 AM";
       if (h === 12) return "12 PM";
@@ -786,7 +870,11 @@ export function UtciExplorer({
       .style("font-size", `${heatmapHourAxisPx}px`)
       .text(h => formatHourRow(h));
 
-    const isSelected = (d: UtciDataRow) => rowPassesGlobalFilters(d, filter);
+    const isSelected = (d: UtciDataRow) => {
+      if (!rowPassesGlobalFilters(d, filter)) return false;
+      if (!focusPeriod) return true;
+      return rowMatchesUtciComfortPeriod(d, focusPeriod, filter);
+    };
 
     // Aggregate data
     let aggregatedData: { x0: number, x1: number, valueAll: number, valueSelected: number | null, comfortRatioAll: number, comfortRatioSelected: number | null, minSelected?: number, maxSelected?: number, month: number }[] = [];
@@ -1018,7 +1106,29 @@ export function UtciExplorer({
   } else {
       renderUtci(svgRef.current, utciData, null, false);
   }
-  }, [utciData, compareUtciData, compareData, showDifference, aggregation, colorMode, gradientId, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, utciMin, utciMax, heatmapCellStatistic]);
+  }, [
+    utciData,
+    compareUtciData,
+    compareData,
+    data,
+    showDifference,
+    aggregation,
+    colorMode,
+    gradientId,
+    gradients,
+    filter,
+    dimensions.width,
+    unitSystem,
+    heatmapTextColor,
+    theme,
+    utciMin,
+    utciMax,
+    heatmapCellStatistic,
+    includeSun,
+    includeWind,
+    tutorialEnabled,
+    tutorialFocusPeriodId,
+  ]);
 
   // Calculate local stats for filtered data
   const stats = (() => {
@@ -1202,6 +1312,8 @@ export function UtciExplorer({
                     Outdoor Comfort · {utciLegendTitle}
                   </span>
                 </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {exposureIndicators}
                 {onRemove && (
                   <div className={removeBtnRevealClass}>
                     <button
@@ -1213,6 +1325,7 @@ export function UtciExplorer({
                     </button>
                   </div>
                 )}
+                </div>
               </div>
               <div className={chartToolbarRevealClass}>
                 <div className="pt-1">
