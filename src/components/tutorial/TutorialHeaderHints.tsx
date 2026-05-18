@@ -30,7 +30,7 @@ export function TutorialHeaderHints({
       {
         id: 'tutorial-nav-layouts',
         title: 'Layouts',
-        body: 'Only the active layout shows until you move the pointer over this control; then the other layouts slide out on the left so you can switch.',
+        body: 'The active layout is on the right; one alternate peeks beside it. Hover or focus this control to reveal the rest.',
       },
       {
         id: 'tutorial-nav-hover-hints',
@@ -38,11 +38,15 @@ export function TutorialHeaderHints({
         body: 'Turn hover directions on or off for this layout (desktop only).',
       },
       {
-        id: 'tutorial-nav-settings',
-        title: 'Reorder',
-        body: 'Hover a card to reveal a grab handle, then drag it onto another card to swap positions.',
+        id: 'tutorial-slot-reorder-handle',
+        title: 'Reorder cards',
+        body: 'Hover a chart card to reveal the grab handle in the bottom-right corner, then drag it onto another card to swap positions.',
       },
-      { id: 'tutorial-nav-export', title: 'Export', body: 'Move the pointer over Settings to reveal Export here. Capture the dashboard as PDF or JPEG for reports.' },
+      {
+        id: 'tutorial-nav-export',
+        title: 'Export',
+        body: 'Capture the dashboard as PDF or JPEG for reports.',
+      },
       {
         id: 'tutorial-nav-settings',
         title: 'Settings',

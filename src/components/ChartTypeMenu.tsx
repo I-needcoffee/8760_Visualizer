@@ -2,6 +2,10 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { ChartType } from '../App';
 import { Sun, BarChart3, ThermometerSun, Wind } from 'lucide-react';
 import { WindRoseGlyph } from './WindRoseGlyph';
+import {
+  CHART_TOOLBAR_ICON_GLYPH_CLASS,
+  CHART_TOOLBAR_ICON_SLOT_CLASS,
+} from '../lib/chartToolbarLayout';
 
 const LABELS: Record<ChartType, string> = {
   sunpath: 'Sun Path',
@@ -76,11 +80,11 @@ export function ChartTypeMenu({
     const Icon = ICON[value];
     return (
       <div
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-700 ${className ?? ''}`}
+        className={`${CHART_TOOLBAR_ICON_SLOT_CLASS} self-center rounded-full text-gray-700 ${className ?? ''}`}
         title={label}
         aria-label={label}
       >
-        <Icon className="h-3.5 w-3.5" />
+        <Icon className={CHART_TOOLBAR_ICON_GLYPH_CLASS} />
       </div>
     );
   }
@@ -97,7 +101,7 @@ export function ChartTypeMenu({
         aria-controls={menuId}
         className={
           display === 'icon'
-            ? `flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors duration-200 ${
+            ? `${CHART_TOOLBAR_ICON_SLOT_CLASS} self-center rounded-full transition-colors duration-200 ${
                 disabled ? 'cursor-default opacity-60' : 'hover:text-gray-900 dark:hover:text-white'
               } ${dark ? 'text-gray-300' : 'text-gray-600'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-800 ${className ?? ''}`
             : `inline-flex max-w-full min-w-0 font-semibold uppercase tracking-wide text-[10px] underline-offset-2 transition-colors truncate w-max ${
@@ -108,7 +112,7 @@ export function ChartTypeMenu({
       >
         {display === 'icon' ? (() => {
           const Icon = ICON[value];
-          return <Icon className="h-3.5 w-3.5" />;
+          return <Icon className={CHART_TOOLBAR_ICON_GLYPH_CLASS} />;
         })() : label}
       </button>
 

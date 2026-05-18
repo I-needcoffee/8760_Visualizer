@@ -104,7 +104,7 @@ export function SiteFooter({
       : 'border-gray-200/90 bg-white/92 text-gray-700 shadow-hard-sm backdrop-blur-sm';
 
   /** One scale for all footer footnote & pill labels; weight varies per control (selected = bold). */
-  const footnoteText = 'text-[8px] sm:text-[9px] leading-none';
+  const footnoteText = 'text-[10px] sm:text-[11px] leading-snug';
   const footerLinkClass =
     theme === 'dark'
       ? 'font-normal text-gray-300 underline decoration-gray-500/60 underline-offset-2 hover:text-white'

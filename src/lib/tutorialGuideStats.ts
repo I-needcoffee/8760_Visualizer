@@ -72,13 +72,6 @@ function formatValue(v: number, unit: string, unitSystem: UnitSystem): string {
   return `${n.toFixed(decimals)}${u ? ` ${u}` : ''}`;
 }
 
-/** Numeric token only (before unit suffix) for compact month strips. */
-function compactNumberForMonthStrip(v: number, unit: string, unitSystem: UnitSystem): string {
-  const full = formatValue(v, unit, unitSystem);
-  const sp = full.indexOf(' ');
-  return sp === -1 ? full : full.slice(0, sp);
-}
-
 function coreStats(vals: number[], unit: string, unitSystem: UnitSystem): TutorialQuickStat[] {
   if (!vals.length) return [{ label: 'Values', value: 'None in this filtered range.' }];
   const min = d3.min(vals)!;
@@ -121,24 +114,28 @@ function windSpeedBlock(rows: EPWDataRow[], unitSystem: UnitSystem): TutorialQui
   };
 }
 
-/** One cell per calendar month when guided panel matches Data Explorer month aggregation. */
+/** One row per calendar month when guided panel matches Data Explorer month aggregation. */
 export type TutorialMonthlyExplorerCell = {
   abbr: string;
   title: string;
-  /** Stacked values (numbers only): high → average → low. */
   high: string;
   avg: string;
   low: string;
 };
 
-/** Returns 12 cells when chart is month aggregation; otherwise `null`. */
+export type TutorialMonthlyExplorerTable = {
+  variableLabel: string;
+  cells: TutorialMonthlyExplorerCell[];
+};
+
+/** Returns 12 rows when chart is month aggregation; otherwise `null`. */
 export function computeExplorerMonthlyByMonth(opts: {
   rows: EPWDataRow[] | undefined;
   filter: GlobalFilterState;
   unitSystem: UnitSystem;
   slotVariableId?: string;
   live: TutorialLiveSnapshot;
-}): TutorialMonthlyExplorerCell[] | null {
+}): TutorialMonthlyExplorerTable | null {
   const { rows, filter, unitSystem, slotVariableId, live } = opts;
   if (live.aggregation !== 'month' || !rows?.length) return null;
 
@@ -150,8 +147,9 @@ export function computeExplorerMonthlyByMonth(opts: {
   const category = meta.category ?? '';
   const useDaily = explorerUsesDailyAvgBarExtents(columnId, category);
   const filtered = filterRows(rows, filter);
+  const variableLabel = meta.name ?? columnId;
 
-  return [...EXPLORER_MONTH_LABELS_SHORT].map((abbr, mi) => {
+  const cells = [...EXPLORER_MONTH_LABELS_SHORT].map((abbr, mi) => {
     const month = mi + 1;
     const mrows = filtered.filter(r => r.month === month);
     if (!mrows.length) {
@@ -176,18 +174,20 @@ export function computeExplorerMonthlyByMonth(opts: {
       }
     }
 
-    const lowS = compactNumberForMonthStrip(lowR, unit, unitSystem);
-    const avgS = compactNumberForMonthStrip(avgR, unit, unitSystem);
-    const highS = compactNumberForMonthStrip(highR, unit, unitSystem);
+    const lowS = formatValue(lowR, unit, unitSystem);
+    const avgS = formatValue(avgR, unit, unitSystem);
+    const highS = formatValue(highR, unit, unitSystem);
 
     return {
       abbr,
-      title: `${abbr}: high · avg · low (${meta.name ?? columnId}, filtered)`,
+      title: `${abbr}: high ${highS} · average ${avgS} · low ${lowS} (${variableLabel}, filtered)`,
       high: highS,
       avg: avgS,
       low: lowS,
     };
   });
+
+  return { variableLabel, cells };
 }
 
 export function computeTutorialGuideQuickStats(opts: {

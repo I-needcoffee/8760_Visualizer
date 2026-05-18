@@ -185,6 +185,7 @@ export function SingleModeLayout({
       >
         {showHandle && (
           <div
+            id="tutorial-slot-reorder-handle"
             draggable
             onDragStart={e => onDragStart(e, globalIndex)}
             onDragEnd={onDragEnd}

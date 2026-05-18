@@ -62,7 +62,7 @@ export function TutorialGuidePanel({
       return {
         chartTitle: 'Choose a chart',
         overviewBody:
-          'This guided view keeps one large chart next to plain-language notes. Pick Sun path, Data explorer, UTCI, Wind explorer, or Wind rose from the dashed tile.',
+          'This details view keeps one large chart next to plain-language notes. Pick Sun path, Data explorer, UTCI, Wind explorer, or Wind rose from the dashed tile.',
         readingTitle: 'Why one card?',
         readingBody:
           'Focusing on a single chart keeps the story simple: what you are looking at, how to read it, and a few headline numbers from your file with the same month and hour filters you set in Settings.',
@@ -112,6 +112,15 @@ export function TutorialGuidePanel({
           {copy.overviewBody}
         </p>
       </section>
+
+      {slot.type !== 'empty' ? (
+        <section className="mb-4 border-t border-gray-200/80 pt-3 dark:border-gray-700/80">
+          <h3 className={`mb-2 text-xs font-bold uppercase tracking-wider ${muted}`}>{copy.readingTitle}</h3>
+          <p className={ink} style={textScale}>
+            {copy.readingBody}
+          </p>
+        </section>
+      ) : null}
 
       <section className="mt-1 border-t border-gray-200/80 pt-3 dark:border-gray-700/80">
         <h3 className={`mb-2 text-xs font-bold uppercase tracking-wider ${muted}`}>Quick numbers</h3>
@@ -192,7 +201,7 @@ export function TutorialGuidePanel({
                   comfort time.
                 </p>
                 <div className="-mx-1 overflow-x-auto px-1">
-                  <table className="w-full min-w-[28rem] border-separate border-spacing-0 text-left text-[10px]">
+                  <table className="w-full min-w-0 border-separate border-spacing-0 text-left text-[10px] sm:min-w-[24rem]">
                     <thead>
                       <tr>
                         <th
@@ -308,40 +317,46 @@ export function TutorialGuidePanel({
         <section className="mt-4 border-t border-gray-200/80 pt-3 dark:border-gray-700/80">
           <h3 className={`mb-1 text-xs font-bold uppercase tracking-wider ${muted}`}>By month</h3>
           <p className={`mb-2 text-[11px] leading-snug ${muted}`}>
-            High, average, and low for each calendar month (same filters as the chart). Where the explorer uses mean
-            daily min/max for bars, those extents feed high/low here too.
+            <span className={`font-medium ${ink}`}>{explorerMonthlyByMonth.variableLabel}</span>
+            {' — '}
+            high, average, and low per calendar month with the same filters as the chart. When the explorer uses mean
+            daily min/max for bars, those extents define high and low here too.
           </p>
-          <div className="grid grid-cols-6 gap-x-1 gap-y-2">
-            {explorerMonthlyByMonth.slice(0, 6).map(cell => (
-              <div key={cell.abbr} className="min-w-0" title={cell.title}>
-                <div className="flex min-w-0 items-start justify-center gap-1">
-                  <div className={`w-[2rem] shrink-0 text-right text-[10px] font-semibold leading-none ${ink}`}>
-                    {cell.abbr}
-                  </div>
-                  <div className={`min-w-0 text-[8.5px] font-normal tabular-nums leading-[1.15] ${muted}`}>
-                    <div>{cell.high}</div>
-                    <div>{cell.avg}</div>
-                    <div>{cell.low}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-6 gap-x-1 gap-y-2">
-            {explorerMonthlyByMonth.slice(6, 12).map(cell => (
-              <div key={cell.abbr} className="min-w-0" title={cell.title}>
-                <div className="flex min-w-0 items-start justify-center gap-1">
-                  <div className={`w-[2rem] shrink-0 text-right text-[10px] font-semibold leading-none ${ink}`}>
-                    {cell.abbr}
-                  </div>
-                  <div className={`min-w-0 text-[8.5px] font-normal tabular-nums leading-[1.15] ${muted}`}>
-                    <div>{cell.high}</div>
-                    <div>{cell.avg}</div>
-                    <div>{cell.low}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="-mx-1 overflow-x-auto px-1">
+            <table className="w-full min-w-[14rem] border-collapse text-left text-[11px]">
+              <thead>
+                <tr className={`border-b border-gray-200/80 dark:border-gray-700/80 ${muted}`}>
+                  <th scope="col" className="pb-1.5 pr-2 font-semibold">
+                    Month
+                  </th>
+                  <th scope="col" className="pb-1.5 pr-1 text-right font-semibold tabular-nums">
+                    High
+                  </th>
+                  <th scope="col" className="pb-1.5 pr-1 text-right font-semibold tabular-nums">
+                    Avg
+                  </th>
+                  <th scope="col" className="pb-1.5 text-right font-semibold tabular-nums">
+                    Low
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {explorerMonthlyByMonth.cells.map(cell => (
+                  <tr
+                    key={cell.abbr}
+                    title={cell.title}
+                    className="border-b border-gray-100/90 last:border-0 dark:border-gray-700/50"
+                  >
+                    <th scope="row" className={`py-1 pr-2 font-semibold ${ink}`}>
+                      {cell.abbr}
+                    </th>
+                    <td className={`py-1 pr-1 text-right font-medium tabular-nums ${ink}`}>{cell.high}</td>
+                    <td className={`py-1 pr-1 text-right tabular-nums ${muted}`}>{cell.avg}</td>
+                    <td className={`py-1 text-right tabular-nums ${muted}`}>{cell.low}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       ) : null}

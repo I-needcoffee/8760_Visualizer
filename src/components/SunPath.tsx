@@ -15,6 +15,13 @@ import type { GlobalFilterState } from '../lib/globalFilter';
 import { dryBulbCPassesGlobalTemperature, rowPassesGlobalFilters } from '../lib/globalFilter';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import { ChartToolbarLabeledMenu } from './ChartToolbarLabeledMenu';
+import {
+  CHART_TOOLBAR_CONTROLS_CLASS,
+  CHART_TOOLBAR_EXPORT_STACKED_ROW_CLASS,
+  CHART_TOOLBAR_HEADER_PAD,
+  CHART_TOOLBAR_ROW_CLASS,
+} from '../lib/chartToolbarLayout';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit, exportCaptionShort } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { VariableChartSelect } from './VariableChartSelect';
@@ -219,23 +226,6 @@ export function SunPath({
   const isMobile = useIsMobileMaxSm();
   /** Mobile cannot hover; tutorial mode also pins the strip. */
   const expandChromeStrip = !exportMode && (tutorialChromeAnchors || isMobile);
-  /** Full header row (icon + controls): width drives dual pickers — inner column was collapsing to ~select width. */
-  const sunHeaderRowRef = useRef<HTMLDivElement>(null);
-  const [sunDualVarPickers, setSunDualVarPickers] = useState(false);
-
-  useEffect(() => {
-    const el = sunHeaderRowRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.getBoundingClientRect().width;
-      setSunDualVarPickers(w >= 420);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
   const chartToolbarRevealClass = expandChromeStrip
     ? 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-[52px] opacity-100 pointer-events-auto'
     : 'overflow-hidden transition-[max-height,opacity] duration-200 ease-out max-h-0 opacity-0 pointer-events-none group-hover:max-h-[48px] group-hover:opacity-100 group-hover:pointer-events-auto focus-within:max-h-[48px] focus-within:opacity-100 focus-within:pointer-events-auto';
@@ -863,20 +853,18 @@ const filteredCompareData = (compareData || []).filter(d => {
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-1.5 py-0.5`}>
+      } ${CHART_TOOLBAR_HEADER_PAD}`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
-            <div className="flex items-start gap-2 min-w-0">
-              <div className="shrink-0 pt-0.5">
-                <ChartTypeMenu
-                  value="sunpath"
-                  label="Sun Path"
-                  onChange={() => {}}
-                  theme="light"
-                  display="icon"
-                  staticIcon
-                />
-              </div>
+            <div className={`${CHART_TOOLBAR_EXPORT_STACKED_ROW_CLASS} min-w-0`}>
+              <ChartTypeMenu
+                value="sunpath"
+                label="Sun Path"
+                onChange={() => {}}
+                theme="light"
+                display="icon"
+                staticIcon
+              />
               <ExportHeaderCaption
                 lines={[
                   (() => {
@@ -892,12 +880,12 @@ const filteredCompareData = (compareData || []).filter(d => {
             </div>
           ) : (
             <>
-              <div ref={sunHeaderRowRef} className="relative flex w-full min-h-[24px] items-center gap-1.5">
-                <div
-                  className={`flex min-h-0 min-w-0 flex-1 items-center gap-1.5 self-stretch pr-0 transition-[padding] duration-200 ease-out sm:gap-2 ${
-                    isMobile ? 'pr-9' : 'group-hover:pr-9 focus-within:pr-9'
-                  }`}
-                >
+              <div
+                className={`relative ${CHART_TOOLBAR_ROW_CLASS} w-full ${
+                  isMobile ? 'pr-9' : 'group-hover:pr-9 focus-within:pr-9'
+                }`}
+              >
+                <div className={CHART_TOOLBAR_CONTROLS_CLASS}>
                   <ChartTypeMenu
                     value="sunpath"
                     label="Sun Path"
@@ -907,64 +895,26 @@ const filteredCompareData = (compareData || []).filter(d => {
                     display="icon"
                     tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
                   />
-                  <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col self-stretch">
-                    <div
-                      className={`flex min-h-0 w-full min-w-0 gap-2 ${sunDualVarPickers ? 'flex-row items-stretch' : 'flex-col'}`}
-                    >
-                      <div
-                        className={`flex min-w-0 flex-row items-center gap-1.5 text-left ${sunDualVarPickers ? 'min-w-0 flex-[1.35] basis-0' : 'w-full'}`}
-                      >
-                        <span className="shrink-0 self-center text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
-                          Color
-                        </span>
-                        <VariableChartSelect
-                          value={colorVar}
-                          onChange={setColorVar}
-                          selectedLabel={colorVarLabel}
-                          theme={theme}
-                          fillRow={false}
-                          domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
-                        >
-                          {Object.entries(groupedVariables).map(([category, vars]) => (
-                            <optgroup key={category} label={category}>
-                              {vars.map(v => (
-                                <option key={v.id} value={v.id}>
-                                  {v.name} ({convertUnit(v.unit)})
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </VariableChartSelect>
-                      </div>
-                      {sunDualVarPickers ? (
-                        <div
-                          className="flex min-w-0 flex-1 basis-0 flex-row items-center gap-1.5 text-left"
-                          id={tutorialChromeAnchors ? 'tutorial-card-sunpath-radius' : undefined}
-                        >
-                          <span className="shrink-0 self-center text-[9px] font-semibold uppercase leading-none tracking-wide text-gray-500 dark:text-gray-400">
-                            Radius
-                          </span>
-                          <VariableChartSelect
-                            value={radiusVar}
-                            onChange={setRadiusVar}
-                            selectedLabel={radiusVarLabel}
-                            theme={theme}
-                            fillRow={false}
-                          >
-                            {Object.entries(groupedVariables).map(([category, vars]) => (
-                              <optgroup key={category} label={category}>
-                                {vars.map(v => (
-                                  <option key={v.id} value={v.id}>
-                                    {v.name} ({convertUnit(v.unit)})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))}
-                          </VariableChartSelect>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                  <ChartToolbarLabeledMenu
+                    label="Color"
+                    value={colorVar}
+                    onChange={setColorVar}
+                    groupedVariables={groupedVariables}
+                    convertUnit={convertUnit}
+                    selectedName={colorVarDef.name}
+                    theme={theme}
+                    domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
+                  />
+                  <ChartToolbarLabeledMenu
+                    label="Radius"
+                    value={radiusVar}
+                    onChange={setRadiusVar}
+                    groupedVariables={groupedVariables}
+                    convertUnit={convertUnit}
+                    selectedName={radiusVarDef.name}
+                    theme={theme}
+                    domId={tutorialChromeAnchors ? 'tutorial-card-sunpath-radius' : undefined}
+                  />
                 </div>
                 {onRemove && (
                   <div className={removeBtnRevealClass}>

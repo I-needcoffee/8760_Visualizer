@@ -11,6 +11,13 @@ import type { GlobalFilterState } from '../lib/globalFilter';
 import { rowPassesGlobalFilters } from '../lib/globalFilter';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import {
+  CHART_TOOLBAR_CONTROLS_CLASS,
+  CHART_TOOLBAR_EXPORT_ROW_CLASS,
+  CHART_TOOLBAR_HEADER_PAD,
+  CHART_TOOLBAR_ROW_CLASS,
+  chartToolbarTitleClass,
+} from '../lib/chartToolbarLayout';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
@@ -491,10 +498,10 @@ export function WindRose({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-1.5 py-0.5`}>
+      } ${CHART_TOOLBAR_HEADER_PAD}`}>
         {exportMode ? (
           <>
-            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
+            <div className={`${CHART_TOOLBAR_EXPORT_ROW_CLASS} min-w-0`}>
               <ChartTypeMenu
                 value="windrose"
                 label="Wind Rose"
@@ -552,9 +559,9 @@ export function WindRose({
                 Baseline · {paneCity}
               </div>
             )}
-            <div className="relative flex min-h-[24px] w-full items-center gap-1.5">
+            <div className={`relative ${CHART_TOOLBAR_ROW_CLASS} w-full`}>
               <div
-                className={`flex min-w-0 flex-1 items-center gap-1.5 transition-[padding] duration-200 ease-out sm:gap-2 ${
+                className={`${CHART_TOOLBAR_CONTROLS_CLASS} transition-[padding] duration-200 ease-out ${
                   showSettings
                     ? onRemove
                       ? 'pr-[4.75rem]'
@@ -575,7 +582,7 @@ export function WindRose({
                 />
                 <span
                   id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
-                  className={`min-w-0 flex-1 truncate text-[10px] font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                  className={chartToolbarTitleClass(theme)}
                   title="Wind Direction"
                 >
                   Wind Direction

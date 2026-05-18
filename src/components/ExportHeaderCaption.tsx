@@ -25,11 +25,11 @@ export function ExportHeaderCaption({
   lines: readonly { short: string; long: string }[];
 }) {
   return (
-    <div className="min-w-0 flex-1 text-left">
+    <div className="min-w-0 flex-1 text-left leading-tight">
       {lines.map((line, i) => (
         <p
           key={i}
-          className="text-[10px] font-medium leading-none text-gray-700 truncate min-w-0"
+          className={`text-[10px] font-medium leading-none text-gray-700 truncate min-w-0${i > 0 ? ' mt-0.5' : ''}`}
           title={line.long !== line.short ? line.long : undefined}
         >
           {line.short}

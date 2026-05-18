@@ -16,6 +16,13 @@ import { UnitSystem } from '../App';
 import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
 import { aggregateCellStatistic, rowPassesGlobalFilters } from '../lib/globalFilter';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import {
+  CHART_TOOLBAR_CONTROLS_CLASS,
+  CHART_TOOLBAR_EXPORT_ROW_CLASS,
+  CHART_TOOLBAR_HEADER_PAD,
+  CHART_TOOLBAR_ROW_CLASS,
+  chartToolbarTitleClass,
+} from '../lib/chartToolbarLayout';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { gradientsForUtci } from '../lib/availableGradientsForVariable';
@@ -1199,10 +1206,10 @@ export function UtciExplorer({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-1.5 py-0.5`}>
+      } ${CHART_TOOLBAR_HEADER_PAD}`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
-            <div className="flex min-h-[24px] min-w-0 items-center gap-2">
+            <div className={`${CHART_TOOLBAR_EXPORT_ROW_CLASS} min-w-0`}>
               <ChartTypeMenu
                 value="utci"
                 label="UTCI Comfort"
@@ -1293,8 +1300,8 @@ export function UtciExplorer({
                   Baseline · {paneCity}
                 </div>
               )}
-              <div className="flex w-full items-center justify-between gap-1.5">
-                <div className="flex min-h-5 min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+              <div className={`${CHART_TOOLBAR_ROW_CLASS} w-full`}>
+                <div className={CHART_TOOLBAR_CONTROLS_CLASS}>
                   <ChartTypeMenu
                     value="utci"
                     label="UTCI Comfort"
@@ -1306,7 +1313,7 @@ export function UtciExplorer({
                   />
                   <span
                     id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
-                    className={`min-w-0 flex-1 truncate text-[10px] font-medium leading-none ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                    className={chartToolbarTitleClass(theme)}
                     title={`Outdoor Comfort · ${utciLegendTitle}`}
                   >
                     Outdoor Comfort · {utciLegendTitle}

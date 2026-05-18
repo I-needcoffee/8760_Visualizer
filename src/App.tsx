@@ -19,13 +19,13 @@ import {
   type HeatmapCellStatistic,
 } from './lib/globalFilter';
 import { SettingsModal } from './components/SettingsModal';
-import { toPng, toJpeg } from 'html-to-image';
-import { jsPDF } from 'jspdf';
+import { exportDashboardArea, type ExportFormat, type ExportFrameSize } from './lib/exportCapture';
+import { ExportModeToolbar } from './components/ExportModeToolbar';
 import { SingleModeLayout } from './components/SingleModeLayout';
 import { ComparisonModeLayout } from './components/ComparisonModeLayout';
 import { TutorialLiveProvider } from './context/TutorialLiveContext';
 import { TutorialHeaderHints } from './components/tutorial/TutorialHeaderHints';
-import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, FileImage, FileText, CloudLightning, Info, Sparkles } from 'lucide-react';
+import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, CloudLightning, Info, Sparkles } from 'lucide-react';
 import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
 import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
@@ -172,32 +172,32 @@ const LAYOUT_PICKER: readonly {
 }[] = [
   {
     mode: 'hero-left',
-    ariaLabel: 'Default layout — hero tile with supporting grid',
-    title: 'Default — hero with supporting tiles',
+    ariaLabel: 'Focus Grid layout',
+    title: 'Focus Grid',
     Icon: LayoutIconHeroLeft,
   },
   {
     mode: 'grid-4x2',
-    ariaLabel: 'Grid layout — four by two tiles',
-    title: 'Grid — 4×2 tiles',
+    ariaLabel: 'Grid layout',
+    title: 'Grid',
     Icon: LayoutIconGrid4x2,
   },
   {
     mode: 'focus-deep',
-    ariaLabel: 'Detail layout — two large tiles',
-    title: 'Detail — two large tiles',
+    ariaLabel: 'Side-by-Side layout',
+    title: 'Side-by-Side',
     Icon: LayoutIconFocusDeep,
   },
   {
     mode: 'tutorial',
-    ariaLabel: 'Guided layout — one large card with explanations',
-    title: 'Guided — one card + tutorial panel',
+    ariaLabel: 'Details layout',
+    title: 'Details',
     Icon: LayoutIconTutorial,
   },
   {
     mode: 'stacked',
-    ariaLabel: 'Stacked layout — full-width cards',
-    title: 'Stacked — full-width cards',
+    ariaLabel: 'Stacked layout',
+    title: 'Stacked',
     Icon: LayoutIconStacked,
   },
 ];
@@ -423,6 +423,9 @@ export default function App() {
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [exportMode, setExportModeState] = useState(false);
+  const [exportFrame, setExportFrame] = useState<ExportFrameSize>('viewport');
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf');
+  const [exportBusy, setExportBusy] = useState(false);
   const exportModeRef = useRef(exportMode);
   const setExportMode = (val: boolean) => {
     setExportModeState(val);
@@ -493,6 +496,12 @@ export default function App() {
     () => activeLayoutPicker.find(o => o.mode === layoutMode) ?? activeLayoutPicker[0] ?? LAYOUT_PICKER[0],
     [layoutMode, activeLayoutPicker]
   );
+  const layoutAlternates = useMemo(
+    () => activeLayoutPicker.filter(o => o.mode !== layoutMode),
+    [activeLayoutPicker, layoutMode]
+  );
+  const layoutPeekAlternate = layoutAlternates[0];
+  const layoutMoreAlternates = layoutAlternates.slice(1);
   const ActiveLayoutIcon = activeLayoutPick.Icon;
   const [tutorialHoverHints, setTutorialHoverHints] = useState(readTutorialHoverHintsEnabled);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
@@ -669,54 +678,17 @@ export default function App() {
     }
   };
 
-  const handleExport = async (format: 'pdf' | 'jpeg') => {
+  const handleExport = async () => {
     const element = document.getElementById('dashboard-area');
-    if (!element) return;
-
+    if (!element || exportBusy) return;
+    const filenameBase = selectedFiles[0]?.metadata.city || 'export';
+    setExportBusy(true);
     try {
-      const originalOverflow = element.style.overflow;
-      element.style.overflow = 'visible';
-      
-      const options = {
-        quality: 0.95,
-        backgroundColor: '#ffffff',
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        style: {
-          transform: 'scale(1)',
-          transformOrigin: 'top left'
-        }
-      };
-
-      if (format === 'jpeg') {
-        const dataUrl = await toJpeg(element, options);
-        element.style.overflow = originalOverflow;
-        const link = document.createElement('a');
-        link.download = `climate-dashboard-${selectedFiles[0]?.metadata.city || 'export'}.jpg`;
-        link.href = dataUrl;
-        link.click();
-      } else {
-        const dataUrl = await toPng(element, options);
-        element.style.overflow = originalOverflow;
-        
-        const img = new Image();
-        img.src = dataUrl;
-        await new Promise(resolve => { img.onload = resolve; });
-        
-        const pdf = new jsPDF({
-          orientation: img.width > img.height ? 'landscape' : 'portrait',
-          unit: 'px',
-          format: [img.width, img.height]
-        });
-        pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
-        const canvasUrl = 'https://climatecanvas.app';
-        const footerStripH = Math.min(64, Math.max(36, img.height * 0.07));
-        pdf.link(0, img.height - footerStripH, img.width, footerStripH, { url: canvasUrl });
-        pdf.save(`climate-dashboard-${selectedFiles[0]?.metadata.city || 'export'}.pdf`);
-      }
+      await exportDashboardArea({ element, frame: exportFrame, format: exportFormat, filenameBase });
     } catch (error) {
       console.error('Export failed:', error);
-      element.style.overflow = 'auto';
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -908,13 +880,50 @@ export default function App() {
         className="relative flex h-dvh w-full flex-col overflow-hidden font-sans"
         style={{ backgroundColor: '#fcfbf8' }}
       >
-        {isSelectingFile && selectedFiles.length > 0 && (
-          <button 
-            onClick={() => setIsSelectingFile(false)}
-            className="absolute top-4 right-4 z-[2000] bg-white text-gray-800 px-4 py-2 rounded-full shadow-hard-md hover:bg-gray-50 font-medium flex items-center gap-2"
-          >
-            <X className="w-4 h-4" /> Cancel Selection
-          </button>
+        {selectedFiles.length > 0 && (
+          <div className="absolute left-3 right-3 top-3 z-[2000] flex flex-col gap-2 sm:left-4 sm:right-auto sm:max-w-md">
+            <div className="rounded-xl border border-gray-200/90 bg-white/95 px-3 py-2.5 shadow-hard-md backdrop-blur-sm">
+              {isSelectingFile ? (
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  {selectedFiles.length > 1 ? 'Add or change comparison site' : 'Add another site'}
+                </p>
+              ) : null}
+              <p className="mt-0.5 text-sm font-semibold text-gray-900">
+                {isSelectingFile ? 'Pick a location on the map' : 'Loaded weather file'}
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {selectedFiles.map((file, index) => (
+                  <li key={`${file.metadata.city}-${index}`} className="flex items-start gap-1.5 text-[12px] leading-snug text-gray-700">
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+                    <span className="min-w-0">
+                      <span className="font-medium text-gray-900">{weatherPlaceLine(file) || file.metadata.city}</span>
+                      {weatherFileTypeLine(file) ? (
+                        <span className="text-gray-500"> · {weatherFileTypeLine(file)}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSelectingFile(false)}
+                  className="rounded-full bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-hard-sm hover:bg-gray-800"
+                >
+                  Back to dashboard
+                </button>
+                {isSelectingFile ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsSelectingFile(false)}
+                    className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
         )}
         <div className="relative z-0 min-h-0 flex-1">
           <MapSelector 
@@ -1178,22 +1187,43 @@ export default function App() {
           {viewMode === 'single' && (
             <div
               id="tutorial-nav-layouts"
+              title="Hover or focus to change dashboard layout"
               className={`group/layout-pick inline-flex h-9 shrink-0 items-stretch rounded-full border p-0.5 sm:h-10 ${
                 theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100 shadow-hard-sm'
               }`}
               role="group"
               aria-label="Dashboard layout"
             >
+              {smUp && layoutPeekAlternate
+                ? (() => {
+                    const PeekIcon = layoutPeekAlternate.Icon;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setLayoutMode(layoutPeekAlternate.mode)}
+                        aria-label={layoutPeekAlternate.ariaLabel}
+                        title={layoutPeekAlternate.title}
+                        className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 opacity-75 transition-[opacity,background-color] duration-200 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-800 sm:min-w-10 sm:px-2.5 ${
+                          theme === 'dark'
+                            ? 'text-gray-500 hover:bg-gray-700/50 hover:text-gray-300'
+                            : 'text-gray-400 hover:bg-white/50 hover:text-gray-700'
+                        }`}
+                      >
+                        <PeekIcon className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
+                      </button>
+                    );
+                  })()
+                : null}
               <div
                 className={
                   !smUp
                     ? layoutPickerOpen
                       ? 'flex min-w-0 shrink-0 gap-0.5 overflow-hidden max-w-[min(12rem,calc(100vw-5rem))] opacity-100 pointer-events-auto transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none'
                       : 'flex min-w-0 shrink-0 gap-0.5 max-w-0 overflow-hidden opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none'
-                    : 'flex min-w-0 shrink-0 gap-0.5 overflow-hidden max-w-0 opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[11rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[11rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[12rem] sm:group-focus-within/layout-pick:max-w-[12rem]'
+                    : 'flex min-w-0 shrink-0 gap-0.5 overflow-hidden max-w-0 opacity-0 pointer-events-none transition-[max-width,opacity] duration-300 ease-out motion-reduce:transition-none group-hover/layout-pick:pointer-events-auto group-hover/layout-pick:max-w-[9.5rem] group-hover/layout-pick:opacity-100 group-focus-within/layout-pick:pointer-events-auto group-focus-within/layout-pick:max-w-[9.5rem] group-focus-within/layout-pick:opacity-100 sm:group-hover/layout-pick:max-w-[10.5rem] sm:group-focus-within/layout-pick:max-w-[10.5rem]'
                 }
               >
-                {activeLayoutPicker.filter(o => o.mode !== layoutMode).map(({ mode, ariaLabel, title, Icon }) => (
+                {(!smUp ? layoutAlternates : layoutMoreAlternates).map(({ mode, ariaLabel, title, Icon }) => (
                   <button
                     key={mode}
                     type="button"
@@ -1215,7 +1245,7 @@ export default function App() {
               </div>
               <button
                 type="button"
-                className={`flex min-w-9 shrink-0 items-center justify-center rounded-full px-2 transition-colors duration-200 sm:min-w-10 sm:px-2.5 ${
+                className={`flex min-w-9 shrink-0 items-center justify-center gap-1 rounded-full px-2 transition-colors duration-200 sm:min-w-10 sm:px-2.5 md:min-w-0 ${
                   theme === 'dark' ? 'bg-gray-600 text-gray-100 shadow-sm' : 'bg-white text-gray-900 shadow-sm'
                 }`}
                 title={activeLayoutPick.title}
@@ -1226,6 +1256,9 @@ export default function App() {
                 }}
               >
                 <ActiveLayoutIcon className="h-[18px] w-[26px] sm:h-5 sm:w-7" />
+                <span className="hidden max-w-[5.5rem] truncate text-[9px] font-semibold leading-none md:inline">
+                  {activeLayoutPick.title}
+                </span>
               </button>
             </div>
           )}
@@ -1233,47 +1266,16 @@ export default function App() {
           <div className={`h-5 sm:h-6 w-px mx-0.5 sm:mx-1 hidden xs:block shrink-0 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
 
           {exportMode ? (
-            <div
-              role="group"
-              aria-label="Export"
-              className={`flex shrink-0 items-stretch overflow-hidden rounded-full border shadow-hard-sm ${
-                theme === 'dark' ? 'border-red-900/55 bg-gray-900/90' : 'border-red-200 bg-red-50/90'
-              }`}
-            >
-              <span className="hidden sm:flex items-center px-2 border-r text-[10px] font-bold uppercase tracking-wider tabular-nums leading-none max-w-[4.5rem] sm:max-w-none text-center sm:px-2.5 bg-red-100/90 text-red-800 dark:bg-red-950/50 dark:text-red-200 dark:border-red-900/50">
-                Export
-              </span>
-              <button
-                type="button"
-                onClick={() => handleExport('pdf')}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-red-600 text-white hover:bg-red-700 active:bg-red-800 border-r border-red-700/40 transition-colors"
-                title="Export PDF"
-              >
-                <FileText className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span className="hidden md:inline text-[10px] font-semibold uppercase tracking-wide">PDF</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExport('jpeg')}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-gray-700 text-white hover:bg-gray-600 active:bg-gray-800 border-r border-gray-600 transition-colors"
-                title="Export JPEG"
-              >
-                <FileImage className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span className="hidden md:inline text-[10px] font-semibold uppercase tracking-wide">JPEG</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setExportMode(false)}
-                className={`flex items-center justify-center px-2.5 py-1.5 sm:px-3 sm:py-2 transition-colors ${
-                  theme === 'dark'
-                    ? 'bg-gray-800 text-gray-200 hover:bg-gray-700'
-                    : 'bg-white text-gray-800 hover:bg-gray-100'
-                }`}
-                title="Exit export mode"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            </div>
+            <ExportModeToolbar
+              theme={theme}
+              frame={exportFrame}
+              onFrameChange={setExportFrame}
+              format={exportFormat}
+              onFormatChange={setExportFormat}
+              onExport={handleExport}
+              onClose={() => setExportMode(false)}
+              exporting={exportBusy}
+            />
           ) : null}
 
           <div className="inline-flex shrink-0 flex-row items-center gap-1">

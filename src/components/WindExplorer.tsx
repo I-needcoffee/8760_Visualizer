@@ -25,6 +25,12 @@ import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
+import {
+  CHART_TOOLBAR_CONTROLS_CLASS,
+  CHART_TOOLBAR_EXPORT_ROW_CLASS,
+  CHART_TOOLBAR_HEADER_PAD,
+  CHART_TOOLBAR_ROW_CLASS,
+} from '../lib/chartToolbarLayout';
 import { CardModal } from './CardModal';
 import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable';
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
@@ -939,11 +945,11 @@ export function WindExplorer({
       {(exportMode || !pairSuppressHeader) && (
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
-      } px-1.5 py-0.5`}>
+      } ${CHART_TOOLBAR_HEADER_PAD}`}>
         <div className="flex flex-col min-w-0">
           {exportMode ? (
             <>
-              <div className="flex min-h-[24px] min-w-0 items-center gap-2">
+              <div className={`${CHART_TOOLBAR_EXPORT_ROW_CLASS} min-w-0`}>
                 <ChartTypeMenu
                   value="wind"
                   label="Wind Explorer"
@@ -1031,8 +1037,8 @@ export function WindExplorer({
                   Baseline · {paneCity}
                 </div>
               )}
-              <div className="flex w-full items-center justify-between gap-1.5">
-                <div className="flex min-h-5 min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+              <div className={`${CHART_TOOLBAR_ROW_CLASS} w-full`}>
+                <div className={CHART_TOOLBAR_CONTROLS_CLASS}>
                   <ChartTypeMenu
                     value="wind"
                     label="Wind Explorer"
@@ -1048,6 +1054,7 @@ export function WindExplorer({
                     selectedLabel={colorVarLabel}
                     theme={theme}
                     fillRow={false}
+                    toolbarTitle
                     domId={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                   >
                     {Object.entries(groupedVariables).map(([category, vars]) => (
