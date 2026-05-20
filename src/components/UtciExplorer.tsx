@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+﻿import { useEffect, useRef, useState, useMemo } from 'react';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
@@ -25,6 +25,7 @@ import {
 } from '../lib/chartToolbarLayout';
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
+import { OUTDOOR_COMFORT_GREEN_HEX } from '../lib/constants';
 import { gradientsForUtci } from '../lib/availableGradientsForVariable';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
@@ -136,8 +137,8 @@ export function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) 
           Extreme cold
         </span>
         <span
-          className="absolute top-0 -translate-x-1/2 font-semibold uppercase tracking-tight leading-none text-green-600 dark:text-green-400 whitespace-nowrap"
-          style={{ left: `${comfortCenterPct}%` }}
+          className="absolute top-0 -translate-x-1/2 font-semibold uppercase tracking-tight leading-none whitespace-nowrap"
+          style={{ left: `${comfortCenterPct}%`, color: OUTDOOR_COMFORT_GREEN_HEX }}
         >
           Comfort
         </span>
@@ -172,7 +173,7 @@ export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' 
     return L < 0.5 ? '#fff' : '#111827';
   };
   const leftBg = theme === 'dark' ? '#1f2937' : '#ffffff';
-  const rightBg = '#22c55e';
+  const rightBg = OUTDOOR_COMFORT_GREEN_HEX;
 
   return (
     <div
@@ -186,10 +187,7 @@ export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' 
         }`}
         style={{
           height: `${barH}px`,
-          background:
-            theme === 'dark'
-              ? 'linear-gradient(to right, #1f2937, #22c55e)'
-              : 'linear-gradient(to right, #ffffff, #22c55e)',
+          background: `linear-gradient(to right, ${leftBg}, ${rightBg})`,
         }}
       >
         {(['0%', '100%'] as const).map((label) => {
@@ -337,73 +335,85 @@ export function UtciExplorer({
   const tutorialExposureSun = tutorialLive?.snapshot.includeSun;
   const tutorialExposureWind = tutorialLive?.snapshot.includeWind;
   const tutorialFocusPeriodId = tutorialLive?.snapshot.utciFocusPeriodId;
+  const lastSyncedFocusRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!tutorialEnabled || utciShared) return;
-    const sun = tutorialExposureSun ?? true;
-    const wind = tutorialExposureWind ?? true;
-    if (sun !== includeSun) setIncludeSun(sun);
-    if (wind !== includeWind) setIncludeWind(wind);
+    const focusId = tutorialFocusPeriodId ?? null;
+    if (lastSyncedFocusRef.current === focusId) return;
+    lastSyncedFocusRef.current = focusId;
+    if (!focusId) return;
+    setIncludeSun(tutorialExposureSun ?? true);
+    setIncludeWind(tutorialExposureWind ?? true);
   }, [
     tutorialEnabled,
     utciShared,
+    tutorialFocusPeriodId,
     tutorialExposureSun,
     tutorialExposureWind,
-    includeSun,
-    includeWind,
     setIncludeSun,
     setIncludeWind,
   ]);
+
+  const exposureTheme = exportMode ? 'light' : theme;
 
   const exposureBadge = (kind: 'sun' | 'wind', active: boolean) => {
     const Icon = kind === 'sun' ? Sun : Wind;
     const title =
       kind === 'sun'
         ? active
-          ? 'Solar radiation included in UTCI'
-          : 'Protected from sun (solar radiation excluded)'
+          ? 'Solar radiation included â€” click to turn off'
+          : 'Solar radiation excluded â€” click to turn on'
         : active
-          ? 'Wind speed included in UTCI'
-          : 'Protected from wind (calm 0.5 m/s used)';
+          ? 'Wind speed included â€” click to turn off'
+          : 'Wind excluded (0.5 m/s) â€” click to turn on';
+    const toggle = () => {
+      if (kind === 'sun') setIncludeSun(v => !v);
+      else setIncludeWind(v => !v);
+    };
 
     return (
-      <span
+      <button
+        type="button"
         title={title}
-        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
+        aria-pressed={active}
+        aria-label={title}
+        onClick={toggle}
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${
           active
             ? kind === 'sun'
-              ? theme === 'dark'
-                ? 'border-amber-600/70 bg-amber-950/50'
-                : 'border-amber-400 bg-amber-50'
-              : theme === 'dark'
-                ? 'border-sky-600/70 bg-sky-950/50'
-                : 'border-sky-400 bg-sky-50'
-            : theme === 'dark'
-              ? 'border-gray-600/50 bg-gray-800/40'
-              : 'border-gray-200/80 bg-gray-50/80'
+              ? exposureTheme === 'dark'
+                ? 'border-amber-600/70 bg-amber-950/50 hover:bg-amber-900/60'
+                : 'border-amber-400 bg-amber-50 hover:bg-amber-100'
+              : exposureTheme === 'dark'
+                ? 'border-sky-600/70 bg-sky-950/50 hover:bg-sky-900/60'
+                : 'border-sky-400 bg-sky-50 hover:bg-sky-100'
+            : exposureTheme === 'dark'
+              ? 'border-gray-600/50 bg-gray-800/40 hover:bg-gray-700/50'
+              : 'border-gray-200/80 bg-gray-50/80 hover:bg-gray-100'
         }`}
       >
         <Icon
-          className={`h-3.5 w-3.5 ${
+          className={`h-2.5 w-2.5 ${
             active
               ? kind === 'sun'
-                ? theme === 'dark'
+                ? exposureTheme === 'dark'
                   ? 'text-amber-400'
                   : 'text-amber-600'
-                : theme === 'dark'
+                : exposureTheme === 'dark'
                   ? 'text-sky-400'
                   : 'text-sky-600'
-              : theme === 'dark'
+              : exposureTheme === 'dark'
                 ? 'text-gray-500 opacity-[0.18]'
                 : 'text-gray-400 opacity-[0.18]'
           }`}
           aria-hidden
         />
-      </span>
+      </button>
     );
   };
 
   const exposureIndicators = (
-    <div className="flex shrink-0 items-center gap-1.5" aria-label="UTCI exposure inputs">
+    <div className="flex shrink-0 items-center gap-1" aria-label="UTCI exposure inputs">
       {exposureBadge('sun', includeSun)}
       {exposureBadge('wind', includeWind)}
     </div>
@@ -506,10 +516,10 @@ export function UtciExplorer({
     }
     return val;
   };
-  const utciUnit = unitSystem === 'imperial' ? '°F' : '°C';
+  const utciUnit = unitSystem === 'imperial' ? 'Â°F' : 'Â°C';
   const utciLegendTitle =
     showDifference && compareData
-      ? `Δ UTCI (${utciUnit})`
+      ? `Î” UTCI (${utciUnit})`
       : colorMode === 'gradient'
         ? `UTCI (${utciUnit})`
         : colorMode === 'categories'
@@ -606,7 +616,7 @@ export function UtciExplorer({
       colorScale = utciCategoryScale;
     } else if (colorMode === 'comfortTime') {
       const comfortLow = theme === 'dark' ? '#1f2937' : '#ffffff';
-      const comfortHigh = '#22c55e';
+      const comfortHigh = OUTDOOR_COMFORT_GREEN_HEX;
       colorScale = d3.scaleSequential<string>()
         .domain([0, 1])
         .interpolator(d3.interpolateRgb(comfortLow, comfortHigh));
@@ -1207,7 +1217,7 @@ export function UtciExplorer({
       <div className={`flex flex-col ${exportMode ? '' : 'border-b'} ${
         exportMode ? 'bg-white' : (theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white')
       } ${CHART_TOOLBAR_HEADER_PAD}`}>
-        <div className="flex flex-col min-w-0">
+        <div className="flex min-w-0 flex-col overflow-visible">
           {exportMode ? (
             <div className={`${CHART_TOOLBAR_EXPORT_ROW_CLASS} min-w-0`}>
               <ChartTypeMenu
@@ -1222,10 +1232,11 @@ export function UtciExplorer({
                 lines={[
                   {
                     short: `Outdoor Comfort (${utciUnit})`,
-                    long: `Outdoor Comfort · UTCI (${utciUnit})`,
+                    long: `Outdoor Comfort Â· UTCI (${utciUnit})`,
                   },
                 ]}
               />
+              {exposureIndicators}
             </div>
           ) : comparePane === 'secondary' ? (
             <>
@@ -1236,7 +1247,7 @@ export function UtciExplorer({
                     : 'border-orange-200 bg-orange-50 text-orange-900'
                 }`}
               >
-                Comparison · {paneCity ?? '—'}
+                Comparison Â· {paneCity ?? 'â€”'}
               </div>
               <div className={chartToolbarRevealClass}>
                 <div className="pt-1">
@@ -1297,7 +1308,7 @@ export function UtciExplorer({
                       : 'border-blue-200 bg-blue-50 text-blue-900'
                   }`}
                 >
-                  Baseline · {paneCity}
+                  Baseline Â· {paneCity}
                 </div>
               )}
               <div className={`${CHART_TOOLBAR_ROW_CLASS} w-full`}>
@@ -1310,13 +1321,14 @@ export function UtciExplorer({
                     disabled={!onChangeType}
                     display="icon"
                     tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
+                    discoverPulse={!!tutorialChromeAnchors}
                   />
                   <span
                     id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                     className={chartToolbarTitleClass(theme)}
-                    title={`Outdoor Comfort · ${utciLegendTitle}`}
+                    title={`Outdoor Comfort Â· ${utciLegendTitle}`}
                   >
-                    Outdoor Comfort · {utciLegendTitle}
+                    Outdoor Comfort Â· {utciLegendTitle}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -1403,7 +1415,7 @@ export function UtciExplorer({
           </div>
           <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
             <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Comfort ratio</div>
-            <div className={`text-base font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>{(stats.comfortRatio * 100).toFixed(1)}%</div>
+            <div className="text-base font-medium" style={{ color: OUTDOOR_COMFORT_GREEN_HEX }}>{(stats.comfortRatio * 100).toFixed(1)}%</div>
           </div>
           <div className={`p-2 rounded-md ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
             <div className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Min / Max</div>
@@ -1445,76 +1457,53 @@ export function UtciExplorer({
         maxWidthPx={520}
       >
         <div className="grid grid-cols-1 gap-3">
+          <p className={`text-xs leading-snug ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+            Sun and wind are toggled with the icons on the chart header.
+          </p>
           <div className="space-y-2">
+            <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Visualization Mode</label>
+            <select
+              value={colorMode}
+              onChange={e => setColorMode(e.target.value as any)}
+              className={`w-full rounded-full border p-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500 ${
+                theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+              }`}
+            >
+              <option value="comfortTime">Time in comfort zone</option>
+              <option value="categories">Stress categories</option>
+              <option value="gradient">Temperature gradient</option>
+            </select>
+          </div>
+          {colorMode === 'gradient' ? (
             <div className="space-y-2">
-              <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Calculation Inputs</label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeSun}
-                    onChange={e => setIncludeSun(e.target.checked)}
-                    className="rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Include Solar Radiation</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeWind}
-                    onChange={e => setIncludeWind(e.target.checked)}
-                    className="rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>Include Wind Speed</span>
-                </label>
+              <div className="flex items-center justify-between">
+                <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
+                <button
+                  type="button"
+                  onClick={() => setShowGradientModal(true)}
+                  className="text-[10px] font-bold uppercase tracking-tight text-blue-500 hover:text-blue-600"
+                >
+                  + Create
+                </button>
               </div>
-            </div>
-
-                <div className="space-y-2">
-                  <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Visualization Mode</label>
-                  <select 
-                    value={colorMode} 
-                    onChange={e => setColorMode(e.target.value as any)}
-                    className={`w-full rounded-full border p-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500 ${
-                      theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+              <div className={`flex overflow-x-auto rounded-lg border p-1.5 ${theme === 'dark' ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}`}>
+                {paletteGradients.map(g => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setGradientId(g.id)}
+                    className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all ${
+                      gradientId === g.id ? 'scale-110 border-blue-500 shadow-sm' : 'border-transparent hover:scale-105'
                     }`}
-                  >
-                    <option value="comfortTime">Time in comfort zone</option>
-                    <option value="categories">Stress categories</option>
-                    <option value="gradient">Temperature gradient</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {colorMode === 'gradient' && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className={`block text-xs font-semibold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Color Palette</label>
-                      <button 
-                        onClick={() => setShowGradientModal(true)}
-                        className="text-[10px] font-bold text-blue-500 hover:text-blue-600 uppercase tracking-tight"
-                      >
-                        + Create
-                      </button>
-                    </div>
-                    <div className={`flex p-1.5 rounded-lg overflow-x-auto border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                      {paletteGradients.map(g => (
-                        <button
-                          key={g.id}
-                          onClick={() => setGradientId(g.id)}
-                          className={`mx-1 h-8 w-8 flex-shrink-0 rounded-full border-2 transition-all ${
-                            gradientId === g.id ? 'border-blue-500 scale-110 shadow-sm' : 'border-transparent hover:scale-105'
-                          }`}
-                          style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
-                          title={g.name}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                    style={{ background: `linear-gradient(to right, ${g.colors.join(', ')})` }}
+                    title={g.name}
+                  />
+                ))}
               </div>
             </div>
+          ) : null}
+        </div>
+
       </CardModal>
 
       {!pairSuppressFooterLegend && (

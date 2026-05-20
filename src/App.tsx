@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,8 +24,9 @@ import { ExportModeToolbar } from './components/ExportModeToolbar';
 import { SingleModeLayout } from './components/SingleModeLayout';
 import { ComparisonModeLayout } from './components/ComparisonModeLayout';
 import { TutorialLiveProvider } from './context/TutorialLiveContext';
-import { TutorialHeaderHints } from './components/tutorial/TutorialHeaderHints';
-import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, CloudLightning, Info, Sparkles } from 'lucide-react';
+import { MapPin, ArrowLeft, Plus, Sun, BarChart2, Wind, ThermometerSun, Settings, X, Compass, BarChart3, Radar, Download, FileJson, CloudLightning, Info } from 'lucide-react';
+import { DiscoverPulseShell } from './components/onboarding/DiscoverPulseShell';
+import { dismissOnboarding, ONBOARDING_KEYS } from './lib/onboardingStorage';
 import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
 import { TUTORIAL_LEGEND_DOM_ID } from './lib/tutorialCopy';
 import { GradientDef } from './components/InteractiveLegend';
@@ -46,17 +47,6 @@ import type { SiteFooterWindControlsProps } from './components/SiteFooterWindCon
 
 export type { CompareWindIemSharedControls, WindFileSource } from './lib/iem/windIemPrefsShared';
 
-const TUTORIAL_HOVER_HINTS_KEY = 'climate-compare-tutorial-hover-hints';
-
-function readTutorialHoverHintsEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(TUTORIAL_HOVER_HINTS_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
 function useMediaMinWidthPx(minWidthPx: number, ssrFallback: boolean) {
   const query = `(min-width: ${minWidthPx}px)`;
   return useSyncExternalStore(
@@ -74,7 +64,7 @@ function useMediaMinWidthPx(minWidthPx: number, ssrFallback: boolean) {
 
 /** Toolbar pictograms for single-mode dashboard layouts (stroke-only, rounded rects). */
 function LayoutIconHeroLeft({ className }: { className?: string }) {
-  /** Shared vertical band so hero column and 3×2 grid share top/bottom edges. */
+  /** Shared vertical band so hero column and 3Ã—2 grid share top/bottom edges. */
   const top = 4;
   const bandH = 20;
   const rowH = 9;
@@ -150,7 +140,7 @@ export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep' | 'tutorial' | 
 function LayoutIconStacked({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 40 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      {/* Single card with a left↔right arrow to suggest full-width single-column layout. */}
+      {/* Single card with a leftâ†”right arrow to suggest full-width single-column layout. */}
       <rect x="5" y="4" width="30" height="20" rx="3" stroke="currentColor" strokeWidth="1.75" />
       <path
         d="M14 14h12m0 0-2.5-2.5M26 14l-2.5 2.5M14 14l2.5-2.5M14 14l2.5 2.5"
@@ -418,7 +408,7 @@ export default function App() {
     ...DEFAULT_GLOBAL_FILTER,
   }));
 
-  /** Heatmaps: statistic taken within each aggregation cell (“Ave” = mean). Shared app-wide via footer toggle. */
+  /** Heatmaps: statistic taken within each aggregation cell (â€œAveâ€ = mean). Shared app-wide via footer toggle. */
   const [heatmapCellStatistic, setHeatmapCellStatistic] = useState<HeatmapCellStatistic>('mean');
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -503,7 +493,6 @@ export default function App() {
   const layoutPeekAlternate = layoutAlternates[0];
   const layoutMoreAlternates = layoutAlternates.slice(1);
   const ActiveLayoutIcon = activeLayoutPick.Icon;
-  const [tutorialHoverHints, setTutorialHoverHints] = useState(readTutorialHoverHintsEnabled);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   /** Positioning root for export outline around bottom-right chart + comfort stats. */
   const grid4x2ExportWrapRef = useRef<HTMLDivElement>(null);
@@ -529,13 +518,6 @@ export default function App() {
     return () => document.removeEventListener('click', onDoc);
   }, [smUp, layoutPickerOpen]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(TUTORIAL_HOVER_HINTS_KEY, tutorialHoverHints ? 'true' : 'false');
-    } catch {
-      /* ignore */
-    }
-  }, [tutorialHoverHints]);
   const [slotsByLayout, setSlotsByLayout] = useState<Record<LayoutMode, ChartConfig[]>>(initialSlotsByLayout);
   const slots = slotsByLayout[layoutMode];
 
@@ -574,7 +556,7 @@ export default function App() {
 
   const iemAttributionInExport = windIemGlobal.source === 'iem' && dashboardHasWindCharts;
 
-  /** Low/Ave/High applies to 12×24 explorer-style heatmaps only; comparison mode always includes those cards. */
+  /** Low/Ave/High applies to 12Ã—24 explorer-style heatmaps only; comparison mode always includes those cards. */
   const dashboardHasHeatmap1224 = useMemo(() => {
     if (viewMode === 'comparison') return true;
     return slots.some(s => s.type === 'explorer' || s.type === 'wind' || s.type === 'utci');
@@ -898,7 +880,7 @@ export default function App() {
                     <span className="min-w-0">
                       <span className="font-medium text-gray-900">{weatherPlaceLine(file) || file.metadata.city}</span>
                       {weatherFileTypeLine(file) ? (
-                        <span className="text-gray-500"> · {weatherFileTypeLine(file)}</span>
+                        <span className="text-gray-500"> Â· {weatherFileTypeLine(file)}</span>
                       ) : null}
                     </span>
                   </li>
@@ -937,9 +919,8 @@ export default function App() {
             onShowOneBuildingPinsChange={setShowOneBuildingMapPins}
           />
         </div>
-        <div className="relative z-[5000] shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2">
-          <div className="mx-auto max-w-[1600px]">
-            <SiteFooter
+        <div className="relative z-[5000] w-full shrink-0 border-t border-gray-200/80 bg-[#fcfbf8] px-2 py-2 sm:px-3">
+          <SiteFooter
               theme={theme}
               exportMode={false}
               windFooter={null}
@@ -949,7 +930,6 @@ export default function App() {
                 onVisibleChange: setShowOneBuildingMapPins,
               }}
             />
-          </div>
         </div>
       </div>
     );
@@ -961,7 +941,6 @@ export default function App() {
       layoutMode={layoutMode}
       exportMode={exportMode}
       theme={theme}
-      tutorialHoverHints={smUp && tutorialHoverHints}
       tutorialEpwRows={displayFiles[activeFileIndex]?.data}
       tutorialFilter={globalFilter}
       tutorialUnitSystem={unitSystem}
@@ -979,7 +958,7 @@ export default function App() {
           false,
           undefined,
           tutSlot ? TUTORIAL_LEGEND_DOM_ID : undefined,
-          tutSlot
+          tutSlot && !exportMode
         );
       }}
       onSelectSlotType={(idx, type) => {
@@ -1016,28 +995,31 @@ export default function App() {
       {/* Top Navigation Bar */}
       <div
         id="tutorial-nav-bar"
-        className={`relative z-30 flex min-w-0 w-full min-h-0 items-center justify-between gap-2 border-b px-2 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 sm:px-4 ${
+        className={`relative z-30 flex min-h-0 w-full min-w-0 items-center justify-between gap-2 border-b px-2 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 sm:px-3 ${
           theme === 'dark'
             ? 'bg-gray-800 border-gray-700 shadow-[0_1px_0_0_rgba(0,0,0,0.35)]'
             : 'bg-white border-gray-200 shadow-sm'
         }`}
       >
-        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-4">
-          <button 
-            id="tutorial-nav-back"
-            onClick={() => {
-              setSelectedFiles([]);
-              setShowDifference(false);
-            }}
-            className={`inline-flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border border-transparent p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow] duration-200 ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-300 hover:border-gray-600' : 'hover:bg-gray-100 text-gray-600 hover:border-gray-200'}`}
-            title="Back to Map"
-          >
-            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
-          
+        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 overflow-visible sm:gap-4">
+          <span className="control-bleed-sm inline-flex shrink-0 overflow-visible rounded-full">
+            <button
+              id="tutorial-nav-back"
+              type="button"
+              onClick={() => {
+                setSelectedFiles([]);
+                setShowDifference(false);
+              }}
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-transparent p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow] duration-200 sm:h-10 sm:w-10 ${theme === 'dark' ? 'text-gray-300 hover:border-gray-600 hover:bg-gray-700' : 'text-gray-600 hover:border-gray-200 hover:bg-gray-100'}`}
+              title="Back to Map"
+            >
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+          </span>
+
           <div
             id="tutorial-nav-files"
-            className="flex min-w-0 items-center gap-1.5 overflow-x-auto hide-scrollbar py-0.5 sm:gap-2"
+            className="flex min-h-0 min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-visible hide-scrollbar py-1 pe-1 sm:gap-2"
           >
             {selectedFiles.map((file, index) => {
               const fileTypeNote = weatherFileTypeLine(file);
@@ -1107,13 +1089,19 @@ export default function App() {
               </div>
               );
             })}
-            <button
-              id="tutorial-nav-add"
-              onClick={() => setIsSelectingFile(true)}
-              className={`flex shrink-0 items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[11px] ${theme === 'dark' ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200' : 'border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700'}`}
-            >
-              <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Add
-            </button>
+            <DiscoverPulseShell storageKey={ONBOARDING_KEYS.addLocation} rounded="pill" className="shrink-0">
+              <button
+                id="tutorial-nav-add"
+                type="button"
+                onClick={() => {
+                  dismissOnboarding(ONBOARDING_KEYS.addLocation);
+                  setIsSelectingFile(true);
+                }}
+                className={`flex shrink-0 items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[10px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-[11px] ${theme === 'dark' ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200' : 'border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700'}`}
+              >
+                <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Add
+              </button>
+            </DiscoverPulseShell>
           </div>
         </div>
 
@@ -1158,30 +1146,6 @@ export default function App() {
                 Compare
               </button>
             </div>
-          )}
-
-          {viewMode === 'single' && layoutMode === 'tutorial' && smUp && (
-            <button
-              type="button"
-              id="tutorial-nav-hover-hints"
-              role="switch"
-              aria-checked={tutorialHoverHints}
-              aria-label={tutorialHoverHints ? 'Deactivate hover directions' : 'Activate hover directions'}
-              onClick={() => setTutorialHoverHints(v => !v)}
-              title={tutorialHoverHints ? 'Deactivate hover directions' : 'Activate hover directions'}
-              className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border p-0 text-[10px] font-bold uppercase tracking-wide transition-[color,background-color,border-color,transform] duration-200 ease-out active:scale-[0.98] sm:h-10 sm:gap-1.5 sm:px-2.5 ${
-                tutorialHoverHints
-                  ? theme === 'dark'
-                    ? 'border-blue-500 bg-blue-600 text-white shadow-sm hover:bg-blue-500'
-                    : 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
-                  : theme === 'dark'
-                    ? 'border-dashed border-gray-500 bg-transparent text-gray-400 hover:bg-gray-800/80'
-                    : 'border-dashed border-gray-400 bg-transparent text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />
-              <span className="hidden sm:inline">Directions</span>
-            </button>
           )}
 
           {viewMode === 'single' && (
@@ -1304,9 +1268,6 @@ export default function App() {
         </div>
       </div>
 
-      {viewMode === 'single' && layoutMode === 'tutorial' && !exportMode && smUp && tutorialHoverHints ? (
-        <TutorialHeaderHints theme={theme} showCompareToggle={selectedFiles.length > 1} />
-      ) : null}
       </div>
 
       {/* Gradient Creator Modal */}
@@ -1420,7 +1381,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Dashboard Area — main charts flex-1; footer strip shrink-0 so pills never overlap cards */}
+      {/* Dashboard Area â€” main charts flex-1; footer strip shrink-0 so pills never overlap cards */}
       <div 
         id="dashboard-area"
         className={`flex min-h-0 flex-1 flex-col overflow-hidden transition-[background-color] duration-200 ease-out ${exportMode ? 'bg-white' : ''}`}
@@ -1428,7 +1389,7 @@ export default function App() {
           backgroundColor: exportMode ? '#ffffff' : theme === 'dark' ? '#121211' : '#fcfbf8',
         }}
       >
-        <div className={`mx-auto flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 pt-1.5 pb-1.5 sm:px-2.5 sm:pt-2.5 sm:pb-2.5 lg:px-3 lg:pt-3 lg:pb-3 w-full max-w-[1600px] ${exportMode ? 'bg-white' : ''}`}>
+        <div className={`flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1.5 pt-1.5 pb-0 sm:px-2 sm:pt-2 ${exportMode ? 'bg-white' : ''}`}>
           {showSettingsModal && (
             <SettingsModal
               isOpen={showSettingsModal}
@@ -1512,11 +1473,11 @@ export default function App() {
 
           </div>
         <div
-          className={`shrink-0 border-t ${
+          className={`shrink-0 overflow-visible border-t ${
             exportMode ? 'border-gray-200 bg-white' : theme === 'dark' ? 'border-gray-800/80 bg-inherit' : 'border-gray-200/80 bg-inherit'
           }`}
         >
-          <div className="mx-auto w-full max-w-[1600px] px-1.5 py-1 sm:px-2.5 lg:px-3">
+          <div className="w-full px-1.5 py-1 sm:px-2">
             <SiteFooter
               theme={theme}
               exportMode={exportMode}
@@ -1535,6 +1496,7 @@ export default function App() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }

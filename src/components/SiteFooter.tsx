@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { IEM_HOME, WindIemDisclaimerFull } from './WindIemAttribution';
@@ -7,6 +7,8 @@ import { windYearRangeShort } from './SiteFooterWindControls';
 import type { UnitSystem } from '../App';
 import type { HeatmapCellStatistic } from '../lib/globalFilter';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
+import { DiscoverPulseShell } from './onboarding/DiscoverPulseShell';
+import { dismissOnboarding, ONBOARDING_KEYS } from '../lib/onboardingStorage';
 
 const CLIMATE_CANVAS = 'https://climatecanvas.app';
 const ONE_BUILDING_HOME = 'https://climate.onebuilding.org/';
@@ -56,7 +58,7 @@ export function SiteFooter({
   onHeatmapCellStatisticChange?: (v: HeatmapCellStatistic) => void;
   dstDisplayEnabled?: boolean;
   onDstDisplayEnabledChange?: (v: boolean) => void;
-  /** When false, hide Low / Ave / High (no 12×24 heatmaps on the dashboard). */
+  /** When false, hide Low / Ave / High (no 12Ã—24 heatmaps on the dashboard). */
   showHeatmapCellToggle?: boolean;
   /** Export capture only: note DST in footer when the DST toggle is on. */
   exportNotesDst?: boolean;
@@ -303,7 +305,7 @@ export function SiteFooter({
 
   /**
    * Metric / Imperial: grey trough; selected = white, unselected = light grey.
-   * Dark: selected white cap, unselected mid grey (reads as “unselected” on dark track).
+   * Dark: selected white cap, unselected mid grey (reads as â€œunselectedâ€ on dark track).
    */
   const unitTrack =
     theme === 'dark'
@@ -314,47 +316,51 @@ export function SiteFooter({
   const metricLabel = isMobile ? 'Met' : 'Metric';
   const imperialLabel = isMobile ? 'Imp' : 'Imperial';
   const dstLabel = isMobile ? 'DST' : 'Daylight savings time';
-
   return (
     <>
       <div className="flex w-full flex-col gap-0.5">
       <footer
-        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-1 ${
+        className={`flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 ${
           showCaptions || showLeftControls || windFooter?.visible || showMapOneBuildingPins ? 'justify-between' : 'justify-end'
         }`}
         aria-label="Site attribution and display options"
       >
         {(showLeftControls || showMapOneBuildingPins) ? (
-          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center gap-2 overflow-visible">
             {showMapOneBuildingPins && oneBuildingMapPins ? (
               <div
+                id="footer-one-building-map-pins"
                 role="switch"
                 tabIndex={0}
                 aria-checked={oneBuildingMapPins.visible}
                 aria-label="Show OneBuilding map locations"
                 title="Adds TMYx station pins from climate.onebuilding.org KML catalogs (zoom in to load). Open the OneBuilding site from the link without changing this switch."
-                className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 cursor-pointer items-center overflow-hidden rounded-full border p-0 outline-none transition-[color] focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-950 ${pillShell}`}
+                className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 cursor-pointer items-center overflow-visible rounded-full border p-0 outline-none transition-[color] focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 dark:focus-visible:ring-gray-500 dark:focus-visible:ring-offset-gray-950 ${pillShell}`}
                 onClick={e => {
                   if ((e.target as HTMLElement).closest('a')) return;
+                  dismissOnboarding(ONBOARDING_KEYS.oneBuildingMapPins);
                   oneBuildingMapPins.onVisibleChange(!oneBuildingMapPins.visible);
                 }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
+                    dismissOnboarding(ONBOARDING_KEYS.oneBuildingMapPins);
                     oneBuildingMapPins.onVisibleChange(!oneBuildingMapPins.visible);
                   }
                 }}
               >
                 <span className="flex shrink-0 items-center justify-center self-center pl-2 pr-0.5 sm:pl-2" aria-hidden>
-                  <span
-                    className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
-                      oneBuildingMapPins.visible
-                        ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
-                        : theme === 'dark'
-                          ? 'border-gray-500 bg-white'
-                          : 'border-gray-400 bg-white'
-                    }`}
-                  />
+                  <DiscoverPulseShell storageKey={ONBOARDING_KEYS.oneBuildingMapPins}>
+                    <span
+                      className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
+                        oneBuildingMapPins.visible
+                          ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
+                          : theme === 'dark'
+                            ? 'border-gray-500 bg-white'
+                            : 'border-gray-400 bg-white'
+                      }`}
+                    />
+                  </DiscoverPulseShell>
                 </span>
                 <span
                   className={`flex min-h-0 min-w-0 flex-1 items-center self-center truncate whitespace-nowrap pl-1 pr-2 text-left sm:pr-2 ${footnoteText} font-normal leading-none ${
@@ -377,38 +383,52 @@ export function SiteFooter({
             ) : null}
             {showLeftControls ? (
               <>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={dstDisplayEnabled}
-              aria-label="Daylight savings time display"
-              title="US-style DST display: between 2nd Sunday in March and 1st Sunday in November, shift each hourly row +1h on the civil clock (EPW rows are usually standard offset; underlying sample time is unchanged for sun math). You can use this for any file as an approximation."
-              onClick={() => onDstDisplayEnabledChange?.(!dstDisplayEnabled)}
-              className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 items-stretch overflow-hidden rounded-full border p-0 ${pillShell}`}
-            >
-              <span className="flex shrink-0 items-center justify-center pl-2 pr-0.5 sm:pl-2" aria-hidden>
-                <span
-                  className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
-                    dstDisplayEnabled
-                      ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
-                      : theme === 'dark'
-                        ? 'border-gray-500 bg-white'
-                        : 'border-gray-400 bg-white'
-                  }`}
-                />
-              </span>
-              <span
-                className={`flex min-w-0 flex-1 items-center truncate pl-1 pr-2 text-left sm:pr-2 ${footnoteText} font-normal ${
-                  theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
-                }`}
-              >
-                {dstLabel}
-              </span>
-            </button>
-            <div className={unitTrack} title="Unit system for numbers in charts" role="group" aria-label="Unit system">
+            <DiscoverPulseShell storageKey={ONBOARDING_KEYS.dstToggle} rounded="pill">
               <button
                 type="button"
-                onClick={() => onUnitSystemChange?.('metric')}
+                role="switch"
+                aria-checked={dstDisplayEnabled}
+                aria-label="Daylight savings time display"
+                title="US-style DST display: between 2nd Sunday in March and 1st Sunday in November, shift each hourly row +1h on the civil clock (EPW rows are usually standard offset; underlying sample time is unchanged for sun math). You can use this for any file as an approximation."
+                onClick={() => {
+                  dismissOnboarding(ONBOARDING_KEYS.dstToggle);
+                  onDstDisplayEnabledChange?.(!dstDisplayEnabled);
+                }}
+                className={`inline-flex ${pillH} max-w-[min(100vw-6rem,20rem)] min-w-0 items-stretch overflow-visible rounded-full border p-0 ${pillShell}`}
+              >
+                <span className="flex shrink-0 items-center justify-center pl-2 pr-0.5 sm:pl-2" aria-hidden>
+                  <span
+                    className={`box-border h-3 w-3 shrink-0 rounded-full border sm:h-3.5 sm:w-3.5 ${
+                      dstDisplayEnabled
+                        ? 'border-gray-600 bg-gray-600 dark:border-gray-500 dark:bg-gray-500'
+                        : theme === 'dark'
+                          ? 'border-gray-500 bg-white'
+                          : 'border-gray-400 bg-white'
+                    }`}
+                  />
+                </span>
+                <span
+                  className={`flex min-w-0 flex-1 items-center truncate pl-1 pr-2 text-left sm:pr-2 ${footnoteText} font-normal ${
+                    theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                  }`}
+                >
+                  {dstLabel}
+                </span>
+              </button>
+            </DiscoverPulseShell>
+            <DiscoverPulseShell storageKey={ONBOARDING_KEYS.unitSystem} rounded="pill">
+            <div
+              className={unitTrack}
+              title="Unit system for numbers in charts"
+              role="group"
+              aria-label="Unit system"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  dismissOnboarding(ONBOARDING_KEYS.unitSystem);
+                  onUnitSystemChange?.('metric');
+                }}
                 aria-label="Metric"
                 className={`${unitSegBase} ${
                   unitSystem === 'metric'
@@ -424,7 +444,10 @@ export function SiteFooter({
               </button>
               <button
                 type="button"
-                onClick={() => onUnitSystemChange?.('imperial')}
+                onClick={() => {
+                  dismissOnboarding(ONBOARDING_KEYS.unitSystem);
+                  onUnitSystemChange?.('imperial');
+                }}
                 aria-label="Imperial"
                 className={`${unitSegBase} ${
                   unitSystem === 'imperial'
@@ -439,6 +462,7 @@ export function SiteFooter({
                 {imperialLabel}
               </button>
             </div>
+            </DiscoverPulseShell>
             {showHeatmapCellToggle && onHeatmapCellStatisticChange && heatmapCellStatistic !== undefined ? (
               <div
                 className={unitTrack}
@@ -564,7 +588,7 @@ export function SiteFooter({
                           : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      * IEM notice…
+                      * IEM noticeâ€¦
                     </button>
                   </>
                 ) : null}

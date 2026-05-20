@@ -71,6 +71,7 @@ export function ChartCardToolbarTypeAndVariables({
   theme,
   disabled,
   tutorialChartTypeId,
+  discoverPulse,
   children,
 }: {
   chartType: ChartType;
@@ -79,6 +80,7 @@ export function ChartCardToolbarTypeAndVariables({
   theme: 'light' | 'dark';
   disabled?: boolean;
   tutorialChartTypeId?: string;
+  discoverPulse?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -91,6 +93,7 @@ export function ChartCardToolbarTypeAndVariables({
         disabled={disabled ?? !onChangeType}
         display="icon"
         tutorialAnchorId={tutorialChartTypeId}
+        discoverPulse={discoverPulse}
       />
       <div className={CHART_TOOLBAR_CONTROLS_CLASS}>{children}</div>
     </>

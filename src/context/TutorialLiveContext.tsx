@@ -34,6 +34,8 @@ type Ctx = {
     includeSun: boolean;
     includeWind: boolean;
   }) => void;
+  /** Remove period highlight on the UTCI 12×24 heatmap (keeps sun/wind toggles). */
+  clearUtciFocus: () => void;
   clear: () => void;
 };
 
@@ -86,12 +88,19 @@ export function TutorialLiveProvider({
     },
     [enabled]
   );
+  const clearUtciFocus = useCallback(() => {
+    if (!enabled) return;
+    setSnapshot(prev => {
+      if (prev.utciFocusPeriodId == null) return prev;
+      return { ...prev, utciFocusPeriodId: null };
+    });
+  }, [enabled]);
   useEffect(() => {
     if (!enabled) clear();
   }, [enabled, clear]);
   const value = useMemo(
-    () => ({ enabled, snapshot, report, requestUtciSelection, clear }),
-    [enabled, snapshot, report, requestUtciSelection, clear]
+    () => ({ enabled, snapshot, report, requestUtciSelection, clearUtciFocus, clear }),
+    [enabled, snapshot, report, requestUtciSelection, clearUtciFocus, clear]
   );
   return <TutorialLiveContext.Provider value={value}>{children}</TutorialLiveContext.Provider>;
 }

@@ -894,6 +894,7 @@ const filteredCompareData = (compareData || []).filter(d => {
                     disabled={!onChangeType}
                     display="icon"
                     tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
+                    discoverPulse={!!tutorialChromeAnchors}
                   />
                   <ChartToolbarLabeledMenu
                     label="Color"

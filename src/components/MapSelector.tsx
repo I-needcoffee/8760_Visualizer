@@ -1399,9 +1399,11 @@ export function MapSelector({
             onChange={handleFileUpload}
           />
           <button
+            id="map-upload-epw"
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center justify-center w-12 h-12 bg-white text-gray-700 rounded-full shadow-hard-md hover:bg-gray-50 transition-colors border border-gray-200"
-            title="Upload .epw"
+            title="Upload .epw — load more weather files"
           >
             <Upload className="w-5 h-5" />
           </button>

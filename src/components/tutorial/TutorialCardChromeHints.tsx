@@ -78,11 +78,15 @@ export function TutorialCardChromeHints({
         : chartType === 'sunpath'
           ? 'Use Color in the header for dot color. When the card is wide, Radius sits beside it; otherwise set radius mapping in Settings (gear).'
           : chartType === 'utci'
-            ? 'This slot shows outdoor UTCI comfort; visualization mode and inputs are in Settings (gear).'
+            ? 'Click the sun and wind icons in the header to include or exclude solar radiation and wind in UTCI. Visualization mode is in Settings (gear).'
             : 'Open the dropdown to pick which EPW column drives bar height and heatmap color.';
 
     return [
-      { id: 'tutorial-card-chart-type', title: 'Chart type', body: 'Switch between Sun path, Data explorer, UTCI, Wind explorer, and Wind rose.' },
+      {
+        id: 'tutorial-card-chart-type',
+        title: 'Chart type',
+        body: 'Click this icon to switch visualization type — Sun path, Data explorer, UTCI, Wind explorer, or Wind rose.',
+      },
       { id: 'tutorial-card-data-control', title: 'Data / variable', body: dataBody },
       ...(chartType === 'sunpath'
         ? [

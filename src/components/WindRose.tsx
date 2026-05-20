@@ -579,6 +579,7 @@ export function WindRose({
                   disabled={!onChangeType}
                   display="icon"
                   tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
+                  discoverPulse={!!tutorialChromeAnchors}
                 />
                 <span
                   id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}

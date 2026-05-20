@@ -3,6 +3,7 @@ import tc from 'jsthermalcomfort';
 import type { EPWDataRow } from './epwParser';
 import type { GlobalFilterState } from './globalFilter';
 import { rowPassesDryBulbTemperature } from './globalFilter';
+import { OUTDOOR_COMFORT_GREEN_HEX, OUTDOOR_COMFORT_GREEN_RGB } from './constants';
 
 export const UTCI_COLORS: Record<string, string> = {
   'extreme cold stress': '#000033',
@@ -10,7 +11,7 @@ export const UTCI_COLORS: Record<string, string> = {
   'strong cold stress': '#0000ff',
   'moderate cold stress': '#0066ff',
   'slight cold stress': '#00ccff',
-  'no thermal stress': '#00ff00',
+  'no thermal stress': OUTDOOR_COMFORT_GREEN_HEX,
   'moderate heat stress': '#ffcc00',
   'strong heat stress': '#ff6600',
   'very strong heat stress': '#ff0000',
@@ -273,7 +274,7 @@ export type UtciComfortMatrix = {
   cells: UtciComfortMatrixCell[][];
 };
 
-/** Matches UTCI chart “comfort time” scale: grey (0%) → green-500 (100%). */
+/** Matches UTCI chart “comfort time” scale: grey (0%) → outdoor comfort green (100%). */
 export function comfortPercentHeatStyle(
   percent: number,
   theme: 'light' | 'dark'
@@ -286,7 +287,7 @@ export function comfortPercentHeatStyle(
   }
   const t = Math.max(0, Math.min(1, percent / 100));
   const low = theme === 'dark' ? { r: 55, g: 65, b: 81 } : { r: 243, g: 244, b: 246 };
-  const high = { r: 34, g: 197, b: 94 };
+  const high = OUTDOOR_COMFORT_GREEN_RGB;
   const r = Math.round(low.r + (high.r - low.r) * t);
   const g = Math.round(low.g + (high.g - low.g) * t);
   const b = Math.round(low.b + (high.b - low.b) * t);

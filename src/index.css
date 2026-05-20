@@ -1,9 +1,23 @@
 @import "tailwindcss";
 
-/** Optima (~macOS/iOS primary); serif fallbacks approximate its stroke contrast on other OS. */
 @theme {
   --font-sans:
-    Optima, "Optima nova", Candara, "Book Antiqua", Palatino, "Lucida Serif", serif;
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+@keyframes discover-pulse-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(249, 115, 22, 0.4),
+      0 0 8px 0 rgba(249, 115, 22, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(249, 115, 22, 0.55),
+      0 0 16px 4px rgba(249, 115, 22, 0.32);
+  }
 }
 
 @layer base {
@@ -35,6 +49,52 @@
 }
 
 @layer utilities {
+  /**
+   * Outer shell: padding + negative margin reserves space so the ring is not clipped.
+   * Pulse draws on ::after so the inner button keeps its own shadow/border.
+   */
+  /** Reserves space so control box-shadows are not clipped by overflow parents. */
+  .control-bleed-sm {
+    --control-bleed: 6px;
+    padding: var(--control-bleed);
+    margin: calc(-1 * var(--control-bleed));
+  }
+
+  .discover-pulse-wrap {
+    --discover-pulse-inset: 6px;
+    position: relative;
+    padding: var(--discover-pulse-inset);
+    margin: calc(-1 * var(--discover-pulse-inset));
+    z-index: 15;
+  }
+
+  .discover-pulse-wrap::after {
+    content: '';
+    position: absolute;
+    inset: var(--discover-pulse-inset);
+    border-radius: inherit;
+    pointer-events: none;
+    animation: discover-pulse-ring 2.8s ease-in-out 5 forwards;
+  }
+
+  /** @deprecated — use DiscoverPulseShell / .discover-pulse-wrap */
+  .discover-pulse-glow {
+    --discover-pulse-inset: 6px;
+    padding: var(--discover-pulse-inset);
+    margin: calc(-1 * var(--discover-pulse-inset));
+    position: relative;
+    z-index: 2;
+  }
+
+  .discover-pulse-glow::after {
+    content: '';
+    position: absolute;
+    inset: var(--discover-pulse-inset);
+    border-radius: inherit;
+    pointer-events: none;
+    animation: discover-pulse-ring 2.8s ease-in-out infinite;
+  }
+
   .hide-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;

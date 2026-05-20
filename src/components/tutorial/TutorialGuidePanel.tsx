@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { comfortPercentHeatStyle, utciExposureScenarioIndex } from '../../lib/utciModel';
 import type { ChartConfig } from '../../App';
 import type { UnitSystem } from '../../App';
@@ -11,6 +11,7 @@ import {
   computeTutorialUtciQuickStats,
 } from '../../lib/tutorialGuideStats';
 import { useTutorialLive } from '../../context/TutorialLiveContext';
+import { OUTDOOR_COMFORT_GREEN_HEX } from '../../lib/constants';
 
 export function TutorialGuidePanel({
   theme,
@@ -25,10 +26,16 @@ export function TutorialGuidePanel({
   filter: GlobalFilterState;
   unitSystem: UnitSystem;
 }) {
-  const { snapshot, requestUtciSelection } = useTutorialLive();
+  const { snapshot, requestUtciSelection, clearUtciFocus } = useTutorialLive();
   const [selectedCell, setSelectedCell] = useState<{ periodIndex: number; scenarioIndex: number } | null>(
     null
   );
+  const comfortMatrixRef = useRef<HTMLDivElement>(null);
+
+  const clearComfortHighlight = useCallback(() => {
+    setSelectedCell(null);
+    clearUtciFocus();
+  }, [clearUtciFocus]);
 
   const activeScenarioIndex = utciExposureScenarioIndex(
     snapshot.includeSun ?? true,
@@ -42,6 +49,16 @@ export function TutorialGuidePanel({
       return { ...prev, scenarioIndex: activeScenarioIndex };
     });
   }, [activeScenarioIndex]);
+
+  useEffect(() => {
+    if (!selectedCell && !snapshot.utciFocusPeriodId) return;
+    const onDocPointer = (e: PointerEvent) => {
+      const root = comfortMatrixRef.current;
+      if (!root?.contains(e.target as Node)) clearComfortHighlight();
+    };
+    document.addEventListener('pointerdown', onDocPointer);
+    return () => document.removeEventListener('pointerdown', onDocPointer);
+  }, [selectedCell, snapshot.utciFocusPeriodId, clearComfortHighlight]);
 
   const explorerMonthlyByMonth = useMemo(
     () =>
@@ -133,22 +150,18 @@ export function TutorialGuidePanel({
           utciStats ? (
             <div className="flex flex-col gap-4">
               <div
-                className={`rounded-lg border px-3 py-2 ${
-                  theme === 'dark'
-                    ? 'border-green-800/60 bg-green-950/40'
-                    : 'border-green-200 bg-green-50'
-                }`}
+                className="rounded-lg border px-3 py-2"
+                style={{
+                  borderColor: theme === 'dark' ? `${OUTDOOR_COMFORT_GREEN_HEX}66` : `${OUTDOOR_COMFORT_GREEN_HEX}40`,
+                  backgroundColor: theme === 'dark' ? `${OUTDOOR_COMFORT_GREEN_HEX}1a` : `${OUTDOOR_COMFORT_GREEN_HEX}14`,
+                }}
               >
                 <p className={`text-[10px] font-semibold uppercase tracking-wide ${muted}`}>Time in comfort</p>
-                <p
-                  className={`mt-0.5 text-lg font-bold tabular-nums ${
-                    theme === 'dark' ? 'text-green-400' : 'text-green-700'
-                  }`}
-                >
+                <p className="mt-0.5 text-lg font-bold tabular-nums" style={{ color: OUTDOOR_COMFORT_GREEN_HEX }}>
                   {utciStats.comfortPercent.toFixed(1)}%
                 </p>
                 <p className={`mt-0.5 text-[10px] leading-snug ${muted}`}>
-                  No thermal stress · {utciStats.hoursCounted.toLocaleString()} filtered hours
+                  No thermal stress Â· {utciStats.hoursCounted.toLocaleString()} filtered hours
                 </p>
               </div>
 
@@ -160,13 +173,15 @@ export function TutorialGuidePanel({
                   {utciStats.categoryShares.map(share => (
                     <li
                       key={share.category}
-                      className={`grid grid-cols-[auto_1fr_auto] items-center gap-x-2 rounded px-1 py-0.5 ${
+                      className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 rounded px-1 py-0.5"
+                      style={
                         share.isComfort
-                          ? theme === 'dark'
-                            ? 'bg-green-950/50 ring-1 ring-green-800/50'
-                            : 'bg-green-50 ring-1 ring-green-200/80'
-                          : ''
-                      }`}
+                          ? {
+                              backgroundColor: theme === 'dark' ? `${OUTDOOR_COMFORT_GREEN_HEX}1a` : `${OUTDOOR_COMFORT_GREEN_HEX}14`,
+                              boxShadow: `inset 0 0 0 1px ${theme === 'dark' ? `${OUTDOOR_COMFORT_GREEN_HEX}55` : `${OUTDOOR_COMFORT_GREEN_HEX}35`}`,
+                            }
+                          : undefined
+                      }
                     >
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-sm border border-black/10"
@@ -174,16 +189,14 @@ export function TutorialGuidePanel({
                         aria-hidden
                       />
                       <span
-                        className={`min-w-0 text-[11px] leading-snug ${
-                          share.isComfort ? 'font-semibold text-green-700 dark:text-green-400' : muted
-                        }`}
+                        className={`min-w-0 text-[11px] leading-snug ${share.isComfort ? 'font-semibold' : muted}`}
+                        style={share.isComfort ? { color: OUTDOOR_COMFORT_GREEN_HEX } : undefined}
                       >
                         {share.label}
                       </span>
                       <span
-                        className={`shrink-0 text-[11px] font-medium tabular-nums ${
-                          share.isComfort ? 'text-green-700 dark:text-green-400' : ink
-                        }`}
+                        className={`shrink-0 text-[11px] font-medium tabular-nums ${share.isComfort ? '' : ink}`}
+                        style={share.isComfort ? { color: OUTDOOR_COMFORT_GREEN_HEX } : undefined}
                       >
                         {share.percentage.toFixed(1)}%
                       </span>
@@ -198,9 +211,22 @@ export function TutorialGuidePanel({
                 </h4>
                 <p className={`mb-2 text-[10px] leading-snug ${muted}`}>
                   Click a cell to apply that exposure and highlight the matching time window on the chart. Greener = more
-                  comfort time.
+                  comfort time. Click the cell again, use Clear, or click outside the table to remove the highlight.
                 </p>
-                <div className="-mx-1 overflow-x-auto px-1">
+                {(selectedCell || snapshot.utciFocusPeriodId) && (
+                  <button
+                    type="button"
+                    onClick={clearComfortHighlight}
+                    className={`mb-2 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                      theme === 'dark'
+                        ? 'border-orange-700/60 text-orange-200 hover:bg-orange-950/50'
+                        : 'border-orange-300 text-orange-800 hover:bg-orange-50'
+                    }`}
+                  >
+                    Clear chart highlight
+                  </button>
+                )}
+                <div ref={comfortMatrixRef} className="-mx-1 overflow-x-auto px-1">
                   <table className="w-full min-w-0 border-separate border-spacing-0 text-left text-[10px] sm:min-w-[24rem]">
                     <thead>
                       <tr>
@@ -257,13 +283,17 @@ export function TutorialGuidePanel({
                                 <td key={`${period.id}-${scenario.id}`} className="px-0.5 py-0.5">
                                   <button
                                     type="button"
-                                    title={`${period.label} · ${scenario.label}`}
+                                    title={`${period.label} Â· ${scenario.label}`}
                                     aria-pressed={isSelected}
                                     style={heat}
                                     className={`w-full min-w-[2.75rem] rounded-md px-0.5 py-1 text-center text-[10px] font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 ${
                                       isSelected ? 'ring-2 ring-black ring-offset-1' : ''
                                     }`}
                                     onClick={() => {
+                                      if (isSelected) {
+                                        clearComfortHighlight();
+                                        return;
+                                      }
                                       setSelectedCell({ periodIndex: pi, scenarioIndex: si });
                                       requestUtciSelection({
                                         periodId: period.id,
@@ -274,7 +304,7 @@ export function TutorialGuidePanel({
                                   >
                                     {Number.isFinite(cell.percentComfort)
                                       ? `${cell.percentComfort.toFixed(1)}%`
-                                      : '—'}
+                                      : 'â€”'}
                                   </button>
                                 </td>
                               );
@@ -318,7 +348,7 @@ export function TutorialGuidePanel({
           <h3 className={`mb-1 text-xs font-bold uppercase tracking-wider ${muted}`}>By month</h3>
           <p className={`mb-2 text-[11px] leading-snug ${muted}`}>
             <span className={`font-medium ${ink}`}>{explorerMonthlyByMonth.variableLabel}</span>
-            {' — '}
+            {' â€” '}
             high, average, and low per calendar month with the same filters as the chart. When the explorer uses mean
             daily min/max for bars, those extents define high and low here too.
           </p>

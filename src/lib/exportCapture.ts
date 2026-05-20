@@ -7,23 +7,26 @@ export type ExportFrameSize =
   | 'hd1080'
   | 'hd720'
   | 'hd1440'
+  | 'uhd4k'
   | 'portrait1080'
   | 'square1080'
   | 'fourThree1200';
 
 export type ExportFormat = 'pdf' | 'jpeg';
 
+/** Fixed export sizes sorted by resolution (pixel area), then special aspects. */
 export const EXPORT_FRAME_OPTIONS: readonly {
   value: ExportFrameSize;
   label: string;
   shortLabel: string;
 }[] = [
   { value: 'viewport', label: 'Screen (current view)', shortLabel: 'Screen' },
-  { value: 'hd1080', label: '1920×1080 — 16:9 widescreen', shortLabel: '16:9 · 1080p' },
   { value: 'hd720', label: '1280×720 — 16:9 HD', shortLabel: '16:9 · 720p' },
+  { value: 'hd1080', label: '1920×1080 — 16:9 widescreen', shortLabel: '16:9 · 1080p' },
   { value: 'hd1440', label: '2560×1440 — 16:9 QHD', shortLabel: '16:9 · 1440p' },
-  { value: 'portrait1080', label: '1080×1920 — 9:16 portrait', shortLabel: '9:16 · portrait' },
+  { value: 'uhd4k', label: '3840×2160 — 16:9 4K UHD', shortLabel: '16:9 · 4K' },
   { value: 'square1080', label: '1080×1080 — 1:1 square', shortLabel: '1:1 · square' },
+  { value: 'portrait1080', label: '1080×1920 — 9:16 portrait', shortLabel: '9:16 · portrait' },
   { value: 'fourThree1200', label: '1600×1200 — 4:3 classic', shortLabel: '4:3 · classic' },
 ] as const;
 
@@ -31,6 +34,7 @@ const FIXED_FRAMES: Record<Exclude<ExportFrameSize, 'viewport'>, { width: number
   hd1080: { width: 1920, height: 1080 },
   hd720: { width: 1280, height: 720 },
   hd1440: { width: 2560, height: 1440 },
+  uhd4k: { width: 3840, height: 2160 },
   portrait1080: { width: 1080, height: 1920 },
   square1080: { width: 1080, height: 1080 },
   fourThree1200: { width: 1600, height: 1200 },

@@ -6,7 +6,6 @@ import { ChartType, ChartConfig, LayoutMode, UnitSystem } from '../App';
 import type { EPWDataRow } from '../lib/epwParser';
 import type { GlobalFilterState } from './GlobalFilterPanel';
 import { DEFAULT_GLOBAL_FILTER } from '../lib/globalFilter';
-import { TutorialCardChromeHints } from './tutorial/TutorialCardChromeHints';
 import { TutorialGuidePanel } from './tutorial/TutorialGuidePanel';
 
 const SLOT_DRAG_MIME = 'application/x-climate-slot-index';
@@ -23,8 +22,6 @@ interface SingleModeLayoutProps {
   tutorialEpwRows?: EPWDataRow[];
   tutorialFilter?: GlobalFilterState;
   tutorialUnitSystem?: UnitSystem;
-  /** When false, guided layout omits hover “tutorial” popovers on chart chrome. */
-  tutorialHoverHints?: boolean;
 }
 
 function getSlotsPerPage(mode: LayoutMode) {
@@ -47,7 +44,6 @@ export function SingleModeLayout({
   tutorialEpwRows,
   tutorialFilter,
   tutorialUnitSystem,
-  tutorialHoverHints = true,
 }: SingleModeLayoutProps) {
   const tutorialColRef = useRef<HTMLDivElement>(null);
   /** Chart + guide grid only (excludes `TutorialCardChromeHints`) so ResizeObserver does not watch the hints strip. */
@@ -225,7 +221,7 @@ export function SingleModeLayout({
           {layoutMode === 'stacked' && (
             <div className="flex w-full flex-1 min-h-0 flex-col gap-2 overflow-y-auto">
               {pageSlots.map((slot, idx) => {
-                let className = 'w-full min-h-[340px] flex flex-col overflow-hidden ';
+                let className = 'w-full min-h-[340px] flex flex-col overflow-visible ';
                 if (!exportMode) {
                   className += `rounded-xl border shadow-hard-lg ${
                     theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
@@ -242,13 +238,6 @@ export function SingleModeLayout({
 
           {layoutMode === 'tutorial' && (
             <div ref={tutorialColRef} className="flex w-full flex-1 min-h-0 flex-col gap-2 md:min-h-0 md:overflow-visible">
-              {tutorialHoverHints && (
-                <TutorialCardChromeHints
-                  theme={theme}
-                  chartType={pageSlots[0]?.type ?? 'empty'}
-                  measureRootRef={tutorialChromeObserveRef}
-                />
-              )}
               <div
                 ref={tutorialChromeObserveRef}
                 className="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-4 md:overflow-visible"
@@ -256,7 +245,7 @@ export function SingleModeLayout({
                 {(() => {
                   const slot = pageSlots[0];
                   let className =
-                    'flex h-full min-h-[46vh] w-full flex-col overflow-hidden md:min-h-0 md:min-h-0 ';
+                    'flex h-full min-h-[46vh] w-full flex-col overflow-visible md:min-h-0 ';
                   if (!exportMode) {
                     className += `rounded-xl border shadow-hard-lg ${
                       theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
@@ -284,7 +273,7 @@ export function SingleModeLayout({
             <div className="grid w-full gap-2 flex-1 min-h-0 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] md:[grid-template-rows:minmax(0,1fr)_minmax(0,1fr)] md:overflow-visible">
               {pageSlots.map((slot, idx) => {
                 const isHero = idx === 0;
-                let className = 'w-full min-h-0 h-full flex flex-col overflow-hidden ';
+                let className = 'w-full min-h-0 h-full flex flex-col overflow-visible ';
                 if (!exportMode) {
                   className += `rounded-xl border shadow-hard-lg ${
                     theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'

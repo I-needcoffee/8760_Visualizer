@@ -1238,6 +1238,7 @@ export function DataExplorer({
                     disabled={!onChangeType}
                     display="icon"
                     tutorialAnchorId={tutorialChromeAnchors ? 'tutorial-card-chart-type' : undefined}
+                    discoverPulse={!!tutorialChromeAnchors}
                   />
                   <VariableChartSelect
                     value={colorVar}

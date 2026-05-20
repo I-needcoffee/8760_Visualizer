@@ -7,6 +7,10 @@ import { DIFFERENCE_DIVERGING_COLORS, DIFFERENCE_DIVERGING_ID } from './differen
  */
 export const CARTO_LIGHT_ALL_WATER_HEX = '#d4dadc';
 
+/** Outdoor comfort green — CMYK 77, 22, 89, 7 (≈ #37B91A). */
+export const OUTDOOR_COMFORT_GREEN_HEX = '#37B91A';
+export const OUTDOOR_COMFORT_GREEN_RGB = { r: 55, g: 185, b: 26 } as const;
+
 /**
  * Temperature heatmap palette from EPW tooling (`temperature_js.html` Plotly colorscale /
  * annotation colors). Blue → teal → green → yellow → orange (cool → warm).
@@ -14,7 +18,7 @@ export const CARTO_LIGHT_ALL_WATER_HEX = '#d4dadc';
 export const TEMPERATURE_COMFORT_GRADIENT_COLORS = [
   '#0069b4',
   '#40b2a6',
-  '#addb8b',
+  OUTDOOR_COMFORT_GREEN_HEX,
   '#fde767',
   '#f06441',
 ] as const;

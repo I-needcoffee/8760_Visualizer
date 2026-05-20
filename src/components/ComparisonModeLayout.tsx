@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { Settings2 } from 'lucide-react';
 import { EPWVariable, ParsedEPW } from '../lib/epwParser';
@@ -71,7 +71,7 @@ const PILL_DROPDOWN_CHEVRON_GUTTER_PX = 20;
 
 function pillSelectOptionLabel(f: ParsedEPW) {
   return (
-    weatherLocationTypeCaption(f) || `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}` || '—'
+    weatherLocationTypeCaption(f) || `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}` || 'â€”'
   );
 }
 
@@ -225,7 +225,7 @@ function PillSelect({
             className={`pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-[8px] leading-none opacity-70 ${caret}`}
             aria-hidden
           >
-            ▾
+            â–¾
           </span>
         </div>
       </div>
@@ -291,7 +291,7 @@ function PairSharedToolbar({
 
 function convertUnitForLegend(unit: string, unitSystem: UnitSystem) {
   if (unitSystem === 'imperial') {
-    if (unit === '°C') return '°F';
+    if (unit === 'Â°C') return 'Â°F';
     if (unit === 'm/s') return 'mph';
     if (unit === 'mm') return 'in';
   }
@@ -541,7 +541,7 @@ export function ComparisonModeLayout({
     [baseline.variables, baseline.data, roseVar, unitSystem]
   );
 
-  const utciPairUnit = unitSystem === 'imperial' ? '°F' : '°C';
+  const utciPairUnit = unitSystem === 'imperial' ? 'Â°F' : 'Â°C';
   const utciPairGradMin = unitSystem === 'imperial' ? -40 * (9 / 5) + 32 : -40;
   const utciPairGradMax = unitSystem === 'imperial' ? 50 * (9 / 5) + 32 : 50;
 
@@ -596,20 +596,16 @@ export function ComparisonModeLayout({
         </div>
         <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[280px] sm:min-h-[300px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex min-h-0 min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <ChartTypeMenu
                 value="sunpath"
                 label="Sun Path"
                 onChange={noopType}
                 theme={theme}
-                disabled
                 display="icon"
+                typeBadge
               />
-              <span
-                className={`text-[10px] font-semibold uppercase tracking-wide ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-              >
-                Sun Path
-              </span>
               <VariableChartSelect
                 value={sunColorVar}
                 onChange={setSunColorVar}
@@ -644,11 +640,11 @@ export function ComparisonModeLayout({
                   </optgroup>
                 ))}
               </VariableChartSelect>
-              <div className="min-w-0 flex-1 basis-full sm:basis-[min(100%,280px)]">
-                <AggregationToolbar
-                  value={sunAgg}
-                  onChange={setSunAgg}
-                  theme={theme}
+              </div>
+              <AggregationToolbar
+                value={sunAgg}
+                onChange={setSunAgg}
+                theme={theme}
                   trailing={
                     <>
                       <button
@@ -685,7 +681,6 @@ export function ComparisonModeLayout({
                     </>
                   }
                 />
-              </div>
             </div>
           </PairSharedToolbar>
           {renderChart(
@@ -705,20 +700,16 @@ export function ComparisonModeLayout({
 
         <CompareCardShell theme={theme} exportMode={exportMode} className="min-h-[300px] sm:min-h-[360px]">
           <PairSharedToolbar theme={theme} exportMode={exportMode}>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex min-h-0 min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <ChartTypeMenu
                 value="explorer"
                 label="Data Explorer"
                 onChange={noopType}
                 theme={theme}
-                disabled
                 display="icon"
+                typeBadge
               />
-              <span
-                className={`text-[10px] font-semibold uppercase tracking-wide ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
-              >
-                Data Explorer
-              </span>
               <VariableChartSelect
                 value={expVar}
                 onChange={setExpVar}
@@ -736,16 +727,16 @@ export function ComparisonModeLayout({
                   </optgroup>
                 ))}
               </VariableChartSelect>
-              <div className="min-w-0 flex-1 basis-full sm:basis-[min(100%,280px)]">
-                <AggregationToolbar
-                  value={expAgg}
-                  onChange={setExpAgg}
-                  theme={theme}
-                  trailing={
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setExpStats(v => !v)}
+              </div>
+              <AggregationToolbar
+                value={expAgg}
+                onChange={setExpAgg}
+                theme={theme}
+                trailing={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setExpStats(v => !v)}
                         className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none transition-colors ${
                           expStats
                             ? theme === 'dark'
@@ -777,7 +768,6 @@ export function ComparisonModeLayout({
                     </>
                   }
                 />
-              </div>
             </div>
           </PairSharedToolbar>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
