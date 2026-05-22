@@ -28,6 +28,10 @@ import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 import { useWindIemGlobalPrefs } from '../lib/iem/globalWindIemPrefsStore';
 import { useResolvedIemWindRows } from '../hooks/useResolvedIemWindRows';
 import { useIemAsosWindSamples } from '../hooks/useIemAsosWindSamples';
+import {
+  buildEpwDryBulbStationClockLookup,
+  resolveWindRowDryBulbC,
+} from '../lib/iem/mergeEpwWind';
 import { IemWindChartLoadingOverlay } from './IemWindSetupModal';
 
 interface WindRoseProps {
@@ -93,8 +97,13 @@ export function WindRose({
   const skipCompareWindResolution = !(epwCompareRaw && epwCompareRaw.length > 0);
 
   // For wind roses, preserve multi-year distributions by binning raw ASOS hourly samples across years.
-  const iemSamples = useIemAsosWindSamples(metadata, iemControls, false);
-  const iemSamplesCompare = useIemAsosWindSamples(compareMetadata ?? metadata, iemControls, skipCompareWindResolution);
+  const iemSamples = useIemAsosWindSamples(metadata, iemControls, false, epwData);
+  const iemSamplesCompare = useIemAsosWindSamples(
+    compareMetadata ?? metadata,
+    iemControls,
+    skipCompareWindResolution,
+    epwCompareRaw ?? []
+  );
 
   const primWindResolved = useResolvedIemWindRows(epwData, metadata, iemControls, false);
   const cmpWindResolved = useResolvedIemWindRows(epwCompareRaw ?? [], compareMetadata ?? metadata, iemControls, skipCompareWindResolution);
@@ -208,14 +217,29 @@ export function WindRose({
     return unit;
   };
 
+  const epwDryBulbLookup = useMemo(
+    () => (epwData.length ? buildEpwDryBulbStationClockLookup(epwData) : null),
+    [epwData]
+  );
+  const compareEpwDryBulbLookup = useMemo(
+    () => (epwCompareRaw?.length ? buildEpwDryBulbStationClockLookup(epwCompareRaw) : null),
+    [epwCompareRaw]
+  );
+
   // Filter data based on global filter and comfort filters
-  const getFilteredData = (targetData: EPWDataRow[]) => {
+  const getFilteredData = (
+    targetData: EPWDataRow[],
+    dryBulbLookup: Map<number, number> | null,
+    rowMetadata?: EPWMetadata
+  ) => {
     return targetData.filter(d => {
       if (!rowPassesGlobalFilters(d, filter)) return false;
 
       let isTempMatch = true;
       if (tempFilterEnabled) {
-        const temp = convertValue(d.dryBulbTemperature as number, '°C');
+        const tempC = resolveWindRowDryBulbC(d, dryBulbLookup, rowMetadata);
+        if (tempC === null) return false;
+        const temp = convertValue(tempC, '°C');
         if (tempFilterType === 'above') {
           isTempMatch = temp > tempThreshold;
         } else {
@@ -237,8 +261,42 @@ export function WindRose({
     });
   };
 
-  const filteredData = useMemo(() => getFilteredData(data), [data, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
-  const filteredCompareData = useMemo(() => compareData ? getFilteredData(compareData) : [], [compareData, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
+  const filteredData = useMemo(
+    () => getFilteredData(data, epwDryBulbLookup, metadata),
+    [
+      data,
+      filter,
+      tempFilterEnabled,
+      tempThreshold,
+      tempFilterType,
+      speedFilterEnabled,
+      speedThreshold,
+      speedFilterType,
+      unitSystem,
+      epwDryBulbLookup,
+      metadata,
+    ]
+  );
+  const filteredCompareData = useMemo(
+    () =>
+      compareData
+        ? getFilteredData(compareData, compareEpwDryBulbLookup, compareMetadata ?? metadata)
+        : [],
+    [
+      compareData,
+      filter,
+      tempFilterEnabled,
+      tempThreshold,
+      tempFilterType,
+      speedFilterEnabled,
+      speedThreshold,
+      speedFilterType,
+      unitSystem,
+      compareEpwDryBulbLookup,
+      compareMetadata,
+      metadata,
+    ]
+  );
 
   const tutorialLive = useTutorialLiveOptional();
   const tutorialReport = tutorialLive?.report;

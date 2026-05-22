@@ -14,6 +14,65 @@ function floorHourUtc(ms: number): number {
   return Math.floor(ms / (60 * 60 * 1000)) * (60 * 60 * 1000);
 }
 
+/** EPW missing dry-bulb sentinel and other non-physical placeholders. */
+export function isValidEpwDryBulb(t: unknown): t is number {
+  return typeof t === 'number' && Number.isFinite(t) && t < 99;
+}
+
+export function stationClockKey(month: number, day: number, hour: number): number {
+  return month * 10000 + day * 100 + hour;
+}
+
+/** Station calendar (month/day/hour) from a UTC observation — matches {@link epwUtcMsForMergedWind}. */
+export function stationClockFromUtcMs(
+  validMs: number,
+  metadata: EPWMetadata
+): { month: number; day: number; hour: number } {
+  const t = new Date(validMs + Math.round(metadata.timeZone * 3600000));
+  return { month: t.getUTCMonth() + 1, day: t.getUTCDate(), hour: t.getUTCHours() };
+}
+
+/** TMY dry-bulb (°C) keyed by EPW station month/day/hour. */
+export function buildEpwDryBulbStationClockLookup(epwRows: EPWDataRow[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const r of epwRows) {
+    if (!isValidEpwDryBulb(r.dryBulbTemperature)) continue;
+    map.set(stationClockKey(r.month, r.day, r.hour), r.dryBulbTemperature as number);
+  }
+  return map;
+}
+
+/**
+ * Dry-bulb for comfort filtering: use the row value when present, else TMY/EPW at the same station clock.
+ */
+export function resolveWindRowDryBulbC(
+  row: EPWDataRow,
+  epwLookup: Map<number, number> | null,
+  metadata?: EPWMetadata
+): number | null {
+  if (isValidEpwDryBulb(row.dryBulbTemperature)) {
+    return row.dryBulbTemperature as number;
+  }
+  if (!epwLookup) return null;
+
+  if (
+    typeof row.month === 'number' &&
+    typeof row.day === 'number' &&
+    typeof row.hour === 'number' &&
+    !Number.isNaN(row.month) &&
+    !Number.isNaN(row.day) &&
+    !Number.isNaN(row.hour)
+  ) {
+    return epwLookup.get(stationClockKey(row.month, row.day, row.hour)) ?? null;
+  }
+
+  if (!metadata) return null;
+  const ms = row.date instanceof Date ? row.date.getTime() : NaN;
+  if (!Number.isFinite(ms)) return null;
+  const sc = stationClockFromUtcMs(ms, metadata);
+  return epwLookup.get(stationClockKey(sc.month, sc.day, sc.hour)) ?? null;
+}
+
 /**
  * Build a UTC hourly map from asos rows (prefer last sample within each UTC hour bucket).
  */

@@ -46,6 +46,10 @@ import { defaultGradientIdForVariable } from '../lib/defaultGradientForVariable'
 import { gradientsForVariable } from '../lib/availableGradientsForVariable';
 import { useWindIemGlobalPrefs } from '../lib/iem/globalWindIemPrefsStore';
 import { useResolvedIemWindRows } from '../hooks/useResolvedIemWindRows';
+import {
+  buildEpwDryBulbStationClockLookup,
+  resolveWindRowDryBulbC,
+} from '../lib/iem/mergeEpwWind';
 import { IemWindChartLoadingOverlay } from './IemWindSetupModal';
 import {
   EXPLORER_SVG_BASE_WIDTH,
@@ -369,6 +373,11 @@ export function WindExplorer({
     });
   }, [tutorialEnabled, tutorialReport, aggregation, colorVar, variables]);
 
+  const epwDryBulbLookup = useMemo(
+    () => (epwData.length ? buildEpwDryBulbStationClockLookup(epwData) : null),
+    [epwData]
+  );
+
   // Calculate local stats for filtered data
   const filteredData = useMemo((): EPWDataRow[] => {
     return data.filter(d => {
@@ -376,7 +385,9 @@ export function WindExplorer({
 
       let isTempMatch = true;
       if (tempFilterEnabled) {
-        const temp = convertValue(d.dryBulbTemperature, '°C');
+        const tempC = resolveWindRowDryBulbC(d, epwDryBulbLookup, metadata);
+        if (tempC === null) return false;
+        const temp = convertValue(tempC, '°C');
         if (tempFilterType === 'above') {
           isTempMatch = temp > tempThreshold;
         } else {
@@ -396,7 +407,20 @@ export function WindExplorer({
 
       return isTempMatch && isSpeedMatch;
     });
-  }, [data, filter, tempFilterEnabled, tempThreshold, tempFilterType, speedFilterEnabled, speedThreshold, speedFilterType, unitSystem]);
+  }, [
+    data,
+    filter,
+    tempFilterEnabled,
+    tempThreshold,
+    tempFilterType,
+    speedFilterEnabled,
+    speedThreshold,
+    speedFilterType,
+    unitSystem,
+    epwDryBulbLookup,
+    metadata,
+    convertValue,
+  ]);
 
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
     const def = variables.find(v => v.id === colorVar) || variables.find(v => v.id === 'windSpeed') || variables[0];

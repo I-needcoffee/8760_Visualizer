@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { EPWDataRow, EPWMetadata } from '../lib/epwParser';
 import { fetchParsedIemWindYear } from '../lib/iem/fetchIemWindYear';
+import {
+  buildEpwDryBulbStationClockLookup,
+  stationClockFromUtcMs,
+  stationClockKey,
+} from '../lib/iem/mergeEpwWind';
 import { messageForResolvedIemWindStation, resolveIemWindStationForEpw } from '../lib/iem/resolveIemWindStation';
 import type { CompareWindIemSharedControls } from '../lib/iem/windIemPrefsShared';
 import type { ParsedIemWindRow } from '../lib/iem/parseAsosCsv';
@@ -27,26 +32,35 @@ function inclusiveYears(start: number, end: number): number[] {
   return out;
 }
 
-function samplesToEpwRows(rows: ParsedIemWindRow[]): EPWDataRow[] {
+function samplesToEpwRows(
+  rows: ParsedIemWindRow[],
+  epwRows: EPWDataRow[],
+  metadata: EPWMetadata
+): EPWDataRow[] {
+  const dryBulbLookup = epwRows.length ? buildEpwDryBulbStationClockLookup(epwRows) : null;
+
   return rows
     .filter(r => Number.isFinite(r.validMs))
     .map(r => {
       const d = new Date(r.validMs);
+      const sc = stationClockFromUtcMs(r.validMs, metadata);
       const year = d.getUTCFullYear();
-      const month = d.getUTCMonth() + 1;
-      const day = d.getUTCDate();
-      const hour = d.getUTCHours();
-      return {
+      const row: EPWDataRow = {
         date: d,
         year,
-        month,
-        day,
-        hour,
+        month: sc.month,
+        day: sc.day,
+        hour: sc.hour,
         minute: d.getUTCMinutes(),
         dayOfYear: 0,
         windSpeed: r.windMs,
         windDirection: r.windFromDeg,
-      } as EPWDataRow;
+      };
+      const tmyDryBulb = dryBulbLookup?.get(stationClockKey(sc.month, sc.day, sc.hour));
+      if (tmyDryBulb !== undefined) {
+        row.dryBulbTemperature = tmyDryBulb;
+      }
+      return row;
     });
 }
 
@@ -60,7 +74,9 @@ export function useIemAsosWindSamples(
     CompareWindIemSharedControls,
     'source' | 'iemYearStart' | 'iemYearEnd' | 'iemStation'
   >,
-  skip = false
+  skip = false,
+  /** TMY/EPW timeline used for dry-bulb when mesonet rows have no temperature. */
+  epwRows: EPWDataRow[] = []
 ): IemAsosSamplesState {
   const years = useMemo(() => inclusiveYears(iem.iemYearStart, iem.iemYearEnd), [iem.iemYearStart, iem.iemYearEnd]);
 
@@ -117,7 +133,12 @@ export function useIemAsosWindSamples(
           all.push(...yr);
         }
 
-        setSt({ kind: 'iem', loading: false, samples: samplesToEpwRows(all), fallbackNote: null });
+        setSt({
+          kind: 'iem',
+          loading: false,
+          samples: samplesToEpwRows(all, epwRows, metadata),
+          fallbackNote: null,
+        });
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -133,7 +154,7 @@ export function useIemAsosWindSamples(
     return () => {
       cancelled = true;
     };
-  }, [skip, iem.source, iem.iemStation, metadata, years]);
+  }, [skip, iem.source, iem.iemStation, metadata, years, epwRows]);
 
   return st;
 }
