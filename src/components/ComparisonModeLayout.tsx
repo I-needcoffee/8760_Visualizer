@@ -434,8 +434,18 @@ export function ComparisonModeLayout({
       iemYearStart: iemGlobal.iemYearStart,
       iemYearEnd: iemGlobal.iemYearEnd,
       setIemYearRange: iemGlobal.setIemYearRange,
+      iemStation: iemGlobal.iemStation,
+      setIemStation: iemGlobal.setIemStation,
     }),
-    [iemGlobal.source, iemGlobal.iemYearStart, iemGlobal.iemYearEnd, iemGlobal.setSource, iemGlobal.setIemYearRange]
+    [
+      iemGlobal.source,
+      iemGlobal.iemYearStart,
+      iemGlobal.iemYearEnd,
+      iemGlobal.iemStation,
+      iemGlobal.setSource,
+      iemGlobal.setIemYearRange,
+      iemGlobal.setIemStation,
+    ]
   );
 
   const [windAgg, setWindAgg] = useState<CompareWindSharedControls['aggregation']>('month');

@@ -779,7 +779,7 @@ export function WindRose({
           {primWindResolved.loadingIem && iemControls.source === 'iem' ? (
             <IemWindChartLoadingOverlay
               theme={theme}
-              label="Compiling IEM ASOS wind for your year range…"
+              label="Compiling IEM mesonet wind for your year range…"
             />
           ) : null}
           <svg ref={roseRef} className="h-full w-full max-h-full max-w-full" preserveAspectRatio="xMidYMid meet" />

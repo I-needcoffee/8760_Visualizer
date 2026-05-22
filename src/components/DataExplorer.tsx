@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useMemo } from 'react';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
@@ -6,6 +6,11 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import {
+  createExplorerChartValueGradient,
+  explorerChartValueGradientId,
+  upsertSvgDefs,
+} from '../lib/explorerBarGradient';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { dataExplorerDiffValuesForAggregation } from '../lib/dataExplorerDiffAggregation';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
@@ -20,8 +25,13 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareExplorerSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
-import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
-import { aggregateCellStatistic, explorerBarStatisticY, rowPassesGlobalFilters } from '../lib/globalFilter';
+import type { BarChartFillMode, GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
+import {
+  aggregateCellStatistic,
+  explorerBarSolidColor,
+  explorerBarStatisticY,
+  rowPassesGlobalFilters,
+} from '../lib/globalFilter';
 
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
@@ -86,6 +96,8 @@ interface DataExplorerProps {
   filter: GlobalFilterState;
   /** Heatmaps: statistic within each cell (footer Low / Ave / High). Default mean. */
   heatmapCellStatistic?: HeatmapCellStatistic;
+  /** Bar fill: solid footer statistic vs legend gradient (global Settings). */
+  barChartFillMode?: BarChartFillMode;
   unitSystem: UnitSystem;
   heatmapTextColor: string;
   theme: 'light' | 'dark';
@@ -111,6 +123,7 @@ interface DataExplorerProps {
 export function DataExplorer({ 
   data, compareData, showDifference, stackedComparison, variables, defaultVariableId, onRemove, onChangeType, gradients, filter,
   heatmapCellStatistic = 'mean',
+  barChartFillMode = 'solid',
   unitSystem, heatmapTextColor, theme, 
   setShowGradientModal,
   exportMode,
@@ -125,6 +138,7 @@ export function DataExplorer({
   tutorialChromeAnchors,
   pairSuppressFooterLegend,
 }: DataExplorerProps) {
+  const barGradientSvgId = explorerChartValueGradientId(useId());
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -298,6 +312,7 @@ export function DataExplorer({
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
+    const svgDefs = upsertSvgDefs(svg);
 
     const g = svg
       .attr("viewBox", `0 0 ${width} ${height}`)
@@ -821,6 +836,14 @@ export function DataExplorer({
     const yScaleBar = usePairBarDomain
       ? d3.scaleLinear().domain([y0, y1]).range([barChartHeight, 0])
       : d3.scaleLinear().domain([y0, y1]).range([barChartHeight, 0]).nice();
+
+    const chartBarFill =
+      barChartFillMode === 'gradient' && !(showDifference && compareData)
+        ? createExplorerChartValueGradient(svgDefs, colorScale, cMin, cMax, v => yScaleBar(v), {
+            id: barGradientSvgId,
+          })
+        : null;
+
     const validData = aggregatedData.filter(d => d.valueSelected !== null);
     const pairLineData = aggregatedData.filter(
       d => d.valueSelected !== null && d.compareValueSelected !== null
@@ -983,7 +1006,15 @@ export function DataExplorer({
           .attr("y", topY)
           .attr("width", barW)
           .attr("height", barH)
-          .style("fill", colorScale(val))
+          .style(
+            "fill",
+            chartBarFill ??
+              explorerBarSolidColor(colorScale, heatmapCellStatistic, {
+                valueSelected: val,
+                minSelected: minVal,
+                maxSelected: maxVal,
+              })
+          )
           .style("opacity", 0.6)
           .attr("rx", pillR)
           .attr("ry", pillR);
@@ -1062,6 +1093,8 @@ export function DataExplorer({
     comparePane,
     explorerShared?.barYDomain,
     heatmapCellStatistic,
+    barGradientSvgId,
+    barChartFillMode,
   ]);
 
   // Calculate local stats for filtered data

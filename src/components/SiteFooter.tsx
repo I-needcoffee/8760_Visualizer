@@ -316,6 +316,7 @@ export function SiteFooter({
   const metricLabel = isMobile ? 'Met' : 'Metric';
   const imperialLabel = isMobile ? 'Imp' : 'Imperial';
   const dstLabel = isMobile ? 'DST' : 'Daylight savings time';
+  const windDataLabel = isMobile ? 'Wind' : 'Wind Data';
   return (
     <>
       <div className="flex w-full flex-col gap-0.5">
@@ -522,19 +523,30 @@ export function SiteFooter({
             ) : null}
             {windFooter?.visible ? (
               <>
+                <DiscoverPulseShell storageKey={ONBOARDING_KEYS.windDataSource} rounded="pill">
                 <div
-                  className={`inline-flex ${pillH} min-w-0 max-w-[min(100vw-8rem,14rem)] shrink-0 items-stretch rounded-full border ${
+                  className={`inline-flex ${pillH} min-w-0 max-w-[min(100vw-6rem,22rem)] shrink-0 items-stretch overflow-visible rounded-full border ${
                     theme === 'dark'
                       ? 'border-gray-600 bg-gray-800 p-0.5 shadow-none'
                       : 'border-gray-200 bg-gray-100 p-0.5 shadow-none'
                   }`}
-                  title="Wind: typical meteorological year file vs Iowa Mesonet ASOS archive"
+                  title="Wind data: weather file (TMY) vs Iowa Environmental Mesonet station archive"
                   role="group"
                   aria-label="Wind data source"
                 >
+                  <span
+                    className={`flex shrink-0 items-center border-r pl-2 pr-1.5 sm:pl-2.5 sm:pr-2 ${footnoteText} font-medium ${
+                      theme === 'dark' ? 'border-gray-600 text-gray-300' : 'border-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {windDataLabel}
+                  </span>
                   <button
                     type="button"
-                    onClick={windFooter.onSelectTmy}
+                    onClick={() => {
+                      dismissOnboarding(ONBOARDING_KEYS.windDataSource);
+                      windFooter.onSelectTmy();
+                    }}
                     aria-label="Wind from weather file (TMY)"
                     className={`${unitSegBase} ${
                       windFooter.source === 'epw'
@@ -550,8 +562,11 @@ export function SiteFooter({
                   </button>
                   <button
                     type="button"
-                    onClick={windFooter.onSelectAsos}
-                    aria-label="Wind from ASOS archive"
+                    onClick={() => {
+                      dismissOnboarding(ONBOARDING_KEYS.windDataSource);
+                      windFooter.onSelectStation();
+                    }}
+                    aria-label="Wind from mesonet station archive"
                     className={`${unitSegBase} ${
                       windFooter.source === 'iem'
                         ? theme === 'dark'
@@ -562,11 +577,26 @@ export function SiteFooter({
                           : 'bg-gray-50 text-gray-500 hover:text-gray-800'
                     }`}
                   >
-                    ASOS
+                    Station
                   </button>
                 </div>
+                </DiscoverPulseShell>
                 {windFooter.source === 'iem' ? (
                   <>
+                    {windFooter.stationLabel ? (
+                      <button
+                        type="button"
+                        onClick={windFooter.onChangeStation}
+                        className={`max-w-[7rem] shrink-0 truncate text-left ${footnoteText} font-medium underline decoration-gray-400/60 underline-offset-2 ${
+                          theme === 'dark'
+                            ? 'text-gray-200 hover:text-gray-100'
+                            : 'text-gray-700 hover:text-gray-900'
+                        }`}
+                        title="Change mesonet station"
+                      >
+                        {windFooter.stationLabel}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={windFooter.onConfigureYears}
@@ -575,7 +605,7 @@ export function SiteFooter({
                           ? 'text-gray-300 hover:text-gray-100'
                           : 'text-gray-600 hover:text-gray-900'
                       }`}
-                      title="Change ASOS year range"
+                      title="Change mesonet year range"
                     >
                       {windYearRangeShort(windFooter.yearStart, windFooter.yearEnd)}
                     </button>
@@ -588,7 +618,7 @@ export function SiteFooter({
                           : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      * IEM noticeâ€¦
+                      * IEM notice…
                     </button>
                   </>
                 ) : null}

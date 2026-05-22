@@ -10,6 +10,9 @@ export interface IemNetworkFeatureProperties {
   country?: string;
   tzname?: string | null;
   online?: boolean;
+  archive_begin?: string | null;
+  archive_end?: string | null;
+  time_domain?: string | null;
 }
 
 export interface IemNetworkGeoJsonFeature {

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useMemo } from 'react';
+﻿import { useEffect, useId, useRef, useState, useMemo } from 'react';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
@@ -13,8 +13,12 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareUtciSharedControls } from '../App';
 import { UnitSystem } from '../App';
 
-import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
-import { aggregateCellStatistic, rowPassesGlobalFilters } from '../lib/globalFilter';
+import type { BarChartFillMode, GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
+import {
+  aggregateCellStatistic,
+  explorerBarStatisticY,
+  rowPassesGlobalFilters,
+} from '../lib/globalFilter';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import {
   CHART_TOOLBAR_CONTROLS_CLASS,
@@ -29,6 +33,11 @@ import { OUTDOOR_COMFORT_GREEN_HEX } from '../lib/constants';
 import { gradientsForUtci } from '../lib/availableGradientsForVariable';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
+import {
+  createExplorerChartValueGradient,
+  explorerChartValueGradientId,
+  upsertSvgDefs,
+} from '../lib/explorerBarGradient';
 import {
   EXPLORER_SVG_BASE_WIDTH,
   EXPLORER_SVG_MARGIN,
@@ -65,6 +74,7 @@ interface UtciExplorerProps {
   gradients: GradientDef[];
   filter: GlobalFilterState;
   heatmapCellStatistic?: HeatmapCellStatistic;
+  barChartFillMode?: BarChartFillMode;
   unitSystem: UnitSystem;
   heatmapTextColor: string;
   theme: 'light' | 'dark';
@@ -237,6 +247,7 @@ export function UtciExplorer({
   gradients,
   filter,
   heatmapCellStatistic = 'mean',
+  barChartFillMode = 'solid',
   unitSystem,
   heatmapTextColor,
   theme,
@@ -251,6 +262,7 @@ export function UtciExplorer({
   tutorialChromeAnchors,
   pairSuppressFooterLegend,
 }: UtciExplorerProps) {
+  const barGradientSvgId = explorerChartValueGradientId(useId());
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
   const [iAgg, setIAgg] = useState<'hour' | 'day' | 'week' | 'month'>('month');
@@ -600,6 +612,7 @@ export function UtciExplorer({
 
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
+    const svgDefs = upsertSvgDefs(svg);
 
     const g = svg
       .attr("viewBox", `0 0 ${width} ${height}`)
@@ -995,6 +1008,22 @@ export function UtciExplorer({
       }
     };
 
+    const chartBarFill =
+      barChartFillMode === 'gradient' && !(showDifference && compareData)
+        ? colorMode === 'comfortTime'
+          ? createExplorerChartValueGradient(svgDefs, r => getFillColor(0, r), 0, 1, v => yScaleBar(v), {
+              id: barGradientSvgId,
+            })
+          : createExplorerChartValueGradient(
+              svgDefs,
+              v => getFillColor(v, 0),
+              convertUtci(utciMin),
+              convertUtci(utciMax),
+              v => yScaleBar(v),
+              { id: barGradientSvgId }
+            )
+        : null;
+
     // Draw foreground elements (Selected Data)
     const fgGroups = barChartG.selectAll(".fg-group")
       .data(aggregatedData.filter(d => d.valueSelected !== null))
@@ -1012,12 +1041,23 @@ export function UtciExplorer({
         const topY = Math.min(yHi, yLo);
         const barH = Math.max(1, Math.abs(yLo - yHi));
         const pillR = Math.min(barW / 2, barH / 2);
+        const ratio = d.comfortRatioSelected ?? 0;
+        const comfortFill =
+          chartBarFill ??
+          getFillColor(
+            0,
+            explorerBarStatisticY(heatmapCellStatistic, {
+              valueSelected: ratio,
+              minSelected: 0,
+              maxSelected: ratio,
+            })
+          );
         group.append("rect")
           .attr("x", xPos)
           .attr("y", topY)
           .attr("width", barW)
           .attr("height", barH)
-          .style("fill", getFillColor(d.valueSelected!, d.comfortRatioSelected!))
+          .style("fill", comfortFill)
           .attr("rx", pillR)
           .attr("ry", pillR);
       } else {
@@ -1031,12 +1071,17 @@ export function UtciExplorer({
         const barH = Math.max(1, Math.abs(yMinPx - yMaxPx));
         const pillR = Math.min(barW / 2, barH / 2);
 
+        const barFillVal = explorerBarStatisticY(heatmapCellStatistic, {
+          valueSelected: val,
+          minSelected: minVal,
+          maxSelected: maxVal,
+        });
         group.append("rect")
           .attr("x", xPos)
           .attr("y", topY)
           .attr("width", barW)
           .attr("height", barH)
-          .style("fill", getFillColor(val, d.comfortRatioSelected!))
+          .style("fill", chartBarFill ?? getFillColor(barFillVal, d.comfortRatioSelected!))
           .style("opacity", 0.6)
           .attr("rx", pillR)
           .attr("ry", pillR);
@@ -1145,6 +1190,8 @@ export function UtciExplorer({
     includeWind,
     tutorialEnabled,
     tutorialFocusPeriodId,
+    barGradientSvgId,
+    barChartFillMode,
   ]);
 
   // Calculate local stats for filtered data

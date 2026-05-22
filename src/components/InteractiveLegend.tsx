@@ -2,6 +2,10 @@ import React from 'react';
 import { EPWVariable } from '../lib/epwParser';
 import * as d3 from 'd3';
 import { DIFFERENCE_DIVERGING_COLORS } from '../lib/differenceDivergingColor';
+import {
+  DIRECT_NORMAL_RADIATION_LEGEND_TICKS,
+  directNormalRadiationParameter,
+} from '../lib/heatmapColorAdjust';
 
 /** Matches `DataExplorer` bar rects (`.style("opacity", 0.6)` on filled bars). */
 const LEGEND_FILL_OPACITY = 0.6;
@@ -105,19 +109,37 @@ export function InteractiveLegend({
   // Build one label per segment and center it in that segment.
   const segColors = colors.length > 0 ? colors : ['#999'];
   const isDiffAxis = isDifference && domain.length === 3;
-  const segLabels = (() => {
-    const n = segColors.length;
+  const isDirectNormalLegend = variable.id === 'directNormalRadiation' && !isDifference;
+
+  const legendTickValues = (() => {
     if (isDiffAxis) {
-      return [domain[0]!, domain[1]!, domain[2]!].map(formatValue);
+      return [domain[0]!, domain[1]!, domain[2]!];
     }
-    if (n === 1) return [formatValue(variable.min)];
+    if (isDirectNormalLegend) {
+      const min = variable.min;
+      const max = variable.max;
+      const span = max - min;
+      return DIRECT_NORMAL_RADIATION_LEGEND_TICKS.map(tick => {
+        if (span <= 0) return min;
+        const t = tick / DIRECT_NORMAL_RADIATION_LEGEND_TICKS[DIRECT_NORMAL_RADIATION_LEGEND_TICKS.length - 1]!;
+        return min + span * t;
+      });
+    }
+    const n = segColors.length;
+    if (n === 1) return [variable.min];
     const min = variable.min;
     const max = variable.max;
-    return Array.from({ length: n }, (_, i) => {
-      const t = min + ((max - min) * i) / (n - 1);
-      return formatValue(t);
-    });
+    return Array.from({ length: n }, (_, i) => min + ((max - min) * i) / (n - 1));
   })();
+
+  const formatLegendTick = (v: number) => {
+    if (isDirectNormalLegend && Math.abs(v - Math.round(v)) < 0.05) {
+      return String(Math.round(v));
+    }
+    return formatValue(v);
+  };
+
+  const segLabels = legendTickValues.map(formatLegendTick);
 
   const labelBasePx = getLegendLabelBasePx(barH, fontScale);
 
@@ -144,6 +166,7 @@ export function InteractiveLegend({
 
         {segLabels.map((label, i) => {
           const n = Math.max(1, segLabels.length);
+          const tickValue = legendTickValues[i] ?? variable.min;
           const tSample = isDiffAxis
             ? i === 0
               ? 0
@@ -155,7 +178,11 @@ export function InteractiveLegend({
               : (n - 1) > 0
                 ? i / (n - 1)
                 : 0.5;
-          const rawAtCenter = d3.interpolateRgbBasis(segColors)(tSample);
+          const rawAtCenter = isDirectNormalLegend
+            ? d3.interpolateRgbBasis(segColors)(
+                directNormalRadiationParameter(tickValue, variable.min, variable.max)
+              )
+            : d3.interpolateRgbBasis(segColors)(tSample);
           const blended = blendOnto(barBg, rawAtCenter, LEGEND_FILL_OPACITY);
           const fg = contrastText(blended);
           const shadow =

@@ -5,9 +5,12 @@ export type SiteFooterWindControlsProps = {
   source: WindFileSource;
   yearStart: number;
   yearEnd: number;
+  /** Short label when mesonet station is active, e.g. "ASOS DSM". */
+  stationLabel?: string | null;
   onSelectTmy: () => void;
-  onSelectAsos: () => void;
+  onSelectStation: () => void;
   onConfigureYears: () => void;
+  onChangeStation: () => void;
 };
 
 export function windYearRangeShort(start: number, end: number): string {

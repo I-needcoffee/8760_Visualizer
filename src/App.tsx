@@ -15,6 +15,7 @@ import { Grid4x2StatsColumn } from './components/QuickStatsSidebar';
 import { SiteFooter, type SiteFooterExportCaption } from './components/SiteFooter';
 import {
   DEFAULT_GLOBAL_FILTER,
+  type BarChartFillMode,
   type GlobalFilterState,
   type HeatmapCellStatistic,
 } from './lib/globalFilter';
@@ -43,7 +44,9 @@ import { dryBulbExtentFromFiles } from './lib/dryBulbExtent';
 import type { CompareWindIemSharedControls } from './lib/iem/windIemPrefsShared';
 import { useWindIemGlobalPrefs } from './lib/iem/globalWindIemPrefsStore';
 import { IemWindSetupModal } from './components/IemWindSetupModal';
+import { WindStationPickerModal } from './components/WindStationPickerModal';
 import type { SiteFooterWindControlsProps } from './components/SiteFooterWindControls';
+import { stationKindLabel } from './lib/iem/windStationTypes';
 
 export type { CompareWindIemSharedControls, WindFileSource } from './lib/iem/windIemPrefsShared';
 
@@ -410,6 +413,8 @@ export default function App() {
 
   /** Heatmaps: statistic taken within each aggregation cell (â€œAveâ€ = mean). Shared app-wide via footer toggle. */
   const [heatmapCellStatistic, setHeatmapCellStatistic] = useState<HeatmapCellStatistic>('mean');
+  /** Explorer bar charts: solid footer statistic color vs legend-aligned gradient (Settings). */
+  const [barChartFillMode, setBarChartFillMode] = useState<BarChartFillMode>('solid');
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [exportMode, setExportModeState] = useState(false);
@@ -527,31 +532,47 @@ export default function App() {
     return slots.some(s => s.type === 'wind' || s.type === 'windrose');
   }, [viewMode, slots, selectedFiles.length]);
 
+  const windPickerMetadata = useMemo(() => {
+    if (!selectedFiles.length) return undefined;
+    if (viewMode === 'comparison' && selectedFiles.length >= 2) {
+      return selectedFiles[differenceBaselineIndex]?.metadata;
+    }
+    return selectedFiles[activeFileIndex]?.metadata;
+  }, [selectedFiles, viewMode, differenceBaselineIndex, activeFileIndex]);
+
   const windFooter = useMemo((): SiteFooterWindControlsProps | null => {
     if (!dashboardHasWindCharts) return null;
+    const st = windIemGlobal.iemStation;
+    const stationLabel = st
+      ? `${stationKindLabel(st.kind)} ${st.stationId}`
+      : null;
     return {
       visible: true,
       source: windIemGlobal.source,
       yearStart: windIemGlobal.iemYearStart,
       yearEnd: windIemGlobal.iemYearEnd,
+      stationLabel,
       onSelectTmy: () => windIemGlobal.setSource('epw'),
-      onSelectAsos: () => {
+      onSelectStation: () => {
         if (windIemGlobal.source === 'epw') {
           windIemGlobal.setSource('iem');
-          windIemGlobal.openIemSetupModal(true);
+          windIemGlobal.openWindStationPicker(true);
         } else {
-          windIemGlobal.openIemSetupModal(false);
+          windIemGlobal.openWindStationPicker(false);
         }
       },
       onConfigureYears: () => windIemGlobal.openIemSetupModal(false),
+      onChangeStation: () => windIemGlobal.openWindStationPicker(false),
     };
   }, [
     dashboardHasWindCharts,
     windIemGlobal.source,
     windIemGlobal.iemYearStart,
     windIemGlobal.iemYearEnd,
+    windIemGlobal.iemStation,
     windIemGlobal.setSource,
     windIemGlobal.openIemSetupModal,
+    windIemGlobal.openWindStationPicker,
   ]);
 
   const iemAttributionInExport = windIemGlobal.source === 'iem' && dashboardHasWindCharts;
@@ -749,6 +770,7 @@ export default function App() {
             gradients={allGradients}
             filter={globalFilter}
             heatmapCellStatistic={heatmapCellStatistic}
+            barChartFillMode={barChartFillMode}
             unitSystem={unitSystem}
             heatmapTextColor={heatmapTextColor}
             theme={theme}
@@ -780,6 +802,7 @@ export default function App() {
             gradients={allGradients}
             filter={globalFilter}
             heatmapCellStatistic={heatmapCellStatistic}
+            barChartFillMode={barChartFillMode}
             unitSystem={unitSystem}
             heatmapTextColor={heatmapTextColor}
             theme={theme}
@@ -836,6 +859,7 @@ export default function App() {
             gradients={allGradients}
             filter={globalFilter}
             heatmapCellStatistic={heatmapCellStatistic}
+            barChartFillMode={barChartFillMode}
             unitSystem={unitSystem}
             heatmapTextColor={heatmapTextColor}
             theme={theme}
@@ -1404,8 +1428,30 @@ export default function App() {
               setShowGradientModal={setShowGradientModal}
               dryBulbExtentMinC={dryBulbExtent.minC}
               dryBulbExtentMaxC={dryBulbExtent.maxC}
+              barChartFillMode={barChartFillMode}
+              onBarChartFillModeChange={setBarChartFillMode}
             />
           )}
+
+          {windIemGlobal.stationPickerOpen && windPickerMetadata ? (
+            <WindStationPickerModal
+              open
+              theme={theme}
+              metadata={windPickerMetadata}
+              initialSelection={windIemGlobal.iemStation}
+              onApply={selection => {
+                windIemGlobal.setIemStation(selection);
+                windIemGlobal.closeWindStationPicker();
+                windIemGlobal.openIemSetupModal(windIemGlobal.stationPickerRevertOnCancel);
+              }}
+              onCancel={() => {
+                if (windIemGlobal.stationPickerRevertOnCancel) {
+                  windIemGlobal.setSource('epw');
+                }
+                windIemGlobal.closeWindStationPicker();
+              }}
+            />
+          ) : null}
 
           {windIemGlobal.setupModalOpen ? (
             <IemWindSetupModal

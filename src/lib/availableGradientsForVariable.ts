@@ -5,6 +5,7 @@ const BUILTIN_IDS = new Set([
   'temperature-comfort',
   'humidity-spectrum',
   'solar-yellow-orange',
+  'direct-normal-radiation',
   'wind-intensity-blue',
   'cloud-cover-gray',
   'turbo',
@@ -36,6 +37,9 @@ export function gradientsForVariable(
   }
   if (variableId === 'totalSkyCover' || variableId === 'opaqueSkyCover') {
     return [...allowIds(['cloud-cover-gray'], gradients), ...customGradients(gradients)];
+  }
+  if (variableId === 'directNormalRadiation') {
+    return [...allowIds(['direct-normal-radiation', 'solar-yellow-orange'], gradients), ...customGradients(gradients)];
   }
 
   // Category defaults.

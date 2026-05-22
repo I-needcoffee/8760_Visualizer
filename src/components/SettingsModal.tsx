@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { X, Calendar, Clock, Palette, Sun, Moon, Settings, Filter, Thermometer } from 'lucide-react';
+import { X, Calendar, Clock, Palette, Sun, Moon, Settings, Filter, Thermometer, BarChart2 } from 'lucide-react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
-import type { GlobalFilterState } from '../lib/globalFilter';
+import type { BarChartFillMode, GlobalFilterState } from '../lib/globalFilter';
 import type { UnitSystem } from '../App';
 import { TemperatureIsolationRange } from './TemperatureIsolationRange';
 
@@ -20,6 +20,8 @@ interface SettingsModalProps {
   /** Min/max dry-bulb (°C) in loaded EPW — slider rail endpoints. */
   dryBulbExtentMinC: number;
   dryBulbExtentMaxC: number;
+  barChartFillMode: BarChartFillMode;
+  onBarChartFillModeChange: (mode: BarChartFillMode) => void;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -37,6 +39,8 @@ export function SettingsModal({
   setShowGradientModal,
   dryBulbExtentMinC,
   dryBulbExtentMaxC,
+  barChartFillMode,
+  onBarChartFillModeChange,
 }: SettingsModalProps) {
   if (!isOpen) return null;
 
@@ -306,6 +310,50 @@ export function SettingsModal({
                     />
                   </div>
                   <span className={`font-bold uppercase tracking-wider text-[10px] ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>White</span>
+                </div>
+              </div>
+
+              {/* Bar chart fill */}
+              <div className="space-y-3 sm:col-span-2">
+                <span className="font-medium text-sm flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-gray-900 dark:text-gray-100" />
+                  Bar chart colors
+                </span>
+                <p className={`text-xs leading-snug ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Single tone uses the footer Low / Ave / High selection. Gradient tone fills each bar with the
+                  variable&apos;s legend ramp from min to max.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onBarChartFillModeChange('solid')}
+                    className={`flex-1 rounded-full border px-3 py-2 text-sm font-medium transition-colors ${
+                      barChartFillMode === 'solid'
+                        ? theme === 'dark'
+                          ? 'bg-gray-600 text-gray-100 border-gray-500 shadow-sm'
+                          : 'bg-gray-200 text-gray-900 border-gray-400 shadow-sm'
+                        : theme === 'dark'
+                          ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    Single tone
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onBarChartFillModeChange('gradient')}
+                    className={`flex-1 rounded-full border px-3 py-2 text-sm font-medium transition-colors ${
+                      barChartFillMode === 'gradient'
+                        ? theme === 'dark'
+                          ? 'bg-gray-600 text-gray-100 border-gray-500 shadow-sm'
+                          : 'bg-gray-200 text-gray-900 border-gray-400 shadow-sm'
+                        : theme === 'dark'
+                          ? 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-700'
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    Gradient tone
+                  </button>
                 </div>
               </div>
 

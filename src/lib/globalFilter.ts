@@ -69,6 +69,29 @@ export function rowPassesGlobalFilters(row: EPWDataRow, f: GlobalFilterState): b
 /** Heatmap cell content: statistic within each aggregation bin (after global filters via row lists). */
 export type HeatmapCellStatistic = 'low' | 'mean' | 'high';
 
+/** Explorer bar fill: solid from footer Low/Ave/High, or legend-aligned vertical gradient. */
+export type BarChartFillMode = 'solid' | 'gradient';
+
+export function explorerBarSolidColor(
+  colorAt: (v: number) => string,
+  stat: HeatmapCellStatistic,
+  dims: {
+    valueSelected: number;
+    minSelected?: number | null;
+    maxSelected?: number | null;
+  }
+): string {
+  const min = dims.minSelected ?? dims.valueSelected;
+  const max = dims.maxSelected ?? dims.valueSelected;
+  return colorAt(
+    explorerBarStatisticY(stat, {
+      valueSelected: dims.valueSelected,
+      minSelected: min,
+      maxSelected: max,
+    })
+  );
+}
+
 /** Y position value for explorer bar midpoint marker (/footer Low · Ave · High). Bars still use span min–max. */
 export function explorerBarStatisticY(
   stat: HeatmapCellStatistic,

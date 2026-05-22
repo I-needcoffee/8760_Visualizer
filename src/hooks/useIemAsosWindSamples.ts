@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { EPWDataRow, EPWMetadata } from '../lib/epwParser';
-import { fetchParsedAsosWindYear } from '../lib/iem/fetchAsosYearWind';
-import { resolveNearestUsAsosForEpw } from '../lib/iem/resolveNearestUsAsosStation';
+import { fetchParsedIemWindYear } from '../lib/iem/fetchIemWindYear';
+import { messageForResolvedIemWindStation, resolveIemWindStationForEpw } from '../lib/iem/resolveIemWindStation';
 import type { CompareWindIemSharedControls } from '../lib/iem/windIemPrefsShared';
 import type { ParsedIemWindRow } from '../lib/iem/parseAsosCsv';
 
@@ -32,7 +32,6 @@ function samplesToEpwRows(rows: ParsedIemWindRow[]): EPWDataRow[] {
     .filter(r => Number.isFinite(r.validMs))
     .map(r => {
       const d = new Date(r.validMs);
-      // Treat ASOS rows as UTC; this is only used for season/hour filtering + rose binning.
       const year = d.getUTCFullYear();
       const month = d.getUTCMonth() + 1;
       const day = d.getUTCDate();
@@ -52,12 +51,15 @@ function samplesToEpwRows(rows: ParsedIemWindRow[]): EPWDataRow[] {
 }
 
 /**
- * Fetch raw ASOS hourly wind samples (one row per hour) for the selected IEM year range.
+ * Fetch raw mesonet wind samples (one row per observation) for the selected IEM year range.
  * Unlike the EPW-merge path, this keeps the full distribution across years for wind rose binning.
  */
 export function useIemAsosWindSamples(
   metadata: EPWMetadata | undefined,
-  iem: Pick<CompareWindIemSharedControls, 'source' | 'iemYearStart' | 'iemYearEnd'>,
+  iem: Pick<
+    CompareWindIemSharedControls,
+    'source' | 'iemYearStart' | 'iemYearEnd' | 'iemStation'
+  >,
   skip = false
 ): IemAsosSamplesState {
   const years = useMemo(() => inclusiveYears(iem.iemYearStart, iem.iemYearEnd), [iem.iemYearStart, iem.iemYearEnd]);
@@ -81,7 +83,7 @@ export function useIemAsosWindSamples(
         loading: false,
         samples: [],
         fallbackNote:
-          'This chart has no EPW location metadata, so an Iowa Environmental Mesonet (IEM) ASOS match cannot be run.',
+          'This chart has no EPW location metadata, so an Iowa Environmental Mesonet station match cannot be run.',
       });
       return;
     }
@@ -96,24 +98,21 @@ export function useIemAsosWindSamples(
 
     (async () => {
       try {
-        const res = await resolveNearestUsAsosForEpw(metadata);
+        const res = await resolveIemWindStationForEpw(metadata, iem.iemStation);
         if (cancelled) return;
         if (res.kind !== 'eligible') {
           setSt({
             kind: 'iem',
             loading: false,
             samples: [],
-            fallbackNote:
-              res.kind === 'not_us_epw_location'
-                ? res.detail
-                : `No online ASOS station was found in the IEM ${res.network} catalogue for this map location.`,
+            fallbackNote: messageForResolvedIemWindStation(res),
           });
           return;
         }
 
         const all: ParsedIemWindRow[] = [];
         for (const y of years) {
-          const yr = await fetchParsedAsosWindYear(res.stationId, y);
+          const yr = await fetchParsedIemWindYear(res.selection, y);
           if (cancelled) return;
           all.push(...yr);
         }
@@ -126,7 +125,7 @@ export function useIemAsosWindSamples(
           kind: 'iem',
           loading: false,
           samples: [],
-          fallbackNote: `Could not load IEM ASOS wind (${msg}).`,
+          fallbackNote: `Could not load IEM wind (${msg}).`,
         });
       }
     })();
@@ -134,8 +133,7 @@ export function useIemAsosWindSamples(
     return () => {
       cancelled = true;
     };
-  }, [skip, iem.source, metadata, years]);
+  }, [skip, iem.source, iem.iemStation, metadata, years]);
 
   return st;
 }
-

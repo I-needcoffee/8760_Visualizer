@@ -38,6 +38,7 @@ export const ONBOARDING_KEYS = {
   dstToggle: 'dst-toggle',
   unitSystem: 'unit-system',
   addLocation: 'add-location',
+  windDataSource: 'wind-data-source',
 } as const;
 
 /** True until the user interacts with this control once in the current session. */

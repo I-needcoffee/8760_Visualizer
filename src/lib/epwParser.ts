@@ -53,7 +53,7 @@ export const EPW_COLUMNS: { id: string; name: string; unit: string; missing: num
   { id: 'extraterrestrialDirectNormalRadiation', name: 'Extraterrestrial Direct Normal Radiation', unit: 'Wh/m²', missing: 9999, index: 11, category: 'Solar', fixedMin: 0, fixedMax: 1400 },
   { id: 'horizontalInfraredRadiation', name: 'Horizontal Infrared Radiation Intensity', unit: 'Wh/m²', missing: 9999, index: 12, category: 'Solar', fixedMin: 150, fixedMax: 500 },
   { id: 'globalHorizontalRadiation', name: 'Global Horizontal Radiation', unit: 'Wh/m²', missing: 9999, index: 13, category: 'Solar', fixedMin: 0, fixedMax: 1200 },
-  { id: 'directNormalRadiation', name: 'Direct Normal Radiation', unit: 'Wh/m²', missing: 9999, index: 14, category: 'Solar', fixedMin: 0, fixedMax: 1100 },
+  { id: 'directNormalRadiation', name: 'Direct Normal Radiation', unit: 'Wh/m²', missing: 9999, index: 14, category: 'Solar', fixedMin: 0, fixedMax: 1000 },
   { id: 'diffuseHorizontalRadiation', name: 'Diffuse Horizontal Radiation', unit: 'Wh/m²', missing: 9999, index: 15, category: 'Solar', fixedMin: 0, fixedMax: 600 },
   { id: 'globalHorizontalIlluminance', name: 'Global Horizontal Illuminance', unit: 'lux', missing: 999999, index: 16, category: 'Solar', fixedMin: 0, fixedMax: 120000 },
   { id: 'directNormalIlluminance', name: 'Direct Normal Illuminance', unit: 'lux', missing: 999999, index: 17, category: 'Solar', fixedMin: 0, fixedMax: 120000 },

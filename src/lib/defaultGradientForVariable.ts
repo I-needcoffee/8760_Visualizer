@@ -5,6 +5,7 @@ import type { EPWVariable } from './epwParser';
 const VARIABLE_GRADIENT: Record<string, string> = {
   totalSkyCover: 'cloud-cover-gray',
   opaqueSkyCover: 'cloud-cover-gray',
+  directNormalRadiation: 'direct-normal-radiation',
   /** Compass direction: sequential wind palette is misleading; use a multi-hue ramp. */
   windDirection: 'turbo',
 };

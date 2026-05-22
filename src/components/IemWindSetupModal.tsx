@@ -86,10 +86,10 @@ export function IemWindSetupModal({
           <X className="h-4 w-4" />
         </button>
         <h2 id="iem-wind-setup-title" className="pr-10 text-base font-semibold leading-snug">
-          IEM ASOS wind — years to compile
+          Mesonet wind — years to compile
         </h2>
         <p className={`mt-2 text-xs leading-relaxed ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-          Choose one or more calendar years. Multiple years are merged as a vector mean at each EPW hour (one ASOS sample
+          Choose one or more calendar years. Multiple years are merged as a vector mean at each EPW hour (one mesonet sample
           per year per UTC hour). Larger ranges take longer to download.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">

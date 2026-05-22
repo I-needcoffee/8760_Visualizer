@@ -47,6 +47,15 @@ export const GRADIENTS = [
     name: 'Solar (yellow→orange)',
     colors: ['#ffff00', '#d97706'],
   },
+  /**
+   * Direct normal radiation (0–1000 Wh/m²): light grey at 0, yellow from ~250, dark orange at 1000.
+   * Legend shows five ticks; {@link directNormalRadiationParameter} shapes chart coloring.
+   */
+  {
+    id: 'direct-normal-radiation',
+    name: 'Direct normal (white→yellow→orange)',
+    colors: ['#e8eaed', '#fef9c3', '#ffff00', '#f97316', '#c2410c'],
+  },
   /** Wind: calm → storm — white → blue/teal/green → warm (no purple). */
   {
     id: 'wind-speed-warm',

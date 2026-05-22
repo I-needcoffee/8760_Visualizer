@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useMemo } from 'react';
 import { useIsMobileMaxSm } from '../hooks/useIsMobileMaxSm';
 import { useTutorialLiveOptional } from '../context/TutorialLiveContext';
 import * as d3 from 'd3';
@@ -6,6 +6,11 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import {
+  createExplorerChartValueGradient,
+  explorerChartValueGradientId,
+  upsertSvgDefs,
+} from '../lib/explorerBarGradient';
 import { differenceDivergingColor, DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import { dataExplorerDiffValuesForAggregation } from '../lib/dataExplorerDiffAggregation';
 import { symmetricDiffBound } from '../lib/symmetricDiffDomain';
@@ -19,8 +24,13 @@ import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareWindSharedControls } from '../App';
 import { X, Settings2 } from 'lucide-react';
 
-import type { GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
-import { aggregateCellStatistic, explorerBarStatisticY, rowPassesGlobalFilters } from '../lib/globalFilter';
+import type { BarChartFillMode, GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
+import {
+  aggregateCellStatistic,
+  explorerBarSolidColor,
+  explorerBarStatisticY,
+  rowPassesGlobalFilters,
+} from '../lib/globalFilter';
 import { UnitSystem } from '../App';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderCaption';
@@ -66,6 +76,7 @@ interface WindExplorerProps {
   gradients: GradientDef[];
   filter: GlobalFilterState;
   heatmapCellStatistic?: HeatmapCellStatistic;
+  barChartFillMode?: BarChartFillMode;
   unitSystem: UnitSystem;
   heatmapTextColor: string;
   theme: 'light' | 'dark';
@@ -148,6 +159,7 @@ export function WindExplorer({
   gradients,
   filter,
   heatmapCellStatistic = 'mean',
+  barChartFillMode = 'solid',
   unitSystem,
   heatmapTextColor,
   theme,
@@ -164,6 +176,7 @@ export function WindExplorer({
   tutorialChromeAnchors,
   pairSuppressFooterLegend,
 }: WindExplorerProps) {
+  const barGradientSvgId = explorerChartValueGradientId(useId());
   const svgRef = useRef<SVGSVGElement>(null);
   const compareSvgRef = useRef<SVGSVGElement>(null);
 
@@ -445,6 +458,7 @@ export function WindExplorer({
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
+    const svgDefs = upsertSvgDefs(svg);
 
     const g = svg
       .attr("viewBox", `0 0 ${width} ${height}`)
@@ -795,6 +809,13 @@ export function WindExplorer({
       .range([barChartHeight, 0])
       .nice();
 
+    const chartBarFill =
+      barChartFillMode === 'gradient' && !(showDifference && compareData)
+        ? createExplorerChartValueGradient(svgDefs, colorScale, cMin, cMax, v => yScaleBar(v), {
+            id: barGradientSvgId,
+          })
+        : null;
+
     barChartG.append("g")
       .attr("class", "explorer-bar-grid")
       .attr("pointer-events", "none")
@@ -838,7 +859,15 @@ export function WindExplorer({
         .attr("y", topY)
         .attr("width", barW)
         .attr("height", barH)
-        .style("fill", colorScale(d.valueSelected))
+        .style(
+          "fill",
+          chartBarFill ??
+            explorerBarSolidColor(colorScale, heatmapCellStatistic, {
+              valueSelected: d.valueSelected,
+              minSelected: minVal,
+              maxSelected: maxVal,
+            })
+        )
         .style("opacity", 0.6)
         .attr("rx", pillR)
         .attr("ry", pillR);
@@ -904,7 +933,7 @@ export function WindExplorer({
     // --- Wind Rose ---
     // Removed from WindExplorer
 
-  }, [data, compareData, showDifference, filteredData, variables, colorVar, gradientId, aggregation, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, metadata, heatmapCellStatistic]);
+  }, [data, compareData, showDifference, filteredData, variables, colorVar, gradientId, aggregation, gradients, filter, dimensions.width, unitSystem, heatmapTextColor, theme, metadata, heatmapCellStatistic, barGradientSvgId, barChartFillMode]);
 
   const stats = (() => {
     if (showDifference && compareData) {
@@ -1333,7 +1362,7 @@ export function WindExplorer({
           {primWindResolved.loadingIem && iemControls.source === 'iem' ? (
             <IemWindChartLoadingOverlay
               theme={theme}
-              label="Compiling IEM ASOS wind for your year range…"
+              label="Compiling IEM mesonet wind for your year range…"
             />
           ) : null}
           <svg

@@ -13,4 +13,21 @@ export {
   epwUtcMsForMergedWind,
   mergeHourlyWindFromIemIntoEpw,
 } from './mergeEpwWind';
-export { iemAsosNetworkForUsEpw } from './usNetworkFromEpw';
+export { iemAsosNetworkForUsEpw, iemRwisNetworkForUsEpw } from './usNetworkFromEpw';
+export { fetchParsedRwisWindYear } from './fetchRwisYearWind';
+export { fetchParsedIemWindYear, fetchParsedIemWindYears } from './fetchIemWindYear';
+export {
+  loadWindStationsNearEpw,
+  pickDefaultWindStation,
+  windMapStationToSelection,
+  type WindStationCatalogResult,
+} from './windStationCatalog';
+export {
+  stationKindLabel,
+  stationMarkerColor,
+  windExpectationLabel,
+  type IemWindStationKind,
+  type IemWindStationSelection,
+  type WindDataExpectation,
+  type WindMapStation,
+} from './windStationTypes';
