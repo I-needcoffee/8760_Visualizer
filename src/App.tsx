@@ -540,6 +540,14 @@ export default function App() {
     return selectedFiles[activeFileIndex]?.metadata;
   }, [selectedFiles, viewMode, differenceBaselineIndex, activeFileIndex]);
 
+  const windPickerSourceFilename = useMemo(() => {
+    if (!selectedFiles.length) return undefined;
+    if (viewMode === 'comparison' && selectedFiles.length >= 2) {
+      return selectedFiles[differenceBaselineIndex]?.sourceFilename;
+    }
+    return selectedFiles[activeFileIndex]?.sourceFilename;
+  }, [selectedFiles, viewMode, differenceBaselineIndex, activeFileIndex]);
+
   const windFooter = useMemo((): SiteFooterWindControlsProps | null => {
     if (!dashboardHasWindCharts) return null;
     const st = windIemGlobal.iemStation;
@@ -1438,6 +1446,7 @@ export default function App() {
               open
               theme={theme}
               metadata={windPickerMetadata}
+              sourceFilename={windPickerSourceFilename}
               initialSelection={windIemGlobal.iemStation}
               onApply={selection => {
                 windIemGlobal.setIemStation(selection);

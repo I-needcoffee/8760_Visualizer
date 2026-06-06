@@ -2,7 +2,14 @@ import type { EPWMetadata } from '../epwParser';
 import { fetchIemNetworkGeoJson } from './geojsonNetwork';
 import type { IemNetworkGeoJsonFeature } from './geojsonNetwork';
 import { haversineKm } from './nearestStation';
-import { iemAsosNetworkForUsEpw, iemRwisNetworkForUsEpw } from './usNetworkFromEpw';
+import {
+  iemAsosNetworkForStateCode,
+  iemRwisNetworkForStateCode,
+  metadataOrFilenameLooksUnitedStates,
+  normalizeUsStateCode,
+  resolveUsStateCodeFromMetadata,
+} from './usNetworkFromEpw';
+import { guessUsStateCodeFromEpwFilename } from './usStateCodes';
 import {
   stationKindLabel,
   windExpectationForCatalogStation,
@@ -64,9 +71,23 @@ export type WindStationCatalogResult =
       rwisNetwork: string | null;
       stations: WindMapStation[];
       rwisUnavailableNote: string | null;
+      stateCode: string;
+    }
+  | {
+      kind: 'needs_state';
+      detail: string;
+      epwLat: number;
+      epwLng: number;
+      suggestedStateCode: string | null;
     }
   | { kind: 'not_us'; detail: string }
   | { kind: 'no_coordinates'; detail: string };
+
+export type LoadWindStationsOptions = {
+  /** When the EPW header state is not a two-letter code (common for uploads). */
+  stateCodeOverride?: string;
+  sourceFilename?: string;
+};
 
 /**
  * Loads state ASOS + RWIS GeoJSON catalogues (cached), keeps online stations within `radiusKm` of the EPW site.
@@ -74,16 +95,16 @@ export type WindStationCatalogResult =
 export async function loadWindStationsNearEpw(
   metadata: EPWMetadata,
   radiusKm = DEFAULT_RADIUS_KM,
-  referenceYear = new Date().getFullYear()
+  referenceYear = new Date().getFullYear(),
+  options?: LoadWindStationsOptions
 ): Promise<WindStationCatalogResult> {
-  const asosNet = iemAsosNetworkForUsEpw(metadata);
-  const rwisNet = iemRwisNetworkForUsEpw(metadata);
+  const sourceFilename = options?.sourceFilename;
 
-  if (!asosNet && !rwisNet) {
+  if (!metadataOrFilenameLooksUnitedStates(metadata, sourceFilename)) {
     return {
       kind: 'not_us',
       detail:
-        'IEM wind station maps are available for U.S. EPW locations with a two-letter state code in the file header.',
+        'IEM wind station maps are available for U.S. EPW locations (country USA and a state or territory).',
     };
   }
 
@@ -96,6 +117,34 @@ export async function loadWindStationsNearEpw(
 
   const epwLat = metadata.lat;
   const epwLng = metadata.lng;
+
+  const stateCode =
+    (options?.stateCodeOverride ? normalizeUsStateCode(options.stateCodeOverride) : null) ??
+    resolveUsStateCodeFromMetadata(metadata, sourceFilename);
+
+  if (!stateCode) {
+    return {
+      kind: 'needs_state',
+      detail:
+        'Choose the U.S. state for this site so mesonet ASOS/RWIS stations can be loaded (uploaded files often omit a two-letter state in the EPW header).',
+      epwLat,
+      epwLng,
+      suggestedStateCode: guessUsStateCodeFromEpwFilename(sourceFilename),
+    };
+  }
+
+  const asosNet = iemAsosNetworkForStateCode(stateCode);
+  const rwisNet = iemRwisNetworkForStateCode(stateCode);
+
+  if (!asosNet && !rwisNet) {
+    return {
+      kind: 'needs_state',
+      detail: 'Could not resolve an IEM mesonet catalogue for that state code. Pick another state.',
+      epwLat,
+      epwLng,
+      suggestedStateCode: stateCode,
+    };
+  }
   const stations: WindMapStation[] = [];
   let rwisUnavailableNote: string | null = null;
 
@@ -139,6 +188,7 @@ export async function loadWindStationsNearEpw(
     rwisNetwork: rwisNet,
     stations,
     rwisUnavailableNote,
+    stateCode,
   };
 }
 

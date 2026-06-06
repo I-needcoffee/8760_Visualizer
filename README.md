@@ -33,7 +33,7 @@ npm run build
 
 The app calls same-origin **`/api/*`** routes so the browser can:
 
-- Fetch EPW text and zip payloads from allowed hosts without CORS (`/api/proxy-epw`, `/api/proxy-binary`).
+- Fetch EPW text and zip payloads from allowed hosts without CORS (`/api/proxy-epw`, `/api/proxy-binary`, `/api/proxy-zenodo` for ORNL fTMY state archives).
 - Geocode places via Nominatim with a proper **`User-Agent`** (`/api/nominatim`).
 
 **Local:** Vite registers these in `vite.config.ts` (`configureServer` / `configurePreviewServer`).

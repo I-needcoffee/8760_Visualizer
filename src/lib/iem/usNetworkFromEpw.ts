@@ -1,32 +1,51 @@
 import type { EPWMetadata } from '../epwParser';
+import {
+  metadataLooksUnitedStates,
+  metadataOrFilenameLooksUnitedStates,
+  normalizeUsStateCode,
+  resolveUsStateCodeFromMetadata,
+} from './usStateCodes';
 
-const US_VARIANTS = new Set(['USA', 'US', 'U.S.A.', 'U.S.A', 'UNITED STATES', 'UNITED STATES OF AMERICA']);
+export {
+  metadataLooksUnitedStates,
+  metadataOrFilenameLooksUnitedStates,
+  normalizeUsStateCode,
+  resolveUsStateCodeFromMetadata,
+} from './usStateCodes';
 
-function metadataLooksUnitedStates(metadata: EPWMetadata): boolean {
-  const country = metadata.country.trim().toUpperCase();
-  if (US_VARIANTS.has(country)) return true;
-  if (/\bUNITED STATES\b/.test(metadata.country.toUpperCase())) return true;
-  if (/\bU\.?\s*S\.?\s*A\.?\b/i.test(metadata.country.trim())) return true;
-  return false;
+export function iemAsosNetworkForStateCode(stateCode: string): string | null {
+  const st = normalizeUsStateCode(stateCode);
+  if (!st) return null;
+  return `${st}_ASOS`;
+}
+
+export function iemRwisNetworkForStateCode(stateCode: string): string | null {
+  const st = normalizeUsStateCode(stateCode);
+  if (!st) return null;
+  return `${st}_RWIS`;
 }
 
 /**
  * IEM organizes CONUS (and territory) airports under `{STATE}_ASOS`. Returns e.g. `NY_ASOS`, or null when the
- * EPW header does not look like US or `state` is not a two-letter code.
+ * EPW header does not look like US or `state` is not a two-letter code (unless normalized from a full name).
  */
-export function iemAsosNetworkForUsEpw(metadata: EPWMetadata): string | null {
-  if (!metadataLooksUnitedStates(metadata)) return null;
-
-  const st = metadata.state.trim().toUpperCase();
-  if (st.length !== 2) return null;
-  return `${st}_ASOS`;
+export function iemAsosNetworkForUsEpw(
+  metadata: EPWMetadata,
+  sourceFilename?: string
+): string | null {
+  if (!metadataOrFilenameLooksUnitedStates(metadata, sourceFilename)) return null;
+  const st = resolveUsStateCodeFromMetadata(metadata, sourceFilename);
+  if (!st) return null;
+  return iemAsosNetworkForStateCode(st);
 }
 
 /** State RWIS catalogue on IEM (e.g. `IA_RWIS`, `MN_RWIS`). */
-export function iemRwisNetworkForUsEpw(metadata: EPWMetadata): string | null {
-  if (!metadataLooksUnitedStates(metadata)) return null;
-
-  const st = metadata.state.trim().toUpperCase();
-  if (st.length !== 2) return null;
-  return `${st}_RWIS`;
+export function iemRwisNetworkForUsEpw(
+  metadata: EPWMetadata,
+  sourceFilename?: string
+): string | null {
+  if (!metadataOrFilenameLooksUnitedStates(metadata, sourceFilename)) return null;
+  const st = resolveUsStateCodeFromMetadata(metadata, sourceFilename);
+  if (!st) return null;
+  return iemRwisNetworkForStateCode(st);
 }

@@ -1,11 +1,19 @@
 import { useState, useRef, ChangeEvent, useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Search, Upload, ExternalLink, Database, CloudLightning, Info, Loader2 } from 'lucide-react';
+import { Search, Upload, ExternalLink, Database, CloudLightning, Loader2 } from 'lucide-react';
 import L from 'leaflet';
 import { parseEPW, ParsedEPW, attachParsedEpwSource } from '../lib/epwParser';
 import { CARTO_LIGHT_ALL_WATER_HEX } from '../lib/constants';
-import { loadNrcFutureSampleLocations } from '../lib/futureNrcSamples';
+import {
+  CANADA_NRC_FUTURE_TMY_KML_URL,
+  CANADA_NRC_FUTURE_KML_SOURCE_ID,
+  compareNrcFutureDatasetZips,
+} from '../lib/futureNrcKmlCatalog';
+import { loadCachedCanadaNrcFuturePins, saveCachedCanadaNrcFuturePins } from '../lib/futureNrcKmlCache';
+import { dedupeNrcFutureKmlPins } from '../lib/dedupeNrcFutureKmlPins';
+import type { FtmyUsCountyIndexRow } from '../lib/ftmyUsZenodo';
+import { ftmyStateZipZenodoPage, FTMY_ZENODO_CITY_RECORD } from '../lib/ftmyUsZenodo';
 import { loadCachedOneBuildingKmlPins, saveCachedOneBuildingKmlPins } from '../lib/oneBuildingKmlCache';
 import JSZip from 'jszip';
 import { get, set } from 'idb-keyval';
@@ -50,6 +58,13 @@ const futureIcon = new L.Icon({
 /** Below this zoom we skip fetching/rendering the full TMYx KML layer (large downloads + many markers). */
 const MIN_ZOOM_OB_KML = 5;
 const MAX_OB_KML_MARKERS_VISIBLE = 400;
+/** Canada NRC future TMY pins (Climate One Building KML). */
+const MIN_ZOOM_FUTURE_NRC = 5;
+/** US fTMY county centroids (Zenodo state archives). */
+const MIN_ZOOM_FTMY_COUNTIES = 6;
+const MAX_FUTURE_LAYER_MARKERS = 400;
+
+type FutureMapRegion = 'canada' | 'usa';
 
 interface EPWLocation {
   id: string;
@@ -394,6 +409,30 @@ function nearestGroupsFromPoint(
     .slice(0, count);
 }
 
+function nearestFutureMapPoints(
+  lat: number,
+  lng: number,
+  region: FutureMapRegion,
+  nrcPins: OneBuildingKmlPin[],
+  counties: FtmyUsCountyIndexRow[],
+  count: number
+): [number, number][] {
+  const ranked: { lat: number; lng: number; d: number }[] = [];
+  if (region === 'canada') {
+    for (const p of nrcPins) {
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+      ranked.push({ lat: p.lat, lng: p.lng, d: haversineKm(lat, lng, p.lat, p.lng) });
+    }
+  } else {
+    for (const c of counties) {
+      if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) continue;
+      ranked.push({ lat: c.lat, lng: c.lng, d: haversineKm(lat, lng, c.lat, c.lng) });
+    }
+  }
+  ranked.sort((a, b) => a.d - b.d);
+  return ranked.slice(0, count).map(p => [p.lat, p.lng]);
+}
+
 interface MapSelectorProps {
   onSelect: (data: ParsedEPW, compareData?: ParsedEPW) => void;
   isSelectingCompare?: boolean;
@@ -557,6 +596,53 @@ function ObKmlBoundsListener({
   return null;
 }
 
+function FutureLayerBoundsListener<T extends { lat: number; lng: number }>({
+  items,
+  enabled,
+  minZoom,
+  setVisible,
+}: {
+  items: T[];
+  enabled: boolean;
+  minZoom: number;
+  setVisible: (items: T[]) => void;
+}) {
+  const map = useMapEvents({
+    moveend: () => updateVisible(),
+    zoomend: () => updateVisible(),
+  });
+
+  const updateVisible = () => {
+    if (!enabled) {
+      setVisible([]);
+      return;
+    }
+    try {
+      const z = map.getZoom();
+      if (z < minZoom) {
+        setVisible([]);
+        return;
+      }
+      const bounds = map.getBounds();
+      if (!bounds || !bounds.isValid()) return;
+      const paddedBounds = bounds.pad(0.12);
+      const visible = items.filter(p => {
+        if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return false;
+        return paddedBounds.contains([p.lat, p.lng]);
+      });
+      setVisible(visible.slice(0, MAX_FUTURE_LAYER_MARKERS));
+    } catch (e) {
+      console.warn('Future layer bounds update failed:', e);
+    }
+  };
+
+  useEffect(() => {
+    updateVisible();
+  }, [items, enabled, minZoom]);
+
+  return null;
+}
+
 function listEpwPathsInZip(zip: JSZip): { path: string; basename: string }[] {
   const out: { path: string; basename: string }[] = [];
   for (const path of Object.keys(zip.files)) {
@@ -687,6 +773,178 @@ function ObKmlPinPopupContent({
   );
 }
 
+function FutureNrcPinPopupContent({
+  pin,
+  setLoading,
+  setErrorMsg,
+  onEpwSelected,
+}: {
+  pin: OneBuildingKmlPin;
+  setLoading: (v: boolean) => void;
+  setErrorMsg: (msg: string | null) => void;
+  onEpwSelected: (parsed: ParsedEPW) => void;
+}) {
+  const onEpwSelectedRef = useRef(onEpwSelected);
+  onEpwSelectedRef.current = onEpwSelected;
+
+  const [selectedArchiveUrl, setSelectedArchiveUrl] = useState(pin.zipUrl);
+  const [epwLoading, setEpwLoading] = useState(false);
+
+  const archiveOptions = useMemo(() => {
+    const list =
+      pin.datasetZips && pin.datasetZips.length > 0
+        ? [...pin.datasetZips]
+        : [{ zipUrl: pin.zipUrl, label: pin.zipUrl.split('/').pop()?.replace(/\.zip$/i, '') ?? 'EPW' }];
+    list.sort(compareNrcFutureDatasetZips);
+    return list;
+  }, [pin.datasetZips, pin.zipUrl]);
+
+  const loadSelectedArchive = async () => {
+    const url = selectedArchiveUrl;
+    if (!url) return;
+    setEpwLoading(true);
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/proxy-binary?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error('Failed to download archive');
+      const buf = await res.arrayBuffer();
+      const z = await JSZip.loadAsync(buf);
+      const epws = listEpwPathsInZip(z);
+      if (epws.length === 0) throw new Error('No EPW file found in this archive.');
+      const pick = epws[0]!;
+      const entry = z.files[pick.path];
+      if (!entry || entry.dir) throw new Error('EPW entry missing in archive.');
+      const text = await entry.async('string');
+      const parsed = parseEPW(text);
+      attachParsedEpwSource(parsed, pick.basename, fileTypeLabelFromBasename(pick.basename));
+      onEpwSelectedRef.current(parsed);
+    } catch (e) {
+      console.error(e);
+      setErrorMsg(e instanceof Error ? e.message : 'Could not load future weather from this archive.');
+    } finally {
+      setEpwLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const btnPrimary =
+    'w-full rounded-full bg-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-hard-sm transition-colors hover:bg-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+
+  return (
+    <div className="max-w-[min(280px,88vw)] space-y-2 p-2 text-center">
+      <h3 className="line-clamp-3 font-semibold leading-snug text-gray-900">{pin.name}</h3>
+      <p className="text-[11px] leading-snug text-orange-900">
+        NRC Canada future TMY <span className="whitespace-nowrap">· Climate One Building</span>
+      </p>
+      {archiveOptions.length > 1 ? (
+        <label className="block text-left text-[10px] font-medium uppercase tracking-wide text-gray-600">
+          Global warming level
+          <select
+            className="mt-1 w-full rounded-xl border border-orange-100 bg-white px-2 py-2 text-xs font-medium text-gray-900"
+            value={selectedArchiveUrl}
+            onChange={e => setSelectedArchiveUrl(e.target.value)}
+            disabled={epwLoading}
+          >
+            {archiveOptions.map(opt => (
+              <option key={opt.zipUrl} value={opt.zipUrl}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : archiveOptions[0] ? (
+        <p className="text-left text-[10px] leading-snug text-gray-600">
+          Scenario: <span className="font-medium text-gray-800">{archiveOptions[0].label}</span>
+        </p>
+      ) : null}
+      <button
+        type="button"
+        disabled={epwLoading || !selectedArchiveUrl}
+        onClick={() => void loadSelectedArchive()}
+        className={btnPrimary}
+      >
+        {epwLoading ? 'Loading weather file…' : 'Load weather file'}
+      </button>
+    </div>
+  );
+}
+
+function FutureUsCountyPopupContent({
+  county,
+  setErrorMsg,
+  onEpwSelected,
+}: {
+  county: FtmyUsCountyIndexRow;
+  setErrorMsg: (msg: string | null) => void;
+  onEpwSelected: (parsed: ParsedEPW) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleEpwFile = async (file: File) => {
+    setErrorMsg(null);
+    try {
+      const text = await file.text();
+      const parsed = parseEPW(text);
+      attachParsedEpwSource(
+        parsed,
+        file.name,
+        fileTypeLabelFromBasename(file.name)
+      );
+      onEpwSelected(parsed);
+    } catch (e) {
+      console.error(e);
+      setErrorMsg('Could not read that EPW file.');
+    }
+  };
+
+  const zenodoPage = ftmyStateZipZenodoPage(county.state);
+
+  return (
+    <div className="max-w-[min(300px,90vw)] space-y-2 p-2 text-center">
+      <h3 className="font-semibold leading-snug text-gray-900">
+        {county.name}, {county.state}
+      </h3>
+      <p className="text-[11px] leading-snug text-violet-900">
+        US fTMY (ORNL / Zenodo) · county FIPS {county.fips}
+      </p>
+      <p className="text-left text-[10px] leading-snug text-gray-600">
+        County EPWs are packaged in <strong className="font-medium text-gray-800">{county.state}.zip</strong> on
+        Zenodo (hundreds of MB to a few GB per state). After download, extract{' '}
+        <span className="break-all font-mono text-[9px] text-gray-700">{county.epwBasename}</span> and upload it
+        below.
+      </p>
+      <a
+        href={zenodoPage}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-50 px-3 py-2 text-xs font-medium text-violet-900 transition-colors hover:bg-violet-100"
+      >
+        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        Open {county.state}.zip on Zenodo
+      </a>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".epw"
+        className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) void handleEpwFile(f);
+          e.target.value = '';
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className="w-full rounded-full bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-hard-sm transition-colors hover:bg-violet-700"
+      >
+        Upload county .epw
+      </button>
+    </div>
+  );
+}
+
 export function MapSelector({
   onSelect,
   isSelectingCompare,
@@ -715,7 +973,15 @@ export function MapSelector({
   const [locating, setLocating] = useState(false);
   const [fitBoundsPoints, setFitBoundsPoints] = useState<[number, number][] | null>(null);
   const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0);
-  const [nrcSampleLoading, setNrcSampleLoading] = useState(false);
+  const [futureMapRegion, setFutureMapRegion] = useState<FutureMapRegion>('canada');
+  const [futureNrcPins, setFutureNrcPins] = useState<OneBuildingKmlPin[]>([]);
+  const [visibleFutureNrcPins, setVisibleFutureNrcPins] = useState<OneBuildingKmlPin[]>([]);
+  const [futureNrcLoading, setFutureNrcLoading] = useState(false);
+  const [futureNrcError, setFutureNrcError] = useState<string | null>(null);
+  const futureNrcLoadedRef = useRef(false);
+  const [ftmyCounties, setFtmyCounties] = useState<FtmyUsCountyIndexRow[]>([]);
+  const [visibleFtmyCounties, setVisibleFtmyCounties] = useState<FtmyUsCountyIndexRow[]>([]);
+  const [ftmyCountiesLoading, setFtmyCountiesLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
@@ -919,40 +1185,6 @@ export function MapSelector({
     }
   };
 
-  const loadNrcRealFutureSamples = async () => {
-    setErrorMsg(null);
-    setNrcSampleLoading(true);
-    try {
-      const locs = await loadNrcFutureSampleLocations(async (absoluteUrl: string) => {
-        const res = await fetch(`/api/proxy-binary?url=${encodeURIComponent(absoluteUrl)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.arrayBuffer();
-      });
-      setFutureLocations(locs);
-      setShowFuture(true);
-      onMapLibraryModeChange?.('future');
-      const seen = new Set<string>();
-      const unique: [number, number][] = [];
-      for (const loc of locs) {
-        const k = `${roundCoord(loc.lat, 5)},${roundCoord(loc.lng, 5)}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        unique.push([loc.lat, loc.lng]);
-      }
-      if (unique.length > 0) {
-        setFitBoundsPoints(unique);
-        setFitBoundsTrigger(t => t + 1);
-      }
-    } catch (e) {
-      console.error(e);
-      setErrorMsg(
-        'Could not load NRC future samples from Climate One Building. Check your network and that /api/proxy-binary is available (see README for hosted deploys).'
-      );
-    } finally {
-      setNrcSampleLoading(false);
-    }
-  };
-
   const activeLocations = useMemo(() => {
     return showFuture ? futureLocations : locations;
   }, [showFuture, futureLocations, locations]);
@@ -975,6 +1207,78 @@ export function MapSelector({
     if (!showFuture) return;
     onShowOneBuildingPinsChange?.(false);
   }, [showFuture, onShowOneBuildingPinsChange]);
+
+  // Canada NRC future TMY catalog (Climate One Building KML).
+  useEffect(() => {
+    if (!showFuture) return;
+    let cancelled = false;
+
+    void (async () => {
+      if (!futureNrcLoadedRef.current) {
+        const cached = await loadCachedCanadaNrcFuturePins();
+        if (cancelled) return;
+        if (cached?.length) {
+          futureNrcLoadedRef.current = true;
+          setFutureNrcPins(cached);
+        }
+      }
+
+      setFutureNrcLoading(true);
+      setFutureNrcError(null);
+      try {
+        const res = await fetch(
+          `/api/proxy-epw?url=${encodeURIComponent(CANADA_NRC_FUTURE_TMY_KML_URL)}`
+        );
+        if (!res.ok) throw new Error(`KML HTTP ${res.status}`);
+        const xml = await res.text();
+        if (cancelled) return;
+        const rows = parseOneBuildingKmlDocument(xml, CANADA_NRC_FUTURE_KML_SOURCE_ID);
+        const deduped = dedupeNrcFutureKmlPins(rows);
+        futureNrcLoadedRef.current = true;
+        setFutureNrcPins(deduped);
+        void saveCachedCanadaNrcFuturePins(deduped);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setFutureNrcError(
+            e instanceof Error ? e.message : 'Failed to load Canada future weather catalog.'
+          );
+          if (!futureNrcLoadedRef.current) setFutureNrcPins([]);
+        }
+      } finally {
+        if (!cancelled) setFutureNrcLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showFuture]);
+
+  // US fTMY county centroid index (for map + Zenodo state association).
+  useEffect(() => {
+    if (!showFuture || ftmyCounties.length > 0) return;
+    let cancelled = false;
+    setFtmyCountiesLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch('/data/ftmy-us-county-index.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as FtmyUsCountyIndexRow[];
+        if (!cancelled) setFtmyCounties(data);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setErrorMsg('Could not load US county index for fTMY.');
+        }
+      } finally {
+        if (!cancelled) setFtmyCountiesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showFuture, ftmyCounties.length]);
 
   useEffect(() => {
     if (showOneBuildingPins) return;
@@ -1073,12 +1377,17 @@ export function MapSelector({
     if (!q) return;
     setErrorMsg(null);
 
-    if (activeGroupsWithOneBuilding.length === 0) {
-      setErrorMsg(
-        showFuture
-          ? 'Add a future-weather ZIP, load the NRC samples from the start card, or switch to Historical to search the global catalog.'
-          : 'Weather stations are still loading — try again in a moment.'
-      );
+    const hasFutureCatalog =
+      showFuture &&
+      ((futureMapRegion === 'canada' && futureNrcPins.length > 0) ||
+        (futureMapRegion === 'usa' && ftmyCounties.length > 0));
+
+    if (!showFuture && activeGroupsWithOneBuilding.length === 0) {
+      setErrorMsg('Weather stations are still loading — try again in a moment.');
+      return;
+    }
+    if (showFuture && !hasFutureCatalog && activeGroupsWithOneBuilding.length === 0) {
+      setErrorMsg('Future weather catalog is still loading — try again in a moment.');
       return;
     }
 
@@ -1097,17 +1406,40 @@ export function MapSelector({
         setErrorMsg('Unexpected geocoding response.');
         return;
       }
-      const nearest = nearestGroupsFromPoint(activeGroupsWithOneBuilding, lat, lon, 2);
-      if (nearest.length === 0) {
-        setErrorMsg('No stations found near that place in the current dataset.');
-        return;
-      }
       const pts: [number, number][] = [[lat, lon]];
-      for (const s of nearest) {
-        const dup = pts.some(
-          p => Math.abs(p[0] - s.lat) < 1e-7 && Math.abs(p[1] - s.lng) < 1e-7
+
+      if (showFuture && hasFutureCatalog) {
+        for (const p of nearestFutureMapPoints(
+          lat,
+          lon,
+          futureMapRegion,
+          futureNrcPins,
+          ftmyCounties,
+          2
+        )) {
+          const dup = pts.some(
+            q => Math.abs(q[0] - p[0]) < 1e-7 && Math.abs(q[1] - p[1]) < 1e-7
+          );
+          if (!dup) pts.push(p);
+        }
+      }
+
+      if (activeGroupsWithOneBuilding.length > 0) {
+        for (const s of nearestGroupsFromPoint(activeGroupsWithOneBuilding, lat, lon, 2)) {
+          const dup = pts.some(
+            p => Math.abs(p[0] - s.lat) < 1e-7 && Math.abs(p[1] - s.lng) < 1e-7
+          );
+          if (!dup) pts.push([s.lat, s.lng]);
+        }
+      }
+
+      if (pts.length < 2) {
+        setErrorMsg(
+          showFuture
+            ? 'No future-weather sites found near that place in the current region. Try zooming the map or switching Canada / United States.'
+            : 'No stations found near that place in the current dataset.'
         );
-        if (!dup) pts.push([s.lat, s.lng]);
+        return;
       }
       setSearchPin({ lat, lng: lon });
       setFitBoundsPoints(pts);
@@ -1314,6 +1646,49 @@ export function MapSelector({
         </div>
       ) : null}
 
+      {showFuture && futureNrcLoading ? (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 z-[1500] flex -translate-x-1/2 items-center gap-2 rounded-full border border-orange-200 bg-white/95 px-4 py-2 text-xs font-medium text-orange-950 shadow-hard-md sm:text-sm">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-orange-600" aria-hidden />
+          <span>Loading Canada NRC future weather catalog…</span>
+        </div>
+      ) : null}
+
+      {futureNrcError ? (
+        <div className="absolute top-[5.25rem] left-1/2 z-[1500] flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 items-start gap-2 rounded-2xl border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-950 shadow-hard-md sm:top-[6rem]">
+          <span className="min-w-0 flex-1 leading-snug">
+            <span className="font-semibold">Canada future KML:</span> {futureNrcError}
+          </span>
+          <button
+            type="button"
+            onClick={() => setFutureNrcError(null)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-bold leading-none text-orange-900 transition-colors hover:bg-orange-200/70"
+            aria-label="Dismiss catalog error"
+          >
+            &times;
+          </button>
+        </div>
+      ) : null}
+
+      {showFuture &&
+      futureMapRegion === 'canada' &&
+      liveMapZoom < MIN_ZOOM_FUTURE_NRC &&
+      !futureNrcLoading &&
+      futureNrcPins.length > 0 ? (
+        <div className="pointer-events-none absolute top-[5.25rem] left-1/2 z-[1500] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-orange-200 bg-orange-50/95 px-4 py-2.5 text-center text-xs font-medium text-orange-950 shadow-hard-md sm:top-[6rem] sm:text-sm">
+          Zoom in to see Canadian NRC future weather stations.
+        </div>
+      ) : null}
+
+      {showFuture &&
+      futureMapRegion === 'usa' &&
+      liveMapZoom < MIN_ZOOM_FTMY_COUNTIES &&
+      !ftmyCountiesLoading &&
+      ftmyCounties.length > 0 ? (
+        <div className="pointer-events-none absolute top-[5.25rem] left-1/2 z-[1500] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-violet-200 bg-violet-50/95 px-4 py-2.5 text-center text-xs font-medium text-violet-950 shadow-hard-md sm:top-[6rem] sm:text-sm">
+          Zoom in to see US county locations (fTMY on Zenodo).
+        </div>
+      ) : null}
+
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-3xl px-4 flex flex-col sm:flex-row gap-2 items-center pointer-events-none">
         <div className="relative flex-1 w-full pointer-events-auto bg-white p-2 rounded-full shadow-hard-md border border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div className="relative flex min-w-0 flex-1 flex-row items-center">
@@ -1410,95 +1785,109 @@ export function MapSelector({
         </div>
       </div>
 
-      {showFuture && futureLocations.length === 0 && (
+      {showFuture ? (
         <div className="pointer-events-auto absolute top-20 left-1/2 z-[1000] max-h-[calc(100dvh-5.5rem)] w-[min(100%,20rem)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white p-3.5 shadow-hard-lg sm:top-24 sm:max-h-[calc(100dvh-6.5rem)] sm:w-full sm:max-w-md">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-gray-900">
             <CloudLightning className="h-4 w-4 shrink-0 text-orange-600" aria-hidden />
             Future weather
           </h3>
 
-          <div className="mb-3 space-y-2 text-xs leading-snug text-gray-600">
-            <p>
-              Projected (future-year) weather arrives as ZIP archives. This view is separate from the usual
-              typical-year station map.
-            </p>
-            <p>
-              <strong className="font-semibold text-gray-800">Canada:</strong> future files from Canada&apos;s National
-              Research Council, listed on Climate One Building.
-            </p>
-            <p>
-              <strong className="font-semibold text-gray-800">United States:</strong> future TMY (fTMY) files from a
-              separate research effort, published on Zenodo.
-            </p>
+          <div className="mb-3 flex rounded-full border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setFutureMapRegion('canada')}
+              className={`flex-1 rounded-full px-2 py-1.5 transition-colors ${
+                futureMapRegion === 'canada'
+                  ? 'bg-orange-600 text-white shadow-sm'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              Canada
+            </button>
+            <button
+              type="button"
+              onClick={() => setFutureMapRegion('usa')}
+              className={`flex-1 rounded-full px-2 py-1.5 transition-colors ${
+                futureMapRegion === 'usa'
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              United States
+            </button>
           </div>
 
-          <div className="flex flex-col gap-3">
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Try the map</p>
-              <button
-                type="button"
-                disabled={nrcSampleLoading || loading}
-                onClick={() => void loadNrcRealFutureSamples()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+          {futureMapRegion === 'canada' ? (
+            <div className="mb-3 space-y-2 text-xs leading-snug text-gray-600">
+              <p>
+                <strong className="font-semibold text-gray-800">564 NRC stations</strong> load from Climate One
+                Building. Zoom in, tap a pin, pick a warming level (GW0.5–GW3.5), and load the EPW.
+              </p>
+              {futureNrcPins.length > 0 ? (
+                <p className="text-[11px] text-orange-800">
+                  Catalog ready — {Math.round(futureNrcPins.length)} stations on the map.
+                </p>
+              ) : null}
+              <a
+                href={ONE_BUILDING_CANADA_FUTURE_ROOT}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
               >
-                {nrcSampleLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <Info className="h-3.5 w-3.5" aria-hidden />
-                )}
-                Load samples
-              </button>
-              <p className="mt-1 text-[11px] leading-snug text-gray-500">
-                Adds Canadian example sites (Toronto Pearson, several warming levels) without downloading archives
-                first.
-              </p>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Full library on Climate One Building
+              </a>
             </div>
-
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                Download data for your country
+          ) : (
+            <div className="mb-3 space-y-2 text-xs leading-snug text-gray-600">
+              <p>
+                There is <strong className="font-semibold text-gray-800">no public KML</strong> for US fTMY. Zoom in to
+                county dots, open a county, download that state&apos;s archive on Zenodo, then upload the county{' '}
+                <span className="font-mono text-[10px]">.epw</span>.
               </p>
-              <div className="flex flex-col gap-1.5">
-                <a
-                  href={ONE_BUILDING_CANADA_FUTURE_ROOT}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
-                  aria-label="Canada: download NRC future weather files from Climate One Building"
-                >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Canada — Climate One Building
-                </a>
-                <a
-                  href={US_FUTURE_FTMY_ZENODO}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-center text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
-                  aria-label="United States: download fTMY future weather files from Zenodo"
-                >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  United States — Zenodo
-                </a>
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                Use files you already saved
-              </p>
-              <input type="file" accept=".zip" className="hidden" ref={zipInputRef} onChange={handleZipUpload} />
-              <button
-                type="button"
-                onClick={() => zipInputRef.current?.click()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-full bg-orange-600 px-3 py-1.5 text-xs font-medium text-white shadow-hard-sm transition-colors hover:bg-orange-700"
+              {ftmyCounties.length > 0 ? (
+                <p className="text-[11px] text-violet-800">
+                  {ftmyCounties.length.toLocaleString()} counties indexed.
+                </p>
+              ) : null}
+              <a
+                href={`https://zenodo.org/records/${FTMY_ZENODO_CITY_RECORD}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-900 transition-colors hover:bg-violet-100"
               >
-                <Upload className="h-3.5 w-3.5" aria-hidden />
-                Upload ZIP
-              </button>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Zenodo — 18 climate-zone cities (smaller pack)
+              </a>
+              <a
+                href={US_FUTURE_FTMY_ZENODO}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Zenodo — all US counties (by state)
+              </a>
             </div>
-          </div>
+          )}
+
+          <details className="text-xs text-gray-600">
+            <summary className="cursor-pointer font-medium text-gray-800">Advanced: bulk ZIP upload</summary>
+            <p className="mt-2 leading-snug">
+              If you already downloaded provincial or state archives, upload a ZIP of EPW files here.
+            </p>
+            <input type="file" accept=".zip" className="hidden" ref={zipInputRef} onChange={handleZipUpload} />
+            <button
+              type="button"
+              onClick={() => zipInputRef.current?.click()}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-800 transition-colors hover:bg-gray-200"
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden />
+              Upload ZIP
+            </button>
+          </details>
         </div>
-      )}
+      ) : null}
       
       <div className="h-full w-full z-0">
         {typeof mapCenter[0] === 'number' && !isNaN(mapCenter[0]) && isFinite(mapCenter[0]) &&
@@ -1524,6 +1913,18 @@ export function MapSelector({
               enabled={showOneBuildingPins && !showFuture}
               minZoom={MIN_ZOOM_OB_KML}
               setVisiblePins={setVisibleObKmlPins}
+            />
+            <FutureLayerBoundsListener
+              items={futureNrcPins}
+              enabled={showFuture && futureMapRegion === 'canada'}
+              minZoom={MIN_ZOOM_FUTURE_NRC}
+              setVisible={setVisibleFutureNrcPins}
+            />
+            <FutureLayerBoundsListener
+              items={ftmyCounties}
+              enabled={showFuture && futureMapRegion === 'usa'}
+              minZoom={MIN_ZOOM_FTMY_COUNTIES}
+              setVisible={setVisibleFtmyCounties}
             />
 
             {searchPin &&
@@ -1563,6 +1964,47 @@ export function MapSelector({
                     setErrorMsg={setErrorMsg}
                     onEpwSelected={parsed => {
                       onMapLibraryModeChange?.('historical');
+                      onSelect(parsed);
+                    }}
+                  />
+                </Popup>
+              </CircleMarker>
+            ))}
+
+            {visibleFutureNrcPins.map(pin => (
+              <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={futureIcon}>
+                <Popup className="rounded-2xl">
+                  <FutureNrcPinPopupContent
+                    pin={pin}
+                    setLoading={setLoading}
+                    setErrorMsg={setErrorMsg}
+                    onEpwSelected={parsed => {
+                      onMapLibraryModeChange?.('future');
+                      onSelect(parsed);
+                    }}
+                  />
+                </Popup>
+              </Marker>
+            ))}
+
+            {visibleFtmyCounties.map(county => (
+              <CircleMarker
+                key={county.fips}
+                center={[county.lat, county.lng]}
+                radius={5}
+                pathOptions={{
+                  color: '#6d28d9',
+                  fillColor: '#ddd6fe',
+                  fillOpacity: 0.9,
+                  weight: 1.25,
+                }}
+              >
+                <Popup className="rounded-2xl">
+                  <FutureUsCountyPopupContent
+                    county={county}
+                    setErrorMsg={setErrorMsg}
+                    onEpwSelected={parsed => {
+                      onMapLibraryModeChange?.('future');
                       onSelect(parsed);
                     }}
                   />

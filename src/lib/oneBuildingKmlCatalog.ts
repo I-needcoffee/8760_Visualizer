@@ -44,7 +44,10 @@ export function stationKeyFromOneBuildingZipUrl(zipUrl: string): string {
     const u = new URL(zipUrl);
     const base = (u.pathname.split('/').pop() || '').replace(/\.zip$/i, '');
     if (!base) return zipUrl;
-    const noWin = base.replace(/_TMYx\.\d{4}-\d{4}$/i, '').replace(/_TMYx$/i, '');
+    const noWin = base
+      .replace(/_TMYx\.\d{4}-\d{4}$/i, '')
+      .replace(/_TMYx$/i, '')
+      .replace(/_TMY_GW[\d.]+$/i, '');
     return noWin || base;
   } catch {
     return zipUrl;

@@ -12,6 +12,7 @@ import {
   pickDefaultWindStation,
   windMapStationToSelection,
 } from '../lib/iem/windStationCatalog';
+import { US_STATE_OPTIONS } from '../lib/iem/usStateCodes';
 import {
   stationKindLabel,
   stationMarkerColor,
@@ -53,8 +54,12 @@ function MapFitEpwAndStations({
   const map = useMap();
 
   useEffect(() => {
-    if (!ready || stations.length === 0) return;
+    if (!ready) return;
     map.invalidateSize({ animate: false });
+    if (stations.length === 0) {
+      map.setView([epwLat, epwLng], 8);
+      return;
+    }
     const pts: L.LatLngExpression[] = [[epwLat, epwLng]];
     for (const s of stations.slice(0, 80)) {
       pts.push([s.lat, s.lng]);
@@ -76,6 +81,7 @@ export function WindStationPickerModal({
   open,
   theme,
   metadata,
+  sourceFilename,
   initialSelection,
   onApply,
   onCancel,
@@ -83,12 +89,16 @@ export function WindStationPickerModal({
   open: boolean;
   theme: 'light' | 'dark';
   metadata: EPWMetadata;
+  sourceFilename?: string;
   initialSelection: IemWindStationSelection | null;
   onApply: (selection: IemWindStationSelection) => void;
   onCancel: () => void;
 }) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [statePickerNote, setStatePickerNote] = useState<string | null>(null);
+  const [needsStatePicker, setNeedsStatePicker] = useState(false);
+  const [manualStateCode, setManualStateCode] = useState('');
   const [epwLat, setEpwLat] = useState(metadata.lat);
   const [epwLng, setEpwLng] = useState(metadata.lng);
   const [stations, setStations] = useState<WindMapStation[]>([]);
@@ -101,23 +111,51 @@ export function WindStationPickerModal({
     if (!open) return;
     setSelected(initialSelection);
     setUserPickedStation(!!initialSelection?.stationId);
+    const net = initialSelection?.network ?? '';
+    const inferred = net.match(/^([A-Z]{2})_(?:ASOS|RWIS)$/i);
+    setManualStateCode(inferred?.[1]?.toUpperCase() ?? '');
+    setNeedsStatePicker(false);
+    setStatePickerNote(null);
+    setFatalError(null);
   }, [open, initialSelection]);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setLoading(true);
-    setError(null);
+    setFatalError(null);
+    setStatePickerNote(null);
 
-    loadWindStationsNearEpw(metadata)
+    const stateOverride = manualStateCode.trim() || undefined;
+
+    loadWindStationsNearEpw(metadata, undefined, undefined, {
+      stateCodeOverride: stateOverride,
+      sourceFilename,
+    })
       .then(res => {
         if (cancelled) return;
-        if (res.kind !== 'ok') {
-          setError(res.detail);
+        if (res.kind === 'not_us' || res.kind === 'no_coordinates') {
+          setFatalError(res.detail);
+          setNeedsStatePicker(false);
           setStations([]);
           setLoading(false);
           return;
         }
+        if (res.kind === 'needs_state') {
+          setEpwLat(res.epwLat);
+          setEpwLng(res.epwLng);
+          setStations([]);
+          setRwisNote(null);
+          setNeedsStatePicker(true);
+          setStatePickerNote(res.detail);
+          if (res.suggestedStateCode && !manualStateCode) {
+            setManualStateCode(res.suggestedStateCode);
+          }
+          setLoading(false);
+          return;
+        }
+
+        setNeedsStatePicker(false);
         setEpwLat(res.epwLat);
         setEpwLng(res.epwLng);
         setStations(res.stations);
@@ -134,14 +172,14 @@ export function WindStationPickerModal({
       })
       .catch(e => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
+        setFatalError(e instanceof Error ? e.message : String(e));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open, metadata, initialSelection]);
+  }, [open, metadata, sourceFilename, initialSelection, manualStateCode]);
 
   useEffect(() => {
     if (!open) return;
@@ -228,6 +266,40 @@ export function WindStationPickerModal({
             </span>
             <span className={theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}>Faded = shorter/unknown archive</span>
           </div>
+          {needsStatePicker ? (
+            <div
+              className={`mt-3 rounded-lg border px-3 py-2.5 text-xs leading-snug ${
+                theme === 'dark'
+                  ? 'border-amber-700/60 bg-amber-950/40 text-amber-100'
+                  : 'border-amber-200 bg-amber-50 text-amber-950'
+              }`}
+            >
+              <p>{statePickerNote}</p>
+              <label className="mt-2 flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">U.S. state</span>
+                <select
+                  value={manualStateCode}
+                  onChange={e => {
+                    setManualStateCode(e.target.value);
+                    setUserPickedStation(false);
+                    setSelected(null);
+                  }}
+                  className={`rounded-md border px-2 py-1.5 text-sm ${
+                    theme === 'dark'
+                      ? 'border-gray-600 bg-gray-900/60 text-gray-100'
+                      : 'border-gray-200 bg-white text-gray-900'
+                  }`}
+                >
+                  <option value="">Select state…</option>
+                  {US_STATE_OPTIONS.map(row => (
+                    <option key={row.code} value={row.code}>
+                      {row.name} ({row.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <div
@@ -240,8 +312,8 @@ export function WindStationPickerModal({
               <span className="sr-only">Loading stations</span>
             </div>
           ) : null}
-          {error ? (
-            <p className="px-4 py-8 text-center text-sm text-red-600 dark:text-red-400 sm:px-5">{error}</p>
+          {fatalError ? (
+            <p className="px-4 py-8 text-center text-sm text-red-600 dark:text-red-400 sm:px-5">{fatalError}</p>
           ) : (
             <MapContainer
               center={[epwLat, epwLng]}
@@ -254,12 +326,12 @@ export function WindStationPickerModal({
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
               />
-              <MapInvalidateSize ready={!loading && !error} />
+              <MapInvalidateSize ready={!loading && !fatalError} />
               <MapFitEpwAndStations
                 epwLat={epwLat}
                 epwLng={epwLng}
                 stations={stations}
-                ready={!loading && !error && stations.length > 0}
+                ready={!loading && !fatalError}
               />
               <CircleMarker
                 center={[epwLat, epwLng]}
@@ -318,6 +390,10 @@ export function WindStationPickerModal({
                 {selectedStation.archiveBegin ? ` · archive from ${selectedStation.archiveBegin.slice(0, 10)}` : ''}
               </p>
             </div>
+          ) : needsStatePicker ? (
+            <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+              Pick a state above, then click a station on the map.
+            </p>
           ) : (
             <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>Select a station on the map.</p>
           )}

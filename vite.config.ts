@@ -46,6 +46,45 @@ function epwTextProxyMiddleware(): Connect.NextHandleFunction {
   };
 }
 
+const ZENODO_API = 'https://zenodo.org/api/records/';
+const ZENODO_ALLOWED_RECORDS = new Set(['6939750', '8338549', '8335815']);
+
+function isAllowedZenodoBinaryUrl(targetUrl: string): boolean {
+  if (!targetUrl.startsWith(ZENODO_API)) return false;
+  const m = targetUrl.match(/^https:\/\/zenodo\.org\/api\/records\/(\d+)\/files\/[^/]+\/content$/);
+  return !!m && ZENODO_ALLOWED_RECORDS.has(m[1]!);
+}
+
+function zenodoBinaryProxyMiddleware(): Connect.NextHandleFunction {
+  return async (req, res) => {
+    try {
+      const urlStr = `http://${req.headers.host ?? 'localhost'}${req.originalUrl ?? ''}`;
+      const url = new URL(urlStr);
+      const targetUrl = url.searchParams.get('url');
+      if (!targetUrl) {
+        res.statusCode = 400;
+        res.end('URL is required');
+        return;
+      }
+      if (!isAllowedZenodoBinaryUrl(targetUrl)) {
+        res.statusCode = 403;
+        res.end('Forbidden');
+        return;
+      }
+      const response = await fetch(targetUrl);
+      const buf = Buffer.from(await response.arrayBuffer());
+      res.statusCode = response.status;
+      const ct = response.headers.get('content-type') || 'application/zip';
+      res.setHeader('Content-Type', ct);
+      res.end(buf);
+    } catch (err) {
+      console.error('Zenodo binary proxy error:', err);
+      res.statusCode = 500;
+      res.end('Internal Server Error');
+    }
+  };
+}
+
 function oneBuildingBinaryProxyMiddleware(): Connect.NextHandleFunction {
   return async (req, res) => {
     try {
@@ -127,11 +166,13 @@ export default defineConfig({
         server.middlewares.use('/api/nominatim', nominatimProxyMiddleware());
         server.middlewares.use('/api/proxy-epw', epwTextProxyMiddleware());
         server.middlewares.use('/api/proxy-binary', oneBuildingBinaryProxyMiddleware());
+        server.middlewares.use('/api/proxy-zenodo', zenodoBinaryProxyMiddleware());
       },
       configurePreviewServer(server) {
         server.middlewares.use('/api/nominatim', nominatimProxyMiddleware());
         server.middlewares.use('/api/proxy-epw', epwTextProxyMiddleware());
         server.middlewares.use('/api/proxy-binary', oneBuildingBinaryProxyMiddleware());
+        server.middlewares.use('/api/proxy-zenodo', zenodoBinaryProxyMiddleware());
       },
     },
   ],
