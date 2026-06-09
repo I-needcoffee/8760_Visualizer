@@ -134,7 +134,14 @@ export function WindStationPickerModal({
     })
       .then(res => {
         if (cancelled) return;
-        if (res.kind === 'not_us' || res.kind === 'no_coordinates') {
+        if (res.kind === 'no_coordinates') {
+          setFatalError(res.detail);
+          setNeedsStatePicker(false);
+          setStations([]);
+          setLoading(false);
+          return;
+        }
+        if (res.kind === 'not_us') {
           setFatalError(res.detail);
           setNeedsStatePicker(false);
           setStations([]);

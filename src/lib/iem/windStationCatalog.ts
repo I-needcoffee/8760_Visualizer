@@ -5,11 +5,10 @@ import { haversineKm } from './nearestStation';
 import {
   iemAsosNetworkForStateCode,
   iemRwisNetworkForStateCode,
-  metadataOrFilenameLooksUnitedStates,
   normalizeUsStateCode,
   resolveUsStateCodeFromMetadata,
 } from './usNetworkFromEpw';
-import { guessUsStateCodeFromEpwFilename } from './usStateCodes';
+import { epwMayUseIemWind, guessUsStateCodeFromEpwFilename } from './usStateCodes';
 import {
   stationKindLabel,
   windExpectationForCatalogStation,
@@ -99,14 +98,7 @@ export async function loadWindStationsNearEpw(
   options?: LoadWindStationsOptions
 ): Promise<WindStationCatalogResult> {
   const sourceFilename = options?.sourceFilename;
-
-  if (!metadataOrFilenameLooksUnitedStates(metadata, sourceFilename)) {
-    return {
-      kind: 'not_us',
-      detail:
-        'IEM wind station maps are available for U.S. EPW locations (country USA and a state or territory).',
-    };
-  }
+  const stateOverride = options?.stateCodeOverride?.trim();
 
   if (!Number.isFinite(metadata.lat) || !Number.isFinite(metadata.lng)) {
     return {
@@ -118,8 +110,16 @@ export async function loadWindStationsNearEpw(
   const epwLat = metadata.lat;
   const epwLng = metadata.lng;
 
+  if (!epwMayUseIemWind(metadata, sourceFilename, stateOverride)) {
+    return {
+      kind: 'not_us',
+      detail:
+        'IEM wind station maps are available for U.S. EPW locations. For uploaded files, pick the state in the map dialog when coordinates are present.',
+    };
+  }
+
   const stateCode =
-    (options?.stateCodeOverride ? normalizeUsStateCode(options.stateCodeOverride) : null) ??
+    (stateOverride ? normalizeUsStateCode(stateOverride) : null) ??
     resolveUsStateCodeFromMetadata(metadata, sourceFilename);
 
   if (!stateCode) {

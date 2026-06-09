@@ -83,9 +83,63 @@ export function normalizeUsStateCode(raw: string): string | null {
 export function guessUsStateCodeFromEpwFilename(filename?: string): string | null {
   if (!filename) return null;
   const base = filename.split(/[/\\]/).pop()?.replace(/\.epw$/i, '') ?? '';
-  const m = base.match(/^USA_([A-Z]{2})_/i);
-  if (m?.[1]) return normalizeUsStateCode(m[1]);
+  const atStart = base.match(/^USA_([A-Z]{2})_/i);
+  if (atStart?.[1]) return normalizeUsStateCode(atStart[1]);
+  const anywhere = base.match(/USA_([A-Z]{2})_/i);
+  if (anywhere?.[1]) return normalizeUsStateCode(anywhere[1]);
   return null;
+}
+
+const NON_US_COUNTRY_MARKERS = new Set([
+  'CAN',
+  'CANADA',
+  'MEX',
+  'MEXICO',
+  'GBR',
+  'UK',
+  'AUS',
+  'AUSTRALIA',
+  'DEU',
+  'GERMANY',
+  'FRA',
+  'FRANCE',
+  'JPN',
+  'JAPAN',
+  'CHN',
+  'CHINA',
+  'IND',
+  'INDIA',
+]);
+
+/** True when the EPW header country clearly refers to a non-U.S. nation. */
+export function metadataLooksClearlyNonUs(metadata: EPWMetadata): boolean {
+  const country = metadata.country.trim();
+  if (!country || country === '-' || /^n\/?a$/i.test(country) || /^unknown$/i.test(country)) {
+    return false;
+  }
+  const upper = country.toUpperCase();
+  if (metadataLooksUnitedStates(metadata)) return false;
+  if (NON_US_COUNTRY_MARKERS.has(upper)) return true;
+  if (/^CANADA\b/.test(upper)) return true;
+  if (/^MEXICO\b/.test(upper)) return true;
+  // ISO-style codes that are not U.S.
+  if (/^[A-Z]{2,3}$/.test(upper) && !US_VARIANTS.has(upper)) return true;
+  return false;
+}
+
+/**
+ * Whether IEM mesonet wind may apply: explicit U.S. metadata/filename, user-picked state,
+ * or ambiguous uploads with coordinates (user chooses state in the picker).
+ */
+export function epwMayUseIemWind(
+  metadata: EPWMetadata,
+  sourceFilename?: string,
+  stateCodeOverride?: string
+): boolean {
+  if (stateCodeOverride?.trim()) return true;
+  if (metadataOrFilenameLooksUnitedStates(metadata, sourceFilename)) return true;
+  if (metadataLooksClearlyNonUs(metadata)) return false;
+  return Number.isFinite(metadata.lat) && Number.isFinite(metadata.lng);
 }
 
 export function metadataLooksUnitedStates(metadata: EPWMetadata): boolean {
