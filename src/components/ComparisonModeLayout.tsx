@@ -17,6 +17,8 @@ import type {
 import type { CompareWindIemSharedControls } from '../lib/iem/windIemPrefsShared';
 import { useWindIemGlobalPrefs } from '../lib/iem/globalWindIemPrefsStore';
 import { variableLegendDomain } from '../lib/variableLegendDomain';
+import { convertUnit, convertValue, UNIT_C, UNIT_F } from '../lib/unitConversion';
+import { utciGradientExtentFromRows } from '../lib/utciModel';
 import { GRADIENTS } from '../lib/constants';
 import { DIFFERENCE_DIVERGING_ID } from '../lib/differenceDivergingColor';
 import type { GradientDef } from './InteractiveLegend';
@@ -71,7 +73,7 @@ const PILL_DROPDOWN_CHEVRON_GUTTER_PX = 20;
 
 function pillSelectOptionLabel(f: ParsedEPW) {
   return (
-    weatherLocationTypeCaption(f) || `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}` || 'â€”'
+    weatherLocationTypeCaption(f) || `${f.metadata.city}${f.metadata.state ? `, ${f.metadata.state}` : ''}` || '\u2014'
   );
 }
 
@@ -290,12 +292,7 @@ function PairSharedToolbar({
 }
 
 function convertUnitForLegend(unit: string, unitSystem: UnitSystem) {
-  if (unitSystem === 'imperial') {
-    if (unit === 'Â°C') return 'Â°F';
-    if (unit === 'm/s') return 'mph';
-    if (unit === 'mm') return 'in';
-  }
-  return unit;
+  return convertUnit(unit, unitSystem);
 }
 
 export function ComparisonModeLayout({
@@ -551,9 +548,13 @@ export function ComparisonModeLayout({
     [baseline.variables, baseline.data, roseVar, unitSystem]
   );
 
-  const utciPairUnit = unitSystem === 'imperial' ? 'Â°F' : 'Â°C';
-  const utciPairGradMin = unitSystem === 'imperial' ? -40 * (9 / 5) + 32 : -40;
-  const utciPairGradMax = unitSystem === 'imperial' ? 50 * (9 / 5) + 32 : 50;
+  const utciExtentC = useMemo(
+    () => utciGradientExtentFromRows(baseline.data),
+    [baseline.data]
+  );
+  const utciPairUnit = unitSystem === 'imperial' ? UNIT_F : UNIT_C;
+  const utciPairGradMin = convertValue(utciExtentC.minC, UNIT_C, unitSystem);
+  const utciPairGradMax = convertValue(utciExtentC.maxC, UNIT_C, unitSystem);
 
   const noopType = (_t: ChartType) => {};
 

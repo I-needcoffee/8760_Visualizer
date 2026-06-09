@@ -2,6 +2,7 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import type { GlobalFilterState } from '../lib/globalFilter';
 import type { UnitSystem } from '../App';
+import { UNIT_C, UNIT_F } from '../lib/unitConversion';
 
 function effectiveTemperatureBand(
   f: GlobalFilterState,
@@ -89,8 +90,8 @@ export function TemperatureIsolationRange({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={`rounded-full border px-2 py-0.5 font-mono text-xs ${dark ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}`}>
           {filter.temperatureMode === 'off'
-            ? `Full file (${display(minC).toFixed(1)}–${display(maxC).toFixed(1)}°${unitSystem === 'imperial' ? 'F' : 'C'})`
-            : `Isolating ${display(loC).toFixed(1)}–${display(hiC).toFixed(1)}°${unitSystem === 'imperial' ? 'F' : 'C'}`}
+            ? `Full file (${display(minC).toFixed(1)}\u2013${display(maxC).toFixed(1)}${unitSystem === 'imperial' ? UNIT_F : UNIT_C})`
+            : `Isolating ${display(loC).toFixed(1)}\u2013${display(hiC).toFixed(1)}${unitSystem === 'imperial' ? UNIT_F : UNIT_C}`}
         </span>
         <button
           type="button"
@@ -155,7 +156,7 @@ export function TemperatureIsolationRange({
               }}
               className={`w-24 rounded-lg border px-2 py-1 font-mono text-sm outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
             />
-            <span className="tabular-nums opacity-75">{unitSystem === 'imperial' ? '°F' : '°C'}</span>
+            <span className="tabular-nums opacity-75">{unitSystem === 'imperial' ? UNIT_F : UNIT_C}</span>
           </div>
         </label>
         <label className="flex flex-col gap-1">
@@ -180,7 +181,7 @@ export function TemperatureIsolationRange({
               }}
               className={`w-24 rounded-lg border px-2 py-1 font-mono text-sm outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
             />
-            <span className="tabular-nums opacity-75">{unitSystem === 'imperial' ? '°F' : '°C'}</span>
+            <span className="tabular-nums opacity-75">{unitSystem === 'imperial' ? UNIT_F : UNIT_C}</span>
           </div>
         </label>
       </div>

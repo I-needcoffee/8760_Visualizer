@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import tc from 'jsthermalcomfort';
 import type { EPWDataRow } from '../lib/epwParser';
 import type { UnitSystem } from '../App';
+import { UNIT_C, UNIT_F } from '../lib/unitConversion';
 
 function cToF(v: number) {
   return v * (9 / 5) + 32;
@@ -89,7 +90,7 @@ function computeQuickStatsFromRows(rows: EPWDataRow[] | undefined, unitSystem: U
   const hi = unitSystem === 'imperial' ? cToF(hiC) : hiC;
   const lo = unitSystem === 'imperial' ? cToF(loC) : loC;
   const avg = unitSystem === 'imperial' ? cToF(avgC) : avgC;
-  const tUnit = unitSystem === 'imperial' ? '°F' : '°C';
+  const tUnit = unitSystem === 'imperial' ? UNIT_F : UNIT_C;
 
   const peakRad = max(rad);
   const radUnit = 'Wh/m²';

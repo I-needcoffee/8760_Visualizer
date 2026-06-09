@@ -12,6 +12,7 @@ import { InteractiveLegend, GradientDef, getLegendBarHeightPx, getLegendLabelBas
 import { AggregationToolbar } from './AggregationToolbar';
 import type { ChartType, CompareUtciSharedControls } from '../App';
 import { UnitSystem } from '../App';
+import { UNIT_C, UNIT_F, utciGradientExtentC } from '../lib/unitConversion';
 
 import type { BarChartFillMode, GlobalFilterState, HeatmapCellStatistic } from '../lib/globalFilter';
 import {
@@ -528,10 +529,10 @@ export function UtciExplorer({
     }
     return val;
   };
-  const utciUnit = unitSystem === 'imperial' ? 'Â°F' : 'Â°C';
+  const utciUnit = unitSystem === 'imperial' ? UNIT_F : UNIT_C;
   const utciLegendTitle =
     showDifference && compareData
-      ? `Î” UTCI (${utciUnit})`
+      ? `\u0394 UTCI (${utciUnit})`
       : colorMode === 'gradient'
         ? `UTCI (${utciUnit})`
         : colorMode === 'categories'
@@ -571,11 +572,9 @@ export function UtciExplorer({
         utciMax: maxDiff
       };
     }
-    return {
-      utciMin: -40, // Fixed logical min for UTCI
-      utciMax: 50   // Fixed logical max for UTCI
-    };
-  }, [data, compareData, showDifference, includeSun, includeWind]);
+    const extent = utciGradientExtentC(utciData.map(d => d.utci));
+    return { utciMin: extent.minC, utciMax: extent.maxC };
+  }, [data, compareData, showDifference, includeSun, includeWind, utciData]);
 
   useEffect(() => {
     if (!svgRef.current || dimensions.width === 0) return;

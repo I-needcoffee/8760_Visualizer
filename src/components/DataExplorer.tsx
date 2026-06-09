@@ -34,6 +34,12 @@ import {
 } from '../lib/globalFilter';
 
 import { UnitSystem } from '../App';
+import {
+  convertUnit as convertDisplayUnit,
+  convertValue as convertDisplayValue,
+  effectiveVariableLegendBounds,
+  UNIT_C,
+} from '../lib/unitConversion';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ExportHeaderCaption, exportCaptionLinesWithUnit } from './ExportHeaderCaption';
 import { VariableChartSelect } from './VariableChartSelect';
@@ -67,7 +73,7 @@ import {
 const EMPTY_VARIABLES_FALLBACK: EPWVariable = {
   id: 'dryBulbTemperature',
   name: 'Dry bulb temperature',
-  unit: '°C',
+  unit: UNIT_C,
   min: 0,
   max: 35,
   category: 'Temperature',
@@ -234,23 +240,10 @@ export function DataExplorer({
   }, [tutorialEnabled, tutorialReport, aggregation, colorVar, variables]);
 
   const convertValue = useCallback((val: number | null | undefined, unit: string, isDelta: boolean = false) => {
-    if (val === null || val === undefined) return 0;
-    if (unitSystem === 'imperial') {
-      if (unit === '°C') return isDelta ? val * 9/5 : val * 9/5 + 32;
-      if (unit === 'm/s') return val * 2.23694;
-      if (unit === 'mm') return val / 25.4;
-    }
-    return val;
+    return convertDisplayValue(val, unit, unitSystem, isDelta);
   }, [unitSystem]);
 
-  const convertUnit = (unit: string) => {
-    if (unitSystem === 'imperial') {
-      if (unit === '°C') return '°F';
-      if (unit === 'm/s') return 'mph';
-      if (unit === 'mm') return 'in';
-    }
-    return unit;
-  };
+  const convertUnit = (unit: string) => convertDisplayUnit(unit, unitSystem);
 
   // Group variables by category
   const groupedVariables = variables.reduce((acc, v) => {
@@ -262,8 +255,9 @@ export function DataExplorer({
 
   const { colorVarDef, cMin, cMax, cUnit } = useMemo(() => {
     const def = variables.find(v => v.id === colorVar) ?? variables[0] ?? EMPTY_VARIABLES_FALLBACK;
-    let min = def.fixedMin !== undefined ? convertValue(def.fixedMin, def.unit) : convertValue(def.min, def.unit);
-    let max = def.fixedMax !== undefined ? convertValue(def.fixedMax, def.unit) : convertValue(def.max, def.unit);
+    const bounds = effectiveVariableLegendBounds(def);
+    let min = convertValue(bounds.lo, def.unit);
+    let max = convertValue(bounds.hi, def.unit);
     const unit = convertUnit(def.unit);
 
     if (showDifference && compareData) {

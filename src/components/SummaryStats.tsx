@@ -3,7 +3,8 @@ import { EPWDataRow, EPWVariable } from '../lib/epwParser';
 import type { GlobalFilterState } from '../lib/globalFilter';
 import { rowPassesGlobalFilters } from '../lib/globalFilter';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { UnitSystem } from '../App';
+import type { UnitSystem } from '../App';
+import { UNIT_C, UNIT_F } from '../lib/unitConversion';
 import tc from 'jsthermalcomfort';
 
 interface SummaryStatsProps {
@@ -126,7 +127,7 @@ export function SummaryStats({ data, compareData, showDifference, variables, fil
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className={`p-4 rounded-xl shadow-hard-md border ${theme === 'dark' ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
         <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{showDifference ? 'Δ Avg Temp' : 'Avg Temp'}</div>
-        <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{avgTemp > 0 && showDifference ? '+' : ''}{avgTemp.toFixed(1)}{unitSystem === 'imperial' ? '°F' : '°C'}</div>
+        <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{avgTemp > 0 && showDifference ? '+' : ''}{avgTemp.toFixed(1)}{unitSystem === 'imperial' ? UNIT_F : UNIT_C}</div>
       </div>
       
       <div className={`p-4 rounded-xl shadow-hard-md border ${theme === 'dark' ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
@@ -148,7 +149,7 @@ export function SummaryStats({ data, compareData, showDifference, variables, fil
         <>
           <div className={`p-4 rounded-xl shadow-hard-md border ${theme === 'dark' ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>
             <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{showDifference ? 'Δ Avg UTCI' : 'Avg UTCI'}</div>
-            <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{avgUtci > 0 && showDifference ? '+' : ''}{avgUtci.toFixed(1)}{unitSystem === 'imperial' ? '°F' : '°C'}</div>
+            <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{avgUtci > 0 && showDifference ? '+' : ''}{avgUtci.toFixed(1)}{unitSystem === 'imperial' ? UNIT_F : UNIT_C}</div>
           </div>
           {!showDifference && (
             <div className={`p-4 rounded-xl shadow-hard-md border ${theme === 'dark' ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-100'}`}>

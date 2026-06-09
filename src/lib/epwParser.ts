@@ -1,3 +1,5 @@
+import { UNIT_C } from './unitConversion';
+
 export interface EPWMetadata {
   city: string;
   state: string;
@@ -45,8 +47,8 @@ export interface EPWVariable {
 
 export const EPW_COLUMNS: { id: string; name: string; unit: string; missing: number; index: number; category: string; fixedMin?: number; fixedMax?: number }[] = [
   /** Narrow fixed domain improves contrast for typical hourly values (heatmap legend span). */
-  { id: 'dryBulbTemperature', name: 'Dry Bulb Temperature', unit: '°C', missing: 99.9, index: 6, category: 'Temperature', fixedMin: 5, fixedMax: 35 },
-  { id: 'dewPointTemperature', name: 'Dew Point Temperature', unit: '°C', missing: 99.9, index: 7, category: 'Temperature', fixedMin: -20, fixedMax: 30 },
+  { id: 'dryBulbTemperature', name: 'Dry Bulb Temperature', unit: UNIT_C, missing: 99.9, index: 6, category: 'Temperature', fixedMin: 5, fixedMax: 35 },
+  { id: 'dewPointTemperature', name: 'Dew Point Temperature', unit: UNIT_C, missing: 99.9, index: 7, category: 'Temperature', fixedMin: -20, fixedMax: 30 },
   { id: 'relativeHumidity', name: 'Relative Humidity', unit: '%', missing: 999, index: 8, category: 'Humidity', fixedMin: 0, fixedMax: 100 },
   { id: 'atmosphericPressure', name: 'Atmospheric Station Pressure', unit: 'Pa', missing: 999999, index: 9, category: 'Other', fixedMin: 80000, fixedMax: 110000 },
   { id: 'extraterrestrialHorizontalRadiation', name: 'Extraterrestrial Horizontal Radiation', unit: 'Wh/m²', missing: 9999, index: 10, category: 'Solar', fixedMin: 0, fixedMax: 1200 },

@@ -1,6 +1,7 @@
 // @ts-ignore
 import tc from 'jsthermalcomfort';
 import type { EPWDataRow } from './epwParser';
+import { utciGradientExtentC } from './unitConversion';
 import type { GlobalFilterState } from './globalFilter';
 import { rowPassesDryBulbTemperature } from './globalFilter';
 import { OUTDOOR_COMFORT_GREEN_HEX, OUTDOOR_COMFORT_GREEN_RGB } from './constants';
@@ -322,4 +323,17 @@ export function computeUtciComfortMatrix(rows: EPWDataRow[], filter: GlobalFilte
   );
 
   return { periods, scenarios: UTCI_EXPOSURE_SCENARIOS, cells };
+}
+
+/** UTCI heatmap/bar gradient domain (°C), extended for cold/high-altitude files. */
+export function utciGradientExtentFromRows(
+  rows: EPWDataRow[],
+  opts: { includeSun?: boolean; includeWind?: boolean } = {}
+): { minC: number; maxC: number } {
+  const values: number[] = [];
+  for (const row of rows) {
+    const u = computeUtciForEpwRow(row, opts);
+    if (u) values.push(u.utci);
+  }
+  return utciGradientExtentC(values);
 }
