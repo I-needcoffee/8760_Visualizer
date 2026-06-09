@@ -8,10 +8,12 @@ import { getTutorialGuideCopy } from '../../lib/tutorialCopy';
 import {
   computeExplorerMonthlyByMonth,
   computeTutorialGuideQuickStats,
+  computeTutorialNvQuickStats,
   computeTutorialUtciQuickStats,
 } from '../../lib/tutorialGuideStats';
 import { useTutorialLive } from '../../context/TutorialLiveContext';
-import { OUTDOOR_COMFORT_GREEN_HEX } from '../../lib/constants';
+import { NATURAL_VENTILATION_SUITABLE_BLUE_HEX, OUTDOOR_COMFORT_GREEN_HEX } from '../../lib/constants';
+import { NV_CRITERIA_PRESETS } from '../../lib/naturalVentilationModel';
 
 export function TutorialGuidePanel({
   theme,
@@ -53,8 +55,10 @@ export function TutorialGuidePanel({
   useEffect(() => {
     if (!selectedCell && !snapshot.utciFocusPeriodId) return;
     const onDocPointer = (e: PointerEvent) => {
+      const target = e.target;
+      if (target instanceof Element && target.closest('[data-export-ui]')) return;
       const root = comfortMatrixRef.current;
-      if (!root?.contains(e.target as Node)) clearComfortHighlight();
+      if (!root?.contains(target as Node)) clearComfortHighlight();
     };
     document.addEventListener('pointerdown', onDocPointer);
     return () => document.removeEventListener('pointerdown', onDocPointer);
@@ -95,7 +99,7 @@ export function TutorialGuidePanel({
 
   const statBlocks = useMemo(
     () =>
-      slot.type === 'utci'
+      slot.type === 'utci' || slot.type === 'naturalVentilation'
         ? []
         : computeTutorialGuideQuickStats({
             chartType: slot.type,
@@ -115,6 +119,17 @@ export function TutorialGuidePanel({
         : null,
     [slot.type, epwRows, filter, snapshot]
   );
+
+  const nvStats = useMemo(
+    () =>
+      slot.type === 'naturalVentilation'
+        ? computeTutorialNvQuickStats({ rows: epwRows, filter, unitSystem, live: snapshot })
+        : null,
+    [slot.type, epwRows, filter, unitSystem, snapshot]
+  );
+
+  const formatNvHoursPct = (hours: number, pct: number) =>
+    `${hours.toLocaleString()} hrs · ${Number.isFinite(pct) ? pct.toFixed(1) : '—'}%`;
 
   const surface = theme === 'dark' ? 'bg-gray-800/92 shadow-sm' : 'bg-white/95 shadow-sm';
   const ink = theme === 'dark' ? 'text-gray-100' : 'text-gray-900';
@@ -144,9 +159,111 @@ export function TutorialGuidePanel({
         <p className={`mb-3 text-[11px] leading-snug ${muted}`}>
           {slot.type === 'utci'
             ? 'Modeled UTCI from your file, using the same month, hour, and temperature filters as Settings. Sun and wind options match the chart card.'
-            : 'From your loaded file, using the same month and hour filters as the chart (if the chart is empty, this still reflects the file).'}
+            : slot.type === 'naturalVentilation'
+              ? 'Outdoor dry-bulb and humidity from your file, using the same month and hour filters as Settings. Criteria presets match the chart card.'
+              : 'From your loaded file, using the same month and hour filters as the chart (if the chart is empty, this still reflects the file).'}
         </p>
-        {slot.type === 'utci' ? (
+        {slot.type === 'naturalVentilation' ? (
+          nvStats ? (
+            <div className="flex flex-col gap-4">
+              <div>
+                <h4 className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wide ${muted}`}>
+                  Suitable hours by preset
+                </h4>
+                <ul className="flex flex-col gap-2">
+                  {nvStats.presetStats.map(stat => {
+                    const preset = NV_CRITERIA_PRESETS.find(p => p.id === stat.id);
+                    return (
+                      <li
+                        key={stat.id}
+                        className="rounded-lg border px-3 py-2"
+                        style={{
+                          borderColor:
+                            theme === 'dark'
+                              ? `${NATURAL_VENTILATION_SUITABLE_BLUE_HEX}66`
+                              : `${NATURAL_VENTILATION_SUITABLE_BLUE_HEX}40`,
+                          backgroundColor:
+                            theme === 'dark'
+                              ? `${NATURAL_VENTILATION_SUITABLE_BLUE_HEX}1a`
+                              : `${NATURAL_VENTILATION_SUITABLE_BLUE_HEX}14`,
+                        }}
+                      >
+                        <p className={`text-[10px] font-semibold uppercase tracking-wide ${muted}`}>
+                          {stat.shortLabel}
+                        </p>
+                        <p
+                          className="mt-0.5 text-sm font-bold tabular-nums"
+                          style={{ color: NATURAL_VENTILATION_SUITABLE_BLUE_HEX }}
+                        >
+                          {formatNvHoursPct(stat.suitableHours, stat.suitablePct)}
+                        </p>
+                        {preset ? (
+                          <p className={`mt-0.5 text-[10px] leading-snug ${muted}`}>{preset.label}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              <div>
+                <h4 className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wide ${muted}`}>
+                  Active criteria breakdown
+                </h4>
+                <p className={`mb-2 text-[10px] leading-snug ${muted}`}>
+                  {nvStats.activeCriteriaSummary} · {nvStats.totalHours.toLocaleString()} filtered hours
+                </p>
+                <dl className="grid w-max max-w-full grid-cols-[max-content_max-content] gap-x-2 gap-y-1.5 text-left">
+                  {[
+                    {
+                      label: 'Temp + humidity (suitable)',
+                      hours: nvStats.activeBreakdown.suitableHours,
+                      pct: nvStats.activeBreakdown.suitablePct,
+                      primary: true,
+                    },
+                    {
+                      label: 'Temp range only',
+                      hours: nvStats.activeBreakdown.tempOnlyHours,
+                      pct: nvStats.activeBreakdown.tempOnlyPct,
+                    },
+                    {
+                      label: 'Humidity limit only',
+                      hours: nvStats.activeBreakdown.rhOnlyHours,
+                      pct: nvStats.activeBreakdown.rhOnlyPct,
+                    },
+                    {
+                      label: 'Temp OK, humidity too high',
+                      hours: nvStats.activeBreakdown.tempOkRhFailHours,
+                      pct: nvStats.activeBreakdown.tempOkRhFailPct,
+                    },
+                    {
+                      label: 'Humidity OK, temp out of range',
+                      hours: nvStats.activeBreakdown.rhOkTempFailHours,
+                      pct: nvStats.activeBreakdown.rhOkTempFailPct,
+                    },
+                  ].map(row => (
+                    <React.Fragment key={row.label}>
+                      <dt
+                        className={`text-[11px] ${row.primary ? 'font-semibold' : muted}`}
+                        style={row.primary ? { color: NATURAL_VENTILATION_SUITABLE_BLUE_HEX } : undefined}
+                      >
+                        {row.label}
+                      </dt>
+                      <dd
+                        className={`text-[11px] font-medium tabular-nums ${ink}`}
+                        style={row.primary ? { color: NATURAL_VENTILATION_SUITABLE_BLUE_HEX } : undefined}
+                      >
+                        {formatNvHoursPct(row.hours, row.pct)}
+                      </dd>
+                    </React.Fragment>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          ) : (
+            <p className={`text-[11px] ${muted}`}>No hours match your current filters.</p>
+          )
+        ) : slot.type === 'utci' ? (
           utciStats ? (
             <div className="flex flex-col gap-4">
               <div
@@ -161,7 +278,7 @@ export function TutorialGuidePanel({
                   {utciStats.comfortPercent.toFixed(1)}%
                 </p>
                 <p className={`mt-0.5 text-[10px] leading-snug ${muted}`}>
-                  No thermal stress Â· {utciStats.hoursCounted.toLocaleString()} filtered hours
+                  No thermal stress \u00B7 {utciStats.hoursCounted.toLocaleString()} filtered hours
                 </p>
               </div>
 
@@ -283,7 +400,7 @@ export function TutorialGuidePanel({
                                 <td key={`${period.id}-${scenario.id}`} className="px-0.5 py-0.5">
                                   <button
                                     type="button"
-                                    title={`${period.label} Â· ${scenario.label}`}
+                                    title={`${period.label} \u00B7 ${scenario.label}`}
                                     aria-pressed={isSelected}
                                     style={heat}
                                     className={`w-full min-w-[2.75rem] rounded-md px-0.5 py-1 text-center text-[10px] font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 ${
@@ -304,7 +421,7 @@ export function TutorialGuidePanel({
                                   >
                                     {Number.isFinite(cell.percentComfort)
                                       ? `${cell.percentComfort.toFixed(1)}%`
-                                      : 'â€”'}
+                                      : '\u2014'}
                                   </button>
                                 </td>
                               );

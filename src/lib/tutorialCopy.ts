@@ -181,6 +181,19 @@ function utciCopy(input: TutorialGuideInput): TutorialGuideCopy {
   };
 }
 
+function naturalVentilationCopy(input: TutorialGuideInput): TutorialGuideCopy {
+  const agg = input.live.aggregation;
+  const aggWords = aggregationPlain(agg);
+
+  return {
+    chartTitle: 'Natural ventilation',
+    overviewBody: `This view screens outdoor hours when operable windows or natural ventilation may be viable, using dry-bulb temperature and relative humidity limits you can adjust in Settings. Blue intensity shows the share of suitable hours in each time bucket. Columns move ${aggWords}. ${aggregationExplain(agg)}`,
+    readingTitle: 'How to read it',
+    readingBody:
+      'Look for seasons and times of day with strong blue bands—those are when outdoor air likely meets your criteria. Quick numbers compare common, conservative, and cooling presets, plus a breakdown of whether temperature or humidity is the limiting factor.',
+  };
+}
+
 export function getTutorialLegendHoverDef(
   chartType: ChartType,
   live: TutorialLiveSnapshot
@@ -258,6 +271,8 @@ export function getTutorialGuideCopy(input: TutorialGuideInput): TutorialGuideCo
       return sunpathCopy(input);
     case 'utci':
       return utciCopy(input);
+    case 'naturalVentilation':
+      return naturalVentilationCopy(input);
     default:
       return {
         chartTitle: 'Chart',

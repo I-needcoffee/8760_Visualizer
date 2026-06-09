@@ -8,6 +8,11 @@ import { EPW_COLUMNS } from './epwParser';
 import { explorerUsesDailyAvgBarExtents, meanDailyLowHighForRows } from './explorerBarExtents';
 import { EXPLORER_MONTH_LABELS_SHORT } from './explorerChartSvgLayout';
 import {
+  computeNvFilteredStatsBundle,
+  DEFAULT_NV_CRITERIA,
+  formatNvCriteriaSummary,
+} from './naturalVentilationModel';
+import {
   computeUtciCategoryShares,
   computeUtciComfortMatrix,
   formatUtciCategoryLabel,
@@ -25,6 +30,13 @@ export type TutorialUtciQuickStats = {
   comfortPercent: number;
   hoursCounted: number;
   comfortMatrix: UtciComfortMatrix;
+};
+
+export type TutorialNvQuickStats = {
+  totalHours: number;
+  presetStats: { id: string; shortLabel: string; suitableHours: number; suitablePct: number }[];
+  activeBreakdown: ReturnType<typeof computeNvFilteredStatsBundle>['activeBreakdown'];
+  activeCriteriaSummary: string;
 };
 
 function formatPercent(v: number, digits = 1): string {
@@ -242,6 +254,10 @@ export function computeTutorialGuideQuickStats(opts: {
     ];
   }
 
+  if (chartType === 'naturalVentilation') {
+    return [];
+  }
+
   if (chartType === 'utci') {
     const includeSun = live.includeSun ?? true;
     const includeWind = live.includeWind ?? true;
@@ -277,6 +293,28 @@ export function computeTutorialGuideQuickStats(opts: {
   }
 
   return [blockForColumn(filtered, 'dryBulbTemperature', unitSystem)];
+}
+
+/** Natural ventilation preset comparison + active-criteria breakdown for guided details panel. */
+export function computeTutorialNvQuickStats(opts: {
+  rows: EPWDataRow[] | undefined;
+  filter: GlobalFilterState;
+  unitSystem: UnitSystem;
+  live: TutorialLiveSnapshot;
+}): TutorialNvQuickStats | null {
+  const { rows, filter, unitSystem, live } = opts;
+  if (!rows?.length) return null;
+
+  const activeCriteria = live.nvCriteria ?? DEFAULT_NV_CRITERIA;
+  const bundle = computeNvFilteredStatsBundle(rows, filter, activeCriteria);
+  if (!bundle.totalHours) return null;
+
+  return {
+    totalHours: bundle.totalHours,
+    presetStats: bundle.presetStats,
+    activeBreakdown: bundle.activeBreakdown,
+    activeCriteriaSummary: formatNvCriteriaSummary(activeCriteria, unitSystem),
+  };
 }
 
 /** UTCI category breakdown + comfort table for guided Outdoor comfort panel. */

@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useId, useRef, useState } from 'react';
 import { ChartType } from '../App';
-import { Sun, BarChart3, ThermometerSun, Wind, ChevronDown } from 'lucide-react';
+import { Sun, BarChart3, ThermometerSun, Wind, ChevronDown, DoorOpen } from 'lucide-react';
 import { WindRoseGlyph } from './WindRoseGlyph';
 import {
   CHART_TOOLBAR_ICON_GLYPH_CLASS,
@@ -17,10 +17,20 @@ import {
   ONBOARDING_KEYS,
 } from '../lib/onboardingStorage';
 
+const CHART_TYPE_MENU_OPTIONS = [
+  'sunpath',
+  'explorer',
+  'utci',
+  'naturalVentilation',
+  'wind',
+  'windrose',
+] as const satisfies readonly ChartType[];
+
 const LABELS: Record<ChartType, string> = {
   sunpath: 'Sun Path',
   explorer: 'Data Explorer',
   utci: 'UTCI Comfort',
+  naturalVentilation: 'Natural Ventilation',
   wind: 'Wind Explorer',
   windrose: 'Wind Rose',
   empty: 'Empty',
@@ -29,6 +39,7 @@ const ICON: Record<ChartType, React.ComponentType<{ className?: string }>> = {
   sunpath: Sun,
   explorer: BarChart3,
   utci: ThermometerSun,
+  naturalVentilation: DoorOpen,
   wind: Wind,
   windrose: WindRoseGlyph,
   empty: BarChart3,
@@ -177,7 +188,7 @@ export function ChartTypeMenu({
               dark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
             }`}
           >
-            {(['sunpath', 'explorer', 'utci', 'wind', 'windrose'] as const).map(t => {
+            {CHART_TYPE_MENU_OPTIONS.map(t => {
               const active = value === t;
               return (
                 <button
@@ -239,7 +250,7 @@ export function ChartTypeMenu({
             dark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
           }`}
         >
-          {(['sunpath', 'explorer', 'utci', 'wind', 'windrose'] as const).map(t => {
+          {CHART_TYPE_MENU_OPTIONS.map(t => {
             const active = value === t;
             return (
               <button

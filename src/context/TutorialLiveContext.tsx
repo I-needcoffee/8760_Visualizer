@@ -22,6 +22,12 @@ export interface TutorialLiveSnapshot {
   windRoseBins?: number;
   radiusVarId?: string;
   radiusVarName?: string;
+  /** Natural ventilation chart: active temp/RH criteria for guided quick numbers. */
+  nvCriteria?: {
+    tempMinC: number;
+    tempMaxC: number;
+    maxRhPct: number;
+  };
 }
 
 type Ctx = {

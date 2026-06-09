@@ -40,6 +40,12 @@ const FIXED_FRAMES: Record<Exclude<ExportFrameSize, 'viewport'>, { width: number
   fourThree1200: { width: 1600, height: 1200 },
 };
 
+/**
+ * All preset aspect exports render the dashboard at this logical size first, then
+ * letterbox into the selected frame so card positions stay identical across ratios.
+ */
+export const CANONICAL_EXPORT = { width: 1920, height: 1080 } as const;
+
 export function exportFrameLabel(frame: ExportFrameSize): string {
   return EXPORT_FRAME_OPTIONS.find(o => o.value === frame)?.label ?? 'Screen';
 }
@@ -53,6 +59,113 @@ function resolveTargetSize(frame: ExportFrameSize, element: HTMLElement): { widt
   };
 }
 
+function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Export image failed to load'));
+    img.src = dataUrl;
+  });
+}
+
+/** Uniform scale + center on white canvas — same dashboard layout, different frame. */
+async function letterboxDataUrl(
+  pngDataUrl: string,
+  srcW: number,
+  srcH: number,
+  dstW: number,
+  dstH: number,
+  format: ExportFormat
+): Promise<string> {
+  const img = await loadImage(pngDataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = dstW;
+  canvas.height = dstH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not available');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, dstW, dstH);
+  const scale = Math.min(dstW / srcW, dstH / srcH);
+  const drawW = srcW * scale;
+  const drawH = srcH * scale;
+  const x = (dstW - drawW) / 2;
+  const y = (dstH - drawH) / 2;
+  ctx.drawImage(img, x, y, drawW, drawH);
+  return format === 'jpeg' ? canvas.toDataURL('image/jpeg', 0.95) : canvas.toDataURL('image/png');
+}
+
+function waitForLayout(): Promise<void> {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.setTimeout(resolve, 120);
+      });
+    });
+  });
+}
+
+type SavedStyles = {
+  width: string;
+  height: string;
+  minWidth: string;
+  minHeight: string;
+  maxWidth: string;
+  maxHeight: string;
+  overflow: string;
+  flex: string;
+};
+
+function saveElementStyles(el: HTMLElement): SavedStyles {
+  return {
+    width: el.style.width,
+    height: el.style.height,
+    minWidth: el.style.minWidth,
+    minHeight: el.style.minHeight,
+    maxWidth: el.style.maxWidth,
+    maxHeight: el.style.maxHeight,
+    overflow: el.style.overflow,
+    flex: el.style.flex,
+  };
+}
+
+function restoreElementStyles(el: HTMLElement, saved: SavedStyles) {
+  el.style.width = saved.width;
+  el.style.height = saved.height;
+  el.style.minWidth = saved.minWidth;
+  el.style.minHeight = saved.minHeight;
+  el.style.maxWidth = saved.maxWidth;
+  el.style.maxHeight = saved.maxHeight;
+  el.style.overflow = saved.overflow;
+  el.style.flex = saved.flex;
+}
+
+async function captureCanonicalPng(element: HTMLElement): Promise<string> {
+  const saved = saveElementStyles(element);
+  element.style.width = `${CANONICAL_EXPORT.width}px`;
+  element.style.height = `${CANONICAL_EXPORT.height}px`;
+  element.style.minWidth = `${CANONICAL_EXPORT.width}px`;
+  element.style.minHeight = `${CANONICAL_EXPORT.height}px`;
+  element.style.maxWidth = `${CANONICAL_EXPORT.width}px`;
+  element.style.maxHeight = `${CANONICAL_EXPORT.height}px`;
+  element.style.flex = 'none';
+  element.style.overflow = 'hidden';
+
+  await waitForLayout();
+
+  try {
+    return await toPng(element, {
+      quality: 0.95,
+      backgroundColor: '#ffffff',
+      width: CANONICAL_EXPORT.width,
+      height: CANONICAL_EXPORT.height,
+      pixelRatio: 1,
+      cacheBust: true,
+    });
+  } finally {
+    restoreElementStyles(element, saved);
+  }
+}
+
 export async function exportDashboardArea(opts: {
   element: HTMLElement;
   frame: ExportFrameSize;
@@ -61,58 +174,65 @@ export async function exportDashboardArea(opts: {
 }): Promise<void> {
   const { element, frame, format, filenameBase } = opts;
   const target = resolveTargetSize(frame, element);
-  const contentW = element.scrollWidth;
-  const contentH = element.scrollHeight;
-  const scale = Math.min(target.width / contentW, target.height / contentH);
+  const safeName = filenameBase.replace(/[^\w\-]+/g, '_').slice(0, 80) || 'export';
 
-  const prevOverflow = element.style.overflow;
-  element.style.overflow = 'visible';
+  let dataUrl: string;
 
-  const captureOptions = {
-    quality: 0.95,
-    backgroundColor: '#ffffff',
-    width: target.width,
-    height: target.height,
-    pixelRatio: 1,
-    style: {
-      transform: `scale(${scale})`,
-      transformOrigin: 'top left',
-      width: `${contentW}px`,
-      height: `${contentH}px`,
-    },
-  };
-
-  try {
-    const safeName = filenameBase.replace(/[^\w\-]+/g, '_').slice(0, 80) || 'export';
-
-    if (format === 'jpeg') {
-      const dataUrl = await toJpeg(element, captureOptions);
-      const link = document.createElement('a');
-      link.download = `climate-dashboard-${safeName}.jpg`;
-      link.href = dataUrl;
-      link.click();
-      return;
+  if (frame === 'viewport') {
+    const contentW = element.scrollWidth;
+    const contentH = element.scrollHeight;
+    const scale = Math.min(target.width / contentW, target.height / contentH);
+    const prevOverflow = element.style.overflow;
+    element.style.overflow = 'visible';
+    try {
+      const captureOptions = {
+        quality: 0.95,
+        backgroundColor: '#ffffff',
+        width: target.width,
+        height: target.height,
+        pixelRatio: 1,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${contentW}px`,
+          height: `${contentH}px`,
+        },
+      };
+      dataUrl =
+        format === 'jpeg'
+          ? await toJpeg(element, captureOptions)
+          : await toPng(element, captureOptions);
+    } finally {
+      element.style.overflow = prevOverflow;
     }
-
-    const dataUrl = await toPng(element, captureOptions);
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Export image failed to load'));
-    });
-
-    const pdf = new jsPDF({
-      orientation: target.width > target.height ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [target.width, target.height],
-    });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, target.width, target.height);
-    const canvasUrl = 'https://climatecanvas.app';
-    const footerStripH = Math.min(64, Math.max(36, target.height * 0.07));
-    pdf.link(0, target.height - footerStripH, target.width, footerStripH, { url: canvasUrl });
-    pdf.save(`climate-dashboard-${safeName}.pdf`);
-  } finally {
-    element.style.overflow = prevOverflow;
+  } else {
+    const canonicalPng = await captureCanonicalPng(element);
+    dataUrl = await letterboxDataUrl(
+      canonicalPng,
+      CANONICAL_EXPORT.width,
+      CANONICAL_EXPORT.height,
+      target.width,
+      target.height,
+      format
+    );
   }
+
+  if (format === 'jpeg') {
+    const link = document.createElement('a');
+    link.download = `climate-dashboard-${safeName}.jpg`;
+    link.href = dataUrl;
+    link.click();
+    return;
+  }
+
+  const pdf = new jsPDF({
+    orientation: target.width > target.height ? 'landscape' : 'portrait',
+    unit: 'px',
+    format: [target.width, target.height],
+  });
+  pdf.addImage(dataUrl, 'PNG', 0, 0, target.width, target.height);
+  const canvasUrl = 'https://climatecanvas.app';
+  const footerStripH = Math.min(64, Math.max(36, target.height * 0.07));
+  pdf.link(0, target.height - footerStripH, target.width, footerStripH, { url: canvasUrl });
+  pdf.save(`climate-dashboard-${safeName}.pdf`);
 }

@@ -165,7 +165,15 @@ export function UtciCategoryLegendStrip({ theme }: { theme: 'light' | 'dark' }) 
   );
 }
 
-export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' }) {
+export function UtciComfortTimeLegendStrip({
+  theme,
+  highColor = OUTDOOR_COMFORT_GREEN_HEX,
+  leftColor,
+}: {
+  theme: 'light' | 'dark';
+  highColor?: string;
+  leftColor?: string;
+}) {
   const pad = 2.5 * LEGEND_STRIP_SCALE;
   const gap = 1.5 * LEGEND_STRIP_SCALE;
   const titlePx = Math.round(9.5 * LEGEND_STRIP_SCALE);
@@ -183,8 +191,8 @@ export function UtciComfortTimeLegendStrip({ theme }: { theme: 'light' | 'dark' 
     const L = 0.2126 * toLin(rgb.r) + 0.7152 * toLin(rgb.g) + 0.0722 * toLin(rgb.b);
     return L < 0.5 ? '#fff' : '#111827';
   };
-  const leftBg = theme === 'dark' ? '#1f2937' : '#ffffff';
-  const rightBg = OUTDOOR_COMFORT_GREEN_HEX;
+  const leftBg = leftColor ?? (theme === 'dark' ? '#1f2937' : '#ffffff');
+  const rightBg = highColor;
 
   return (
     <div
@@ -374,11 +382,11 @@ export function UtciExplorer({
     const title =
       kind === 'sun'
         ? active
-          ? 'Solar radiation included â€” click to turn off'
-          : 'Solar radiation excluded â€” click to turn on'
+          ? 'Solar radiation included \u2014 click to turn off'
+          : 'Solar radiation excluded \u2014 click to turn on'
         : active
-          ? 'Wind speed included â€” click to turn off'
-          : 'Wind excluded (0.5 m/s) â€” click to turn on';
+          ? 'Wind speed included \u2014 click to turn off'
+          : 'Wind excluded (0.5 m/s) \u2014 click to turn on';
     const toggle = () => {
       if (kind === 'sun') setIncludeSun(v => !v);
       else setIncludeWind(v => !v);
@@ -1278,7 +1286,7 @@ export function UtciExplorer({
                 lines={[
                   {
                     short: `Outdoor Comfort (${utciUnit})`,
-                    long: `Outdoor Comfort Â· UTCI (${utciUnit})`,
+                    long: `Outdoor Comfort \u00B7 UTCI (${utciUnit})`,
                   },
                 ]}
               />
@@ -1293,7 +1301,7 @@ export function UtciExplorer({
                     : 'border-orange-200 bg-orange-50 text-orange-900'
                 }`}
               >
-                Comparison Â· {paneCity ?? 'â€”'}
+                Comparison \u00B7 {paneCity ?? '\u2014'}
               </div>
               <div className={chartToolbarRevealClass}>
                 <div className="pt-1">
@@ -1354,7 +1362,7 @@ export function UtciExplorer({
                       : 'border-blue-200 bg-blue-50 text-blue-900'
                   }`}
                 >
-                  Baseline Â· {paneCity}
+                  Baseline \u00B7 {paneCity}
                 </div>
               )}
               <div className={`${CHART_TOOLBAR_ROW_CLASS} w-full`}>
@@ -1372,9 +1380,9 @@ export function UtciExplorer({
                   <span
                     id={tutorialChromeAnchors ? 'tutorial-card-data-control' : undefined}
                     className={chartToolbarTitleClass(theme)}
-                    title={`Outdoor Comfort Â· ${utciLegendTitle}`}
+                    title={`Outdoor Comfort \u00B7 ${utciLegendTitle}`}
                   >
-                    Outdoor Comfort Â· {utciLegendTitle}
+                    Outdoor Comfort \u00B7 {utciLegendTitle}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">

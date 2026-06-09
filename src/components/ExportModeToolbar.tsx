@@ -57,6 +57,7 @@ export function ExportModeToolbar({
     <div
       role="group"
       aria-label="Export"
+      data-export-ui
       className={`flex shrink-0 items-center gap-1 rounded-full border p-1 ${outerShell}`}
     >
       <div

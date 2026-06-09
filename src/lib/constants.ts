@@ -11,6 +11,9 @@ export const CARTO_LIGHT_ALL_WATER_HEX = '#d4dadc';
 export const OUTDOOR_COMFORT_GREEN_HEX = '#37B91A';
 export const OUTDOOR_COMFORT_GREEN_RGB = { r: 55, g: 185, b: 26 } as const;
 
+/** Calm sky blue for natural-ventilation suitable-hours encoding (distinct from UTCI green). */
+export const NATURAL_VENTILATION_SUITABLE_BLUE_HEX = '#6BAED6';
+
 /**
  * Temperature heatmap palette from EPW tooling (`temperature_js.html` Plotly colorscale /
  * annotation colors). Blue → teal → green → yellow → orange (cool → warm).

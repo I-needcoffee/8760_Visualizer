@@ -10,6 +10,7 @@ import { DataExplorer } from './components/DataExplorer';
 import { WindExplorer } from './components/WindExplorer';
 import { WindRose } from './components/WindRose';
 import { UtciExplorer } from './components/UtciExplorer';
+import { NaturalVentilationExplorer } from './components/NaturalVentilationExplorer';
 import { Grid4x2ComfortExportOutline } from './components/Grid4x2ComfortExportOutline';
 import { Grid4x2StatsColumn } from './components/QuickStatsSidebar';
 import { SiteFooter, type SiteFooterExportCaption } from './components/SiteFooter';
@@ -137,7 +138,7 @@ function LayoutIconTutorial({ className }: { className?: string }) {
   );
 }
 
-export type ChartType = 'sunpath' | 'explorer' | 'wind' | 'windrose' | 'utci' | 'empty';
+export type ChartType = 'sunpath' | 'explorer' | 'wind' | 'windrose' | 'utci' | 'naturalVentilation' | 'empty';
 export type LayoutMode = 'hero-left' | 'grid-4x2' | 'focus-deep' | 'tutorial' | 'stacked';
 
 function LayoutIconStacked({ className }: { className?: string }) {
@@ -881,6 +882,22 @@ export default function App() {
             pairSuppressFooterLegend={pairSuppressFooterLegend}
           />
         );
+      case 'naturalVentilation':
+        return (
+          <NaturalVentilationExplorer
+            data={fileData.data}
+            onRemove={onRemoveHandler}
+            onChangeType={onChangeTypeHandler}
+            filter={globalFilter}
+            heatmapCellStatistic={heatmapCellStatistic}
+            barChartFillMode={barChartFillMode}
+            unitSystem={unitSystem}
+            heatmapTextColor={heatmapTextColor}
+            theme={theme}
+            exportMode={exportMode}
+            tutorialChromeAnchors={tutorialChromeAnchors}
+          />
+        );
       case 'empty':
         return null;
       default:
@@ -1288,6 +1305,7 @@ export default function App() {
               <button
                 id="tutorial-nav-export"
                 type="button"
+                data-export-ui
                 onClick={() => setExportMode(true)}
                 className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border p-0 shadow-hard-sm transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.97] sm:h-10 sm:w-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
                 title="Export layout"
