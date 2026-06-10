@@ -28,7 +28,7 @@ import {
 import { ExportHeaderCaption } from './ExportHeaderCaption';
 import { CardModal } from './CardModal';
 import { NATURAL_VENTILATION_SUITABLE_BLUE_HEX, TEMPERATURE_COMFORT_GRADIENT_COLORS } from '../lib/constants';
-import { dryBulbExtentFromRows } from '../lib/dryBulbExtent';
+import { EPW_COLUMNS } from '../lib/epwParser';
 import {
   createExplorerChartValueGradient,
   explorerChartValueGradientId,
@@ -179,7 +179,24 @@ export function NaturalVentilationExplorer({
     });
   }, [data, criteria]);
 
-  const { tempMinC, tempMaxC } = useMemo(() => dryBulbExtentFromRows(nvData), [nvData]);
+  const dryBulbColumn = EPW_COLUMNS.find(c => c.id === 'dryBulbTemperature')!;
+  const tempGradientMinC = dryBulbColumn.fixedMin ?? 5;
+  const tempGradientMaxC = dryBulbColumn.fixedMax ?? 35;
+
+  const { tempMinC, tempMaxC } = useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const row of nvData) {
+      const t = row.tempC;
+      if (typeof t !== 'number' || Number.isNaN(t)) continue;
+      lo = Math.min(lo, t);
+      hi = Math.max(hi, t);
+    }
+    if (!(lo <= hi) || !Number.isFinite(lo)) {
+      return { tempMinC: tempGradientMinC, tempMaxC: tempGradientMaxC };
+    }
+    return { tempMinC: lo, tempMaxC: hi };
+  }, [nvData, tempGradientMinC, tempGradientMaxC]);
 
   const convertTemp = (c: number) => cToDisplay(c);
 
@@ -266,7 +283,7 @@ export function NaturalVentilationExplorer({
     } else {
       colorScale = d3
         .scaleSequential<string>()
-        .domain([convertTemp(tempMinC), convertTemp(tempMaxC)])
+        .domain([convertTemp(tempGradientMinC), convertTemp(tempGradientMaxC)])
         .interpolator(d3.interpolateRgbBasis([...TEMPERATURE_COMFORT_GRADIENT_COLORS]));
     }
 
@@ -634,8 +651,8 @@ export function NaturalVentilationExplorer({
           : createExplorerChartValueGradient(
               svgDefs,
               v => getFillColor(v, 0),
-              convertTemp(tempMinC),
-              convertTemp(tempMaxC),
+              convertTemp(tempGradientMinC),
+              convertTemp(tempGradientMaxC),
               v => yScaleBar(v),
               { id: barGradientSvgId }
             )

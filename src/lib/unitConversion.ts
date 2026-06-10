@@ -35,15 +35,15 @@ export function convertUnit(unit: string, unitSystem: LegendUnitSystem): string 
 }
 
 /**
- * Heatmap legend span: use fixedMin/Max for contrast when data fits,
- * but always include the file's actual min/max so cold/hot extremes are not clipped.
+ * Heatmap legend span: when fixedMin/Max are set on the variable definition, use them
+ * exclusively so palettes stay comparable across locations (e.g. dry bulb 5–35 °C).
+ * Otherwise fall back to the file's computed min/max.
  */
 export function effectiveVariableLegendBounds(def: EPWVariable): { lo: number; hi: number } {
-  let lo = def.fixedMin ?? def.min;
-  let hi = def.fixedMax ?? def.max;
-  if (def.fixedMin !== undefined && Number.isFinite(def.min)) lo = Math.min(lo, def.min);
-  if (def.fixedMax !== undefined && Number.isFinite(def.max)) hi = Math.max(hi, def.max);
-  return { lo, hi };
+  return {
+    lo: def.fixedMin ?? def.min,
+    hi: def.fixedMax ?? def.max,
+  };
 }
 
 export function variableLegendDomainValues(
