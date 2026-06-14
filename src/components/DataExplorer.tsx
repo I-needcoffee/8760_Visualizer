@@ -130,6 +130,10 @@ interface DataExplorerProps {
   overlayValueFormatter?: (value: number) => string;
   /** Simplified header for standalone 8760 upload card. */
   upload8760Mode?: boolean;
+  /** Optional legend / heatmap domain override (display units). */
+  legendDomainOverride?: { min: number | null; max: number | null };
+  /** EPW column id used for temperature isolation filter (default dry bulb). */
+  temperatureFilterField?: string;
 }
 
 export function DataExplorer({ 
@@ -152,6 +156,8 @@ export function DataExplorer({
   suppressSettingsButton,
   overlayValueFormatter,
   upload8760Mode,
+  legendDomainOverride,
+  temperatureFilterField = 'dryBulbTemperature',
 }: DataExplorerProps) {
   const barGradientSvgId = explorerChartValueGradientId(useId());
   const svgRef = useRef<SVGSVGElement>(null);
@@ -282,9 +288,27 @@ export function DataExplorer({
       const half = bound > 0 ? bound : 1;
       min = -half;
       max = half;
+    } else {
+      if (legendDomainOverride?.min != null && Number.isFinite(legendDomainOverride.min)) {
+        min = legendDomainOverride.min;
+      }
+      if (legendDomainOverride?.max != null && Number.isFinite(legendDomainOverride.max)) {
+        max = legendDomainOverride.max;
+      }
+      if (min >= max) max = min + 1;
     }
     return { colorVarDef: def, cMin: min, cMax: max, cUnit: unit };
-  }, [variables, colorVar, showDifference, compareData, data, unitSystem, aggregation, convertValue]);
+  }, [
+    variables,
+    colorVar,
+    showDifference,
+    compareData,
+    data,
+    unitSystem,
+    aggregation,
+    convertValue,
+    legendDomainOverride,
+  ]);
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
 
@@ -371,7 +395,7 @@ export function DataExplorer({
         Array.from(hourGroups).forEach(([hour, values]) => {
           const startDay = values[0].dayOfYear;
           const endDay = values[values.length - 1].dayOfYear + 1;
-          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter));
+          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter, temperatureFilterField));
           
           let val: number;
           if (selectedRows.length === 0) {
@@ -416,7 +440,7 @@ export function DataExplorer({
           const endDay = Math.min((week + 1) * 7 + 1, 366);
           // Approximate month for week
           const month = values[0].month;
-          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter));
+          const selectedRows = values.filter(d => rowPassesGlobalFilters(d, filter, temperatureFilterField));
 
           let val: number;
           if (selectedRows.length === 0) {
@@ -454,7 +478,7 @@ export function DataExplorer({
     } else {
       // day or hour
       heatmapData = data.map((d, i) => {
-        const pass = rowPassesGlobalFilters(d, filter);
+        const pass = rowPassesGlobalFilters(d, filter, temperatureFilterField);
         let val: number;
         if (!pass) {
           val = NaN;
@@ -626,7 +650,7 @@ export function DataExplorer({
       .style("font-size", `${heatmapHourAxisPx}px`)
       .text(h => formatHourRow(h));
 
-    const isSelected = (d: EPWDataRow) => rowPassesGlobalFilters(d, filter);
+    const isSelected = (d: EPWDataRow) => rowPassesGlobalFilters(d, filter, temperatureFilterField);
 
     let aggregatedData: {
       x0: number;
@@ -1104,7 +1128,7 @@ export function DataExplorer({
 
   // Calculate local stats for filtered data
   const stats = (() => {
-    const filteredData = data.filter(d => rowPassesGlobalFilters(d, filter));
+    const filteredData = data.filter(d => rowPassesGlobalFilters(d, filter, temperatureFilterField));
 
     if (showDifference && compareData) {
       const diffs = filteredData.map(d => {
@@ -1540,7 +1564,7 @@ export function DataExplorer({
             ref={svgRef}
             className="block h-full w-full max-h-full max-w-full"
             preserveAspectRatio={
-              upload8760Mode || pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'
+              pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'
             }
           />
         </div>

@@ -83,6 +83,25 @@ export const GRADIENTS = [
   { id: 'magma', name: 'Magma', colors: ['#000004', '#3B0F70', '#8C2981', '#DE4968', '#FE9F6D', '#FCFDBF'] },
   { id: 'viridis', name: 'Viridis', colors: ['#440154', '#414487', '#2A788E', '#22A884', '#7AD151', '#FDE725'] },
   { id: 'coolwarm', name: 'Cool to Warm', colors: ['#3B4CC0', '#8DB0FE', '#E2E2E2', '#F49A7B', '#B40426'] },
+  /**
+   * UTCI stress categories (cold → comfort → heat) — same stops as {@link UTCI_COLORS} / UtciExplorer category mode.
+   */
+  {
+    id: 'utci-categories',
+    name: 'UTCI stress categories',
+    colors: [
+      '#000033',
+      '#000099',
+      '#0000ff',
+      '#0066ff',
+      '#00ccff',
+      OUTDOOR_COMFORT_GREEN_HEX,
+      '#ffcc00',
+      '#ff6600',
+      '#ff0000',
+      '#800000',
+    ],
+  },
 ];
 
 export const VARIABLES = [

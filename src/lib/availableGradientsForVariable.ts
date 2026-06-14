@@ -13,6 +13,7 @@ const BUILTIN_IDS = new Set([
   'magma',
   'viridis',
   'coolwarm',
+  'utci-categories',
 ]);
 
 function customGradients(gradients: GradientDef[]) {
@@ -60,7 +61,7 @@ export function gradientsForVariable(
   if (cat === 'Uploaded') {
     return [
       ...allowIds(
-        ['temperature-comfort', 'humidity-spectrum', 'wind-speed-warm', 'solar-yellow-orange', 'cloud-cover-gray', 'coolwarm', 'viridis', 'turbo', 'magma'],
+        ['temperature-comfort', 'humidity-spectrum', 'wind-speed-warm', 'solar-yellow-orange', 'cloud-cover-gray', 'coolwarm', 'viridis', 'turbo', 'magma', 'utci-categories'],
         gradients
       ),
       ...customGradients(gradients),

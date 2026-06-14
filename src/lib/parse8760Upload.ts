@@ -261,6 +261,9 @@ export async function parse8760UploadFile(file: File): Promise<Parsed8760Upload>
 /** Detect likely temperature data for default gradient selection. */
 export function inferDefaultGradientId(label: string, unit: string, min: number, max: number): string {
   const hay = `${label} ${unit}`.toLowerCase();
+  if (hay.includes('utci')) {
+    return 'utci-categories';
+  }
   if (hay.includes('temp') || hay.includes('utci') || unit === UNIT_C || (min > -60 && max < 60)) {
     return 'temperature-comfort';
   }

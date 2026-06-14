@@ -5,8 +5,10 @@ import { Upload8760Sidebar } from './components/Upload8760Sidebar';
 import { ExportModeToolbar } from './components/ExportModeToolbar';
 import type { CompareExplorerSharedControls } from './App';
 import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
-import { DEFAULT_GLOBAL_FILTER, type HeatmapCellStatistic } from './lib/globalFilter';
+import { DEFAULT_GLOBAL_FILTER, type GlobalFilterState, type HeatmapCellStatistic } from './lib/globalFilter';
 import type { GradientDef } from './components/InteractiveLegend';
+import { valueExtentFromRows } from './lib/dryBulbExtent';
+import { convertValue, effectiveVariableLegendBounds } from './lib/unitConversion';
 import {
   inferDefaultGradientId,
   UPLOAD_VALUE_ID,
@@ -28,7 +30,9 @@ export type UnitSystem = 'metric' | 'imperial';
 
 /** Matches Climate Canvas Details layout: chart 2fr, companion column 3fr. */
 const WORKSPACE_GRID =
-  'grid h-full min-h-0 w-full max-w-[1440px] grid-cols-1 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] gap-2 overflow-hidden md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:grid-rows-1 md:gap-3';
+  'grid min-h-0 w-full flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-4 md:overflow-visible';
+
+export type LegendDomainOverride = { min: number | null; max: number | null };
 
 export function Upload8760App() {
   const [parsed, setParsed] = useState<Parsed8760Upload | null>(null);
@@ -36,6 +40,11 @@ export function Upload8760App() {
   const [gradientId, setGradientId] = useState('temperature-comfort');
   const [cellFormat, setCellFormat] = useState<CellFormatOptions>(DEFAULT_CELL_FORMAT);
   const [heatmapCellStatistic, setHeatmapCellStatistic] = useState<HeatmapCellStatistic>('mean');
+  const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>(DEFAULT_GLOBAL_FILTER);
+  const [legendDomainOverride, setLegendDomainOverride] = useState<LegendDomainOverride>({
+    min: null,
+    max: null,
+  });
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [heatmapTextColor] = useState('#374151');
   const [exportMode, setExportMode] = useState(false);
@@ -61,7 +70,31 @@ export function Upload8760App() {
 
   useEffect(() => {
     setColorVar(defaultVariableId);
+    setLegendDomainOverride({ min: null, max: null });
   }, [defaultVariableId]);
+
+  useEffect(() => {
+    if (!parsed || !activeVariable) return;
+    const extent = valueExtentFromRows(parsed.data, activeVariable.id);
+    setGlobalFilter(f => ({
+      ...f,
+      temperatureMode: 'off',
+      temperatureLoC: extent.min,
+      temperatureHiC: extent.max,
+    }));
+  }, [parsed, activeVariable?.id]);
+
+  const temperatureFilterField = activeVariable?.id ?? UPLOAD_VALUE_ID;
+
+  const defaultLegendBounds = useMemo(() => {
+    if (!activeVariable) return { min: null as number | null, max: null as number | null, unit: '' };
+    const bounds = effectiveVariableLegendBounds(activeVariable);
+    return {
+      min: convertValue(bounds.lo, activeVariable.unit, 'metric'),
+      max: convertValue(bounds.hi, activeVariable.unit, 'metric'),
+      unit: activeVariable.unit,
+    };
+  }, [activeVariable]);
 
   const handleParsed = useCallback((data: Parsed8760Upload) => {
     setParsed(data);
@@ -221,12 +254,18 @@ export function Upload8760App() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 justify-start overflow-hidden px-2 py-1.5 sm:px-4 sm:py-2">
-        <div className={exportActive ? 'h-full min-h-0 w-full max-w-[720px]' : WORKSPACE_GRID}>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 py-1.5 sm:px-4 sm:py-2">
+        <div
+          className={
+            exportActive
+              ? 'mx-auto h-full min-h-0 w-full max-w-[720px]'
+              : `flex min-h-0 w-full flex-1 flex-col md:min-h-0 md:overflow-visible ${WORKSPACE_GRID}`
+          }
+        >
           <div
             ref={exportAreaRef}
             id="chart-export-area"
-            className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border shadow-hard-lg ${cardShell}`}
+            className={`flex h-full min-h-[46vh] w-full flex-col overflow-visible md:min-h-0 rounded-xl border shadow-hard-lg ${cardShell}`}
           >
             {parsed ? (
               <DataExplorer
@@ -239,7 +278,7 @@ export function Upload8760App() {
                     ? gradientsForVariable(activeVariable.id, parsed.variables, allGradients)
                     : allGradients
                 }
-                filter={DEFAULT_GLOBAL_FILTER}
+                filter={globalFilter}
                 heatmapCellStatistic={heatmapCellStatistic}
                 barChartFillMode="gradient"
                 unitSystem="metric"
@@ -251,6 +290,8 @@ export function Upload8760App() {
                 overlayValueFormatter={overlayValueFormatter}
                 upload8760Mode
                 exportMode={exportActive}
+                legendDomainOverride={legendDomainOverride}
+                temperatureFilterField={temperatureFilterField}
               />
             ) : (
               <EmptyChartPlaceholder theme={theme} />
@@ -269,6 +310,14 @@ export function Upload8760App() {
               onAddCustomGradient={handleAddCustomGradient}
               cellFormat={cellFormat}
               onCellFormatChange={setCellFormat}
+              globalFilter={globalFilter}
+              onGlobalFilterChange={setGlobalFilter}
+              filterValueFieldId={temperatureFilterField}
+              legendDomainOverride={legendDomainOverride}
+              onLegendDomainOverrideChange={setLegendDomainOverride}
+              defaultLegendMin={defaultLegendBounds.min}
+              defaultLegendMax={defaultLegendBounds.max}
+              legendUnit={defaultLegendBounds.unit}
             />
           )}
         </div>

@@ -1,13 +1,14 @@
 import { useCallback, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { ClipboardPaste, FileUp, Plus, X } from 'lucide-react';
-import Slider from 'rc-slider';
-import 'rc-slider/assets/index.css';
 import type { GradientDef } from './InteractiveLegend';
+import { Upload8760GlobalFilters } from './Upload8760GlobalFilters';
 import {
   cellFormatPreview,
   type CellFormatOptions,
   type CellFormatSuffix,
 } from '../lib/cellFormatPresets';
+import type { GlobalFilterState } from '../lib/globalFilter';
+import { valueExtentFromRows } from '../lib/dryBulbExtent';
 import {
   Parse8760Error,
   parse8760Upload,
@@ -22,6 +23,7 @@ const UPLOAD_GRADIENT_PRESETS = [
   { id: 'solar-yellow-orange', label: 'Solar' },
   { id: 'cloud-cover-gray', label: 'Cloud' },
   { id: 'coolwarm', label: 'Cool / warm' },
+  { id: 'utci-categories', label: 'UTCI' },
   { id: 'viridis', label: 'Viridis' },
   { id: 'turbo', label: 'Turbo' },
 ] as const;
@@ -37,6 +39,14 @@ interface Upload8760SidebarProps {
   onAddCustomGradient: (gradient: GradientDef) => void;
   cellFormat: CellFormatOptions;
   onCellFormatChange: (format: CellFormatOptions) => void;
+  globalFilter: GlobalFilterState;
+  onGlobalFilterChange: (filter: GlobalFilterState) => void;
+  filterValueFieldId: string;
+  legendDomainOverride: { min: number | null; max: number | null };
+  onLegendDomainOverrideChange: (override: { min: number | null; max: number | null }) => void;
+  defaultLegendMin: number | null;
+  defaultLegendMax: number | null;
+  legendUnit?: string;
 }
 
 function pillTrackClass(dark: boolean) {
@@ -104,6 +114,14 @@ export function Upload8760Sidebar({
   onAddCustomGradient,
   cellFormat,
   onCellFormatChange,
+  globalFilter,
+  onGlobalFilterChange,
+  filterValueFieldId,
+  legendDomainOverride,
+  onLegendDomainOverrideChange,
+  defaultLegendMin,
+  defaultLegendMax,
+  legendUnit,
 }: Upload8760SidebarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pasteText, setPasteText] = useState('');
@@ -195,11 +213,20 @@ export function Upload8760Sidebar({
     { id: 'degree', label: '°' },
   ];
 
+  const valueExtent = parsed
+    ? valueExtentFromRows(parsed.data, filterValueFieldId, { min: 0, max: 100 })
+    : { min: 0, max: 100 };
+
+  const domainOverrideActive =
+    legendDomainOverride.min != null || legendDomainOverride.max != null;
+
   return (
     <aside
-      className={`grid h-full min-h-0 w-full grid-rows-[minmax(0,1.2fr)_auto_minmax(0,0.75fr)] overflow-hidden rounded-xl border shadow-hard-lg ${
-        dark ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white'
-      }`}
+      className={`grid h-full min-h-0 w-full overflow-hidden rounded-xl border shadow-hard-lg ${
+        parsed
+          ? 'grid-rows-[minmax(0,1fr)_auto_auto_minmax(0,0.7fr)]'
+          : 'grid-rows-[minmax(0,1.2fr)_auto_minmax(0,0.75fr)]'
+      } ${dark ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white'}`}
     >
       <Section
         title="Data input"
@@ -377,55 +404,113 @@ export function Upload8760Sidebar({
             </button>
           </div>
         )}
+        <div className={`shrink-0 space-y-1 rounded-lg border p-1.5 ${dark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50'}`}>
+          <div className="flex items-center justify-between gap-1">
+            <span className={`text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
+              Scale min / max
+            </span>
+            {domainOverrideActive && (
+              <button
+                type="button"
+                onClick={() => onLegendDomainOverrideChange({ min: null, max: null })}
+                className={`text-[8px] font-semibold underline-offset-2 hover:underline ${labelClass}`}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          {(defaultLegendMin != null || defaultLegendMax != null) && (
+            <p className={`text-[8px] leading-snug ${labelClass}`}>
+              Data range{' '}
+              {defaultLegendMin != null ? defaultLegendMin.toFixed(2) : '—'}–
+              {defaultLegendMax != null ? defaultLegendMax.toFixed(2) : '—'}
+              {legendUnit ? ` ${legendUnit}` : ''}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="flex flex-col gap-0.5">
+              <span className={`text-[8px] font-medium ${labelClass}`}>Min</span>
+              <input
+                type="number"
+                step="any"
+                placeholder={defaultLegendMin != null ? String(defaultLegendMin) : 'Min'}
+                value={legendDomainOverride.min ?? ''}
+                onChange={e => {
+                  const raw = e.target.value.trim();
+                  onLegendDomainOverrideChange({
+                    ...legendDomainOverride,
+                    min: raw === '' ? null : Number(raw),
+                  });
+                }}
+                className={`w-full rounded-lg border px-1.5 py-0.5 font-mono text-[10px] outline-none ${inputClass}`}
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className={`text-[8px] font-medium ${labelClass}`}>Max</span>
+              <input
+                type="number"
+                step="any"
+                placeholder={defaultLegendMax != null ? String(defaultLegendMax) : 'Max'}
+                value={legendDomainOverride.max ?? ''}
+                onChange={e => {
+                  const raw = e.target.value.trim();
+                  onLegendDomainOverrideChange({
+                    ...legendDomainOverride,
+                    max: raw === '' ? null : Number(raw),
+                  });
+                }}
+                className={`w-full rounded-lg border px-1.5 py-0.5 font-mono text-[10px] outline-none ${inputClass}`}
+              />
+            </label>
+          </div>
+        </div>
       </Section>
 
+      {parsed && (
+        <Section
+          title="Time & value filters"
+          hint="Isolate months, hours, or value range."
+          dark={dark}
+          className={dark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
+        >
+          <Upload8760GlobalFilters
+            filter={globalFilter}
+            onChange={onGlobalFilterChange}
+            theme={theme}
+            valueExtent={valueExtent}
+            valueUnit={legendUnit}
+            valueLabel={parsed.valueColumnLabel ?? 'Value'}
+          />
+        </Section>
+      )}
+
       <Section title="Cell labels" hint={`Preview ${cellFormatPreview(cellFormat)}`} dark={dark}>
-        <div className={`shrink-0 ${pillTrack} px-3 py-2`}>
-          <span className={`mb-1.5 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
-            Decimal
+        <div className="shrink-0">
+          <span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
+            Decimals
           </span>
-          <div className="mb-1 flex justify-between px-0.5">
-            {[0, 1, 2, 3].map(n => (
-              <span
-                key={n}
-                className={`w-4 text-center text-[9px] font-medium tabular-nums ${
-                  cellFormat.decimalPlaces === n
-                    ? dark
-                      ? 'font-bold text-gray-100'
-                      : 'font-bold text-gray-900'
-                    : labelClass
-                }`}
-              >
-                {n}
-              </span>
-            ))}
-          </div>
-          <div className="px-0.5">
-            <Slider
-              min={0}
-              max={3}
-              step={1}
-              value={cellFormat.decimalPlaces}
-              onChange={v => {
-                const decimalPlaces = Array.isArray(v) ? v[0] : v;
-                onCellFormatChange({ ...cellFormat, decimalPlaces });
-              }}
-              dotStyle={{ display: 'none' }}
-              handleStyle={{
-                borderColor: dark ? '#d1d5db' : '#374151',
-                backgroundColor: '#ffffff',
-                width: 11,
-                height: 11,
-                marginTop: -4,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-              }}
-              trackStyle={{ backgroundColor: dark ? '#9ca3af' : '#374151', height: 3, borderRadius: 9999 }}
-              railStyle={{ backgroundColor: dark ? '#374151' : '#e5e7eb', height: 3, borderRadius: 9999 }}
-            />
+          <div className={`grid grid-cols-4 gap-1 ${pillTrack}`}>
+            {[0, 1, 2, 3].map(n => {
+              const active = cellFormat.decimalPlaces === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onCellFormatChange({ ...cellFormat, decimalPlaces: n })}
+                  className={`py-1.5 text-[11px] font-semibold tabular-nums ${pillSegClass(dark, active)}`}
+                >
+                  {n}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className={`grid shrink-0 grid-cols-3 gap-1 ${pillTrack}`}>
+        <div className="shrink-0">
+          <span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
+            Units
+          </span>
+          <div className={`grid shrink-0 grid-cols-3 gap-1 ${pillTrack}`}>
           {suffixOptions.map(opt => {
             const active = cellFormat.suffix === opt.id;
             return (
@@ -445,6 +530,7 @@ export function Upload8760Sidebar({
               </button>
             );
           })}
+          </div>
         </div>
 
         {cellFormat.suffix === 'percent' && (

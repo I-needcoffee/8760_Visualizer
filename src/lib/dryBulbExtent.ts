@@ -30,3 +30,21 @@ export function dryBulbExtentFromFiles(files: ParsedEPW[]): { minC: number; maxC
   }
   return { minC: lo, maxC: hi };
 }
+
+/** Min/max for any numeric EPW / upload column. */
+export function valueExtentFromRows(
+  rows: EPWDataRow[],
+  fieldId: string,
+  fallback: { min: number; max: number } = { min: 0, max: 100 }
+): { min: number; max: number } {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const r of rows) {
+    const v = r[fieldId] as number | undefined;
+    if (typeof v !== 'number' || Number.isNaN(v)) continue;
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
+  }
+  if (!(lo <= hi) || !Number.isFinite(lo)) return fallback;
+  return { min: lo, max: hi };
+}

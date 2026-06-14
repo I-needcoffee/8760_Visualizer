@@ -57,13 +57,20 @@ export function dryBulbCPassesGlobalTemperature(t: number | null | undefined, f:
   }
 }
 
-/** EPW stores dry-bulb in °C. */
-export function rowPassesDryBulbTemperature(row: EPWDataRow, f: GlobalFilterState): boolean {
-  return dryBulbCPassesGlobalTemperature(row.dryBulbTemperature as number | null | undefined, f);
+export function rowPassesDryBulbTemperature(
+  row: EPWDataRow,
+  f: GlobalFilterState,
+  fieldId = 'dryBulbTemperature'
+): boolean {
+  return dryBulbCPassesGlobalTemperature(row[fieldId] as number | null | undefined, f);
 }
 
-export function rowPassesGlobalFilters(row: EPWDataRow, f: GlobalFilterState): boolean {
-  return rowsMatchSeasonHours(row, f) && rowPassesDryBulbTemperature(row, f);
+export function rowPassesGlobalFilters(
+  row: EPWDataRow,
+  f: GlobalFilterState,
+  temperatureFieldId = 'dryBulbTemperature'
+): boolean {
+  return rowsMatchSeasonHours(row, f) && rowPassesDryBulbTemperature(row, f, temperatureFieldId);
 }
 
 /** Heatmap cell content: statistic within each aggregation bin (after global filters via row lists). */
