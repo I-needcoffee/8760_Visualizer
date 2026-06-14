@@ -7,6 +7,7 @@ const BUILTIN_IDS = new Set([
   'solar-yellow-orange',
   'direct-normal-radiation',
   'wind-intensity-blue',
+  'wind-speed-warm',
   'cloud-cover-gray',
   'turbo',
   'magma',
@@ -55,6 +56,15 @@ export function gradientsForVariable(
   }
   if (cat === 'Wind') {
     return [...allowIds(['wind-intensity-blue'], gradients), ...customGradients(gradients)];
+  }
+  if (cat === 'Uploaded') {
+    return [
+      ...allowIds(
+        ['temperature-comfort', 'humidity-spectrum', 'wind-speed-warm', 'solar-yellow-orange', 'cloud-cover-gray', 'coolwarm', 'viridis', 'turbo', 'magma'],
+        gradients
+      ),
+      ...customGradients(gradients),
+    ];
   }
 
   // Fallback: just show customs + a safe default.

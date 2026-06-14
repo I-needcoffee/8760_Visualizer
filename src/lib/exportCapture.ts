@@ -171,8 +171,10 @@ export async function exportDashboardArea(opts: {
   frame: ExportFrameSize;
   format: ExportFormat;
   filenameBase: string;
+  /** Download filename prefix (default `climate-dashboard`). */
+  filenamePrefix?: string;
 }): Promise<void> {
-  const { element, frame, format, filenameBase } = opts;
+  const { element, frame, format, filenameBase, filenamePrefix = 'climate-dashboard' } = opts;
   const target = resolveTargetSize(frame, element);
   const safeName = filenameBase.replace(/[^\w\-]+/g, '_').slice(0, 80) || 'export';
 
@@ -219,7 +221,7 @@ export async function exportDashboardArea(opts: {
 
   if (format === 'jpeg') {
     const link = document.createElement('a');
-    link.download = `climate-dashboard-${safeName}.jpg`;
+    link.download = `${filenamePrefix}-${safeName}.jpg`;
     link.href = dataUrl;
     link.click();
     return;
@@ -234,5 +236,5 @@ export async function exportDashboardArea(opts: {
   const canvasUrl = 'https://climatecanvas.app';
   const footerStripH = Math.min(64, Math.max(36, target.height * 0.07));
   pdf.link(0, target.height - footerStripH, target.width, footerStripH, { url: canvasUrl });
-  pdf.save(`climate-dashboard-${safeName}.pdf`);
+  pdf.save(`${filenamePrefix}-${safeName}.pdf`);
 }

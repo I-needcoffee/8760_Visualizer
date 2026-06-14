@@ -1,5 +1,5 @@
 {
-  "name": "climate-compare",
+  "name": "8760-visualizer",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -27,7 +27,8 @@
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
     "suncalc": "^1.9.0",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5"
   },
   "overrides": {
     "node-domexception": "1.0.0"

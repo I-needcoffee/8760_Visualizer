@@ -124,6 +124,12 @@ interface DataExplorerProps {
   tutorialChromeAnchors?: boolean;
   /** Compare pair row: parent renders a single shared legend below both panes. */
   pairSuppressFooterLegend?: boolean;
+  /** 8760 upload tool: hide in-card settings (controlled from sidebar). */
+  suppressSettingsButton?: boolean;
+  /** Custom formatter for month/week heatmap cell overlay text. */
+  overlayValueFormatter?: (value: number) => string;
+  /** Simplified header for standalone 8760 upload card. */
+  upload8760Mode?: boolean;
 }
 
 export function DataExplorer({ 
@@ -143,6 +149,9 @@ export function DataExplorer({
   tutorialLegendDomId,
   tutorialChromeAnchors,
   pairSuppressFooterLegend,
+  suppressSettingsButton,
+  overlayValueFormatter,
+  upload8760Mode,
 }: DataExplorerProps) {
   const barGradientSvgId = explorerChartValueGradientId(useId());
   const svgRef = useRef<SVGSVGElement>(null);
@@ -307,6 +316,7 @@ export function DataExplorer({
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
     const svgDefs = upsertSvgDefs(svg);
+    const formatOverlay = overlayValueFormatter ?? ((v: number) => String(Math.round(v)));
 
     const g = svg
       .attr("viewBox", `0 0 ${width} ${height}`)
@@ -567,7 +577,7 @@ export function DataExplorer({
         })
         .text(d =>
           Number.isFinite(d.value) && explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width > overlayMinWidth
-            ? Math.round(d.value)
+            ? formatOverlay(d.value)
             : ""
         );
     }
@@ -1089,6 +1099,7 @@ export function DataExplorer({
     heatmapCellStatistic,
     barGradientSvgId,
     barChartFillMode,
+    overlayValueFormatter,
   ]);
 
   // Calculate local stats for filtered data
@@ -1151,6 +1162,44 @@ export function DataExplorer({
                 lines={[exportCaptionLinesWithUnit(colorVarDef.category, colorVarDef.name, cUnit)]}
               />
             </div>
+          ) : upload8760Mode ? (
+            <>
+              <div className={`${CHART_TOOLBAR_ROW_CLASS} w-full`}>
+                <div className={CHART_TOOLBAR_CONTROLS_CLASS}>
+                  {variables.length > 1 ? (
+                    <VariableChartSelect
+                      value={colorVar}
+                      onChange={setColorVar}
+                      selectedLabel={colorVarLabel}
+                      theme={theme}
+                      fillRow={false}
+                      toolbarTitle
+                    >
+                      {Object.entries(groupedVariables).map(([category, vars]) => (
+                        <optgroup key={category} label={category}>
+                          {vars.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {v.name} {v.unit ? `(${convertUnit(v.unit)})` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </VariableChartSelect>
+                  ) : (
+                    <span
+                      className={`truncate text-[11px] font-bold uppercase tracking-wide ${
+                        theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                      }`}
+                    >
+                      {colorVarLabel}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="pt-1">
+                <AggregationToolbar value={aggregation} onChange={setAggregation} theme={theme} />
+              </div>
+            </>
           ) : comparePane === 'secondary' ? (
             <>
               <div
@@ -1219,6 +1268,7 @@ export function DataExplorer({
                         >
                           Stats
                         </button>
+                        {!suppressSettingsButton && (
                         <button
                           type="button"
                           id={tutorialChromeAnchors ? 'tutorial-card-settings' : undefined}
@@ -1236,6 +1286,7 @@ export function DataExplorer({
                         >
                           <Settings2 className="w-3 h-3" />
                         </button>
+                        )}
                       </>
                     }
                   />
@@ -1340,6 +1391,7 @@ export function DataExplorer({
                         >
                           Stats
                         </button>
+                        {!suppressSettingsButton && (
                         <button
                           type="button"
                           id={tutorialChromeAnchors ? 'tutorial-card-settings' : undefined}
@@ -1357,6 +1409,7 @@ export function DataExplorer({
                         >
                           <Settings2 className="w-3 h-3" />
                         </button>
+                        )}
                       </>
                     }
                   />
@@ -1411,6 +1464,7 @@ export function DataExplorer({
       </CardModal>
 
       {/* Settings Modal */}
+      {!suppressSettingsButton && (
       <CardModal
         open={showSettingsModal}
         onClose={() => setShowSettings(false)}
@@ -1474,6 +1528,7 @@ export function DataExplorer({
           </div>
         </div>
       </CardModal>
+      )}
 
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden px-1 ${
