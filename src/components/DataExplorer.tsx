@@ -1539,7 +1539,9 @@ export function DataExplorer({
           <svg
             ref={svgRef}
             className="block h-full w-full max-h-full max-w-full"
-            preserveAspectRatio={pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'}
+            preserveAspectRatio={
+              upload8760Mode || pairSuppressFooterLegend ? 'xMidYMax meet' : 'xMidYMid meet'
+            }
           />
         </div>
         {stackedComparison && compareData && (

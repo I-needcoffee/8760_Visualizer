@@ -26,6 +26,10 @@ import {
 
 export type UnitSystem = 'metric' | 'imperial';
 
+/** Matches Climate Canvas Details layout: chart 2fr, companion column 3fr. */
+const WORKSPACE_GRID =
+  'grid h-full min-h-0 w-full max-w-[1440px] grid-cols-1 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] gap-2 overflow-hidden md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:grid-rows-1 md:gap-3';
+
 export function Upload8760App() {
   const [parsed, setParsed] = useState<Parsed8760Upload | null>(null);
   const [customGradients, setCustomGradients] = useState<GradientDef[]>([]);
@@ -123,6 +127,12 @@ export function Upload8760App() {
   const dark = theme === 'dark';
   const exportActive = exportMode && !!parsed;
 
+  const cardShell = exportActive
+    ? 'border-gray-200 bg-white'
+    : dark
+      ? 'border-gray-700 bg-gray-800'
+      : 'border-gray-100 bg-white';
+
   return (
     <div
       className={`flex h-full min-h-0 w-full flex-col overflow-hidden ${dark ? 'bg-gray-900 text-gray-100' : ''}`}
@@ -211,18 +221,12 @@ export function Upload8760App() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5 sm:p-2">
-        <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-1.5 overflow-hidden md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:grid-rows-1 md:gap-2">
+      <main className="flex min-h-0 flex-1 justify-start overflow-hidden px-2 py-1.5 sm:px-4 sm:py-2">
+        <div className={exportActive ? 'h-full min-h-0 w-full max-w-[720px]' : WORKSPACE_GRID}>
           <div
             ref={exportAreaRef}
             id="chart-export-area"
-            className={`flex min-h-0 flex-col overflow-hidden rounded-lg border shadow-hard-lg ${
-              exportActive
-                ? 'border-gray-200 bg-white'
-                : dark
-                  ? 'border-gray-700 bg-gray-800'
-                  : 'border-gray-100 bg-white'
-            }`}
+            className={`flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border shadow-hard-lg ${cardShell}`}
           >
             {parsed ? (
               <DataExplorer
@@ -287,7 +291,7 @@ function EmptyChartPlaceholder({ theme }: { theme: 'light' | 'dark' }) {
       <div>
         <p className={`text-xs font-semibold ${dark ? 'text-gray-200' : 'text-gray-800'}`}>No data loaded yet</p>
         <p className={`mt-0.5 max-w-[16rem] text-[10px] leading-snug ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
-          Upload or paste 8760 hourly values in the sidebar.
+          Upload or paste 8760 hourly values in the panel beside the chart.
         </p>
       </div>
     </div>

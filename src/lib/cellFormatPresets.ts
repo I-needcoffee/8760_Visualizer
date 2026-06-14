@@ -6,11 +6,14 @@ export interface CellFormatOptions {
   /** Decimal places shown on month/week heatmap cell labels (0–3). */
   decimalPlaces: number;
   suffix: CellFormatSuffix;
+  /** When suffix is %, multiply the value by 100 before formatting. */
+  percentScale100: boolean;
 }
 
 export const DEFAULT_CELL_FORMAT: CellFormatOptions = {
   decimalPlaces: 1,
   suffix: 'none',
+  percentScale100: false,
 };
 
 export function formatCellValue(value: number, options: CellFormatOptions): string {
@@ -19,7 +22,9 @@ export function formatCellValue(value: number, options: CellFormatOptions): stri
   const dp = Math.max(0, Math.min(3, Math.round(options.decimalPlaces)));
 
   if (options.suffix === 'percent') {
-    return `${(value * 100).toFixed(dp)}%`;
+    const n = options.percentScale100 ? value * 100 : value;
+    const formatted = dp === 0 ? String(Math.round(n)) : n.toFixed(dp);
+    return `${formatted}%`;
   }
 
   const formatted = dp === 0 ? String(Math.round(value)) : value.toFixed(dp);
@@ -36,5 +41,5 @@ export function createCellValueFormatter(options: CellFormatOptions): (value: nu
 }
 
 export function cellFormatPreview(options: CellFormatOptions): string {
-  return formatCellValue(23.456, options);
+  return formatCellValue(0.23456, options);
 }
