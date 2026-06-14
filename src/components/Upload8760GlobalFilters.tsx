@@ -1,24 +1,25 @@
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
-import { Calendar, Clock, Filter } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Calendar, Clock } from 'lucide-react';
 import type { GlobalFilterState } from '../lib/globalFilter';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const MONTH_PRESETS = [
-  { label: 'Spring', range: [3, 5] as const },
-  { label: 'Summer', range: [6, 8] as const },
+  { label: 'Spr', range: [3, 5] as const },
+  { label: 'Sum', range: [6, 8] as const },
   { label: 'Fall', range: [9, 11] as const },
-  { label: 'Winter', range: [12, 2] as const },
-  { label: 'Annual', range: [1, 12] as const },
+  { label: 'Win', range: [12, 2] as const },
+  { label: 'All', range: [1, 12] as const },
 ];
 
 const HOUR_PRESETS = [
-  { label: '7am–7pm', range: [7, 19] as const },
-  { label: 'Morning', range: [7, 11] as const },
-  { label: 'Midday', range: [11, 15] as const },
-  { label: 'Afternoon', range: [16, 19] as const },
-  { label: 'All day', range: [0, 23] as const },
+  { label: '7–19', range: [7, 19] as const },
+  { label: 'AM', range: [7, 11] as const },
+  { label: 'Mid', range: [11, 15] as const },
+  { label: 'PM', range: [16, 19] as const },
+  { label: 'All', range: [0, 23] as const },
 ];
 
 function sliderRail(dark: boolean) {
@@ -35,17 +36,17 @@ function sliderHandles(dark: boolean) {
     {
       borderColor,
       backgroundColor: '#ffffff',
-      width: 11,
-      height: 11,
-      marginTop: -4,
+      width: 10,
+      height: 10,
+      marginTop: -3.5,
       boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
     },
     {
       borderColor,
       backgroundColor: '#ffffff',
-      width: 11,
-      height: 11,
-      marginTop: -4,
+      width: 10,
+      height: 10,
+      marginTop: -3.5,
       boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
     },
   ];
@@ -59,6 +60,18 @@ function presetBtn(dark: boolean, active: boolean) {
     : dark
       ? 'border-gray-700 text-gray-400 hover:bg-gray-700'
       : 'border-gray-200 text-gray-600 hover:bg-gray-50';
+}
+
+function SliderShell({ children, dark }: { children: ReactNode; dark: boolean }) {
+  return (
+    <div
+      className={`w-full min-w-0 max-w-full overflow-hidden rounded-full px-1 py-1.5 ${
+        dark ? 'bg-gray-900/20' : 'bg-gray-50/80'
+      }`}
+    >
+      <div className="w-full min-w-0 [&_.rc-slider]:!w-full [&_.rc-slider-rail]:!w-full">{children}</div>
+    </div>
+  );
 }
 
 interface Upload8760GlobalFiltersProps {
@@ -108,26 +121,21 @@ export function Upload8760GlobalFilters({
   const monthSummary =
     filter.startMonth <= filter.endMonth
       ? `${MONTHS[filter.startMonth - 1]}–${MONTHS[filter.endMonth - 1]}`
-      : `${MONTHS[filter.startMonth - 1]}–${MONTHS[filter.endMonth - 1]} (wrap)`;
+      : `${MONTHS[filter.startMonth - 1]}–${MONTHS[filter.endMonth - 1]} wrap`;
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-      <div className={`flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
-        <Filter className="h-3 w-3" />
-        Time filters
-      </div>
-
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-1">
-          <span className={`flex items-center gap-1 text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
-            <Calendar className="h-3 w-3" />
+    <div className="flex min-w-0 flex-col gap-2.5">
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center justify-between gap-1">
+          <span className={`flex shrink-0 items-center gap-1 text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
+            <Calendar className="h-3 w-3 shrink-0" />
             Months
           </span>
-          <span className={`rounded-full border px-1.5 py-px font-mono text-[8px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+          <span className={`min-w-0 truncate rounded-full border px-1.5 py-px font-mono text-[8px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
             {monthSummary}
           </span>
         </div>
-        <div className="px-0.5 py-1">
+        <SliderShell dark={dark}>
           <Slider
             range
             min={1}
@@ -140,14 +148,14 @@ export function Upload8760GlobalFilters({
             handleStyle={sliderHandles(dark)}
             railStyle={sliderRail(dark)}
           />
-        </div>
-        <div className="flex flex-wrap gap-1">
+        </SliderShell>
+        <div className="grid grid-cols-5 gap-0.5">
           {MONTH_PRESETS.map(p => (
             <button
               key={p.label}
               type="button"
               onClick={() => onChange({ ...filter, startMonth: p.range[0], endMonth: p.range[1] })}
-              className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${presetBtn(
+              className={`rounded-full border px-0.5 py-0.5 text-[7px] font-semibold ${presetBtn(
                 dark,
                 filter.startMonth === p.range[0] && filter.endMonth === p.range[1]
               )}`}
@@ -158,17 +166,17 @@ export function Upload8760GlobalFilters({
         </div>
       </div>
 
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-1">
-          <span className={`flex items-center gap-1 text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
-            <Clock className="h-3 w-3" />
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center justify-between gap-1">
+          <span className={`flex shrink-0 items-center gap-1 text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
+            <Clock className="h-3 w-3 shrink-0" />
             Hours
           </span>
-          <span className={`rounded-full border px-1.5 py-px font-mono text-[8px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+          <span className={`min-w-0 truncate rounded-full border px-1.5 py-px font-mono text-[8px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
             {filter.startHour.toString().padStart(2, '0')}:00–{filter.endHour.toString().padStart(2, '0')}:59
           </span>
         </div>
-        <div className="px-0.5 py-1">
+        <SliderShell dark={dark}>
           <Slider
             range
             min={0}
@@ -181,14 +189,14 @@ export function Upload8760GlobalFilters({
             handleStyle={sliderHandles(dark)}
             railStyle={sliderRail(dark)}
           />
-        </div>
-        <div className="flex flex-wrap gap-1">
+        </SliderShell>
+        <div className="grid grid-cols-5 gap-0.5">
           {HOUR_PRESETS.map(p => (
             <button
               key={p.label}
               type="button"
               onClick={() => onChange({ ...filter, startHour: p.range[0], endHour: p.range[1] })}
-              className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold ${presetBtn(
+              className={`rounded-full border px-0.5 py-0.5 text-[7px] font-semibold ${presetBtn(
                 dark,
                 filter.startHour === p.range[0] && filter.endHour === p.range[1]
               )}`}
@@ -199,10 +207,10 @@ export function Upload8760GlobalFilters({
         </div>
       </div>
 
-      <div className={`space-y-1 border-t pt-2 ${dark ? 'border-gray-700' : 'border-gray-100'}`}>
-        <div className="flex items-center justify-between gap-1">
-          <span className={`text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
-            {valueLabel} isolation
+      <div className={`min-w-0 space-y-1 border-t pt-2 ${dark ? 'border-gray-700' : 'border-gray-100'}`}>
+        <div className="flex min-w-0 items-center justify-between gap-1">
+          <span className={`truncate text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
+            {valueLabel} range
           </span>
           <button
             type="button"
@@ -214,17 +222,12 @@ export function Upload8760GlobalFilters({
                 temperatureHiC: maxV,
               })
             }
-            className={`text-[8px] font-semibold underline-offset-2 hover:underline ${labelClass}`}
+            className={`shrink-0 text-[8px] font-semibold underline-offset-2 hover:underline ${labelClass}`}
           >
             Reset
           </button>
         </div>
-        <p className={`text-[8px] leading-snug ${labelClass}`}>
-          {filter.temperatureMode === 'off'
-            ? `Full range (${minV.toFixed(2)}–${maxV.toFixed(2)}${valueUnit ? ` ${valueUnit}` : ''})`
-            : `Isolating ${lo.toFixed(2)}–${hi.toFixed(2)}${valueUnit ? ` ${valueUnit}` : ''}`}
-        </p>
-        <div className="px-0.5 py-1">
+        <SliderShell dark={dark}>
           <Slider
             range
             min={minV}
@@ -246,9 +249,9 @@ export function Upload8760GlobalFilters({
             handleStyle={sliderHandles(dark)}
             railStyle={sliderRail(dark)}
           />
-        </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <label className="flex flex-col gap-0.5">
+        </SliderShell>
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          <label className="flex min-w-0 flex-col gap-0.5">
             <span className={`text-[8px] font-medium ${labelClass}`}>Low</span>
             <input
               type="number"
@@ -265,10 +268,10 @@ export function Upload8760GlobalFilters({
                   temperatureMode: syncMode(nextLo, hi),
                 });
               }}
-              className={`w-full rounded-lg border px-1.5 py-0.5 font-mono text-[10px] outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
+              className={`min-w-0 w-full rounded-lg border px-2 py-0.5 font-mono text-[10px] outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
             />
           </label>
-          <label className="flex flex-col gap-0.5">
+          <label className="flex min-w-0 flex-col gap-0.5">
             <span className={`text-[8px] font-medium ${labelClass}`}>High</span>
             <input
               type="number"
@@ -285,10 +288,15 @@ export function Upload8760GlobalFilters({
                   temperatureMode: syncMode(lo, nextHi),
                 });
               }}
-              className={`w-full rounded-lg border px-1.5 py-0.5 font-mono text-[10px] outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
+              className={`min-w-0 w-full rounded-lg border px-2 py-0.5 font-mono text-[10px] outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
             />
           </label>
         </div>
+        <p className={`truncate text-[8px] leading-snug ${labelClass}`}>
+          {filter.temperatureMode === 'off'
+            ? `Full (${minV.toFixed(1)}–${maxV.toFixed(1)}${valueUnit ? ` ${valueUnit}` : ''})`
+            : `${lo.toFixed(1)}–${hi.toFixed(1)}${valueUnit ? ` ${valueUnit}` : ''}`}
+        </p>
       </div>
     </div>
   );

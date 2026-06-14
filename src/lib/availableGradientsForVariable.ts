@@ -61,7 +61,7 @@ export function gradientsForVariable(
   if (cat === 'Uploaded') {
     return [
       ...allowIds(
-        ['temperature-comfort', 'humidity-spectrum', 'wind-speed-warm', 'solar-yellow-orange', 'cloud-cover-gray', 'coolwarm', 'viridis', 'turbo', 'magma', 'utci-categories'],
+        ['temperature-comfort', 'humidity-spectrum', 'wind-speed-warm', 'solar-yellow-orange', 'cloud-cover-gray', 'coolwarm', 'viridis', 'magma', 'utci-categories'],
         gradients
       ),
       ...customGradients(gradients),

@@ -63,6 +63,11 @@ export function Upload8760App() {
     return parsed.variables.find(v => v.id === UPLOAD_VALUE_ID) ?? parsed.variables[0];
   }, [parsed]);
 
+  const explorerGradients = useMemo(() => {
+    if (!parsed || !activeVariable) return allGradients;
+    return gradientsForVariable(activeVariable.id, parsed.variables, allGradients);
+  }, [activeVariable, allGradients, parsed]);
+
   const defaultVariableId = activeVariable?.id ?? UPLOAD_VALUE_ID;
 
   const [aggregation, setAggregation] = useState<'hour' | 'day' | 'week' | 'month'>('month');
@@ -273,11 +278,7 @@ export function Upload8760App() {
                 data={parsed.data}
                 variables={parsed.variables}
                 defaultVariableId={defaultVariableId}
-                gradients={
-                  activeVariable
-                    ? gradientsForVariable(activeVariable.id, parsed.variables, allGradients)
-                    : allGradients
-                }
+                gradients={explorerGradients}
                 filter={globalFilter}
                 heatmapCellStatistic={heatmapCellStatistic}
                 barChartFillMode="gradient"

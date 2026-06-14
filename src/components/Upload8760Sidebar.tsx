@@ -25,7 +25,6 @@ const UPLOAD_GRADIENT_PRESETS = [
   { id: 'coolwarm', label: 'Cool / warm' },
   { id: 'utci-categories', label: 'UTCI' },
   { id: 'viridis', label: 'Viridis' },
-  { id: 'turbo', label: 'Turbo' },
 ] as const;
 
 interface Upload8760SidebarProps {
@@ -83,7 +82,7 @@ function Section({
 }) {
   return (
     <section
-      className={`flex min-h-0 flex-col gap-1.5 overflow-hidden px-3 py-2 sm:px-3.5 sm:py-2.5 ${className}`}
+      className={`flex min-h-0 min-w-0 flex-col gap-2 px-3.5 py-2.5 sm:px-4 sm:py-3 ${className}`}
     >
       <div className="flex shrink-0 items-start justify-between gap-2">
         <div className="min-w-0">
@@ -98,7 +97,7 @@ function Section({
         </div>
         {action}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-col gap-2">{children}</div>
     </section>
   );
 }
@@ -222,11 +221,9 @@ export function Upload8760Sidebar({
 
   return (
     <aside
-      className={`grid h-full min-h-0 w-full overflow-hidden rounded-xl border shadow-hard-lg ${
-        parsed
-          ? 'grid-rows-[minmax(0,1fr)_auto_auto_minmax(0,0.7fr)]'
-          : 'grid-rows-[minmax(0,1.2fr)_auto_minmax(0,0.75fr)]'
-      } ${dark ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white'}`}
+      className={`flex h-full min-h-0 w-full min-w-0 flex-col gap-0 overflow-hidden rounded-xl border p-1.5 shadow-hard-lg sm:p-2 ${
+        dark ? 'border-gray-700 bg-gray-800' : 'border-gray-100 bg-white'
+      }`}
     >
       <Section
         title="Data input"
@@ -279,7 +276,7 @@ export function Upload8760Sidebar({
           value={pasteText}
           onChange={e => setPasteText(e.target.value)}
           placeholder="Or paste values here…"
-          className={`min-h-[2.75rem] flex-1 resize-none rounded-xl border px-2.5 py-1.5 font-mono text-[10px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
+          className={`max-h-[3.5rem] min-h-[2.25rem] shrink-0 resize-none rounded-xl border px-2.5 py-1.5 font-mono text-[10px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
         />
         <button
           type="button"
@@ -324,7 +321,7 @@ export function Upload8760Sidebar({
           </button>
         }
       >
-        <div className="grid shrink-0 grid-cols-4 gap-x-1.5 gap-y-1.5">
+        <div className="grid min-w-0 shrink-0 grid-cols-4 gap-2">
           {visiblePresets.map(p => {
             const g = gradients.find(x => x.id === p.id);
             if (!g) return null;
@@ -404,7 +401,7 @@ export function Upload8760Sidebar({
             </button>
           </div>
         )}
-        <div className={`shrink-0 space-y-1 rounded-lg border p-1.5 ${dark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50'}`}>
+        <div className={`min-w-0 shrink-0 space-y-1.5 rounded-lg border p-2 ${dark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex items-center justify-between gap-1">
             <span className={`text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
               Scale min / max
@@ -427,7 +424,7 @@ export function Upload8760Sidebar({
               {legendUnit ? ` ${legendUnit}` : ''}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid min-w-0 grid-cols-2 gap-2">
             <label className="flex flex-col gap-0.5">
               <span className={`text-[8px] font-medium ${labelClass}`}>Min</span>
               <input
@@ -469,18 +466,20 @@ export function Upload8760Sidebar({
       {parsed && (
         <Section
           title="Time & value filters"
-          hint="Isolate months, hours, or value range."
+          hint="Months, hours, and value range."
           dark={dark}
           className={dark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
         >
-          <Upload8760GlobalFilters
+          <div className="min-w-0">
+            <Upload8760GlobalFilters
             filter={globalFilter}
             onChange={onGlobalFilterChange}
             theme={theme}
             valueExtent={valueExtent}
             valueUnit={legendUnit}
             valueLabel={parsed.valueColumnLabel ?? 'Value'}
-          />
+            />
+          </div>
         </Section>
       )}
 

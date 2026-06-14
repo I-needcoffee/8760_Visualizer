@@ -209,6 +209,8 @@ export function DataExplorer({
   const gradientId = explorerShared?.gradientId ?? internalGradientId;
   const setGradientId = explorerShared?.setGradientId ?? setInternalGradientId;
 
+  const prevColorVarForGradientRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (showDifference && compareData) {
       if (gradients.some(g => g.id === DIFFERENCE_DIVERGING_ID)) {
@@ -216,8 +218,18 @@ export function DataExplorer({
         return;
       }
     }
-    const id = defaultGradientIdForVariable(colorVar, variables, gradients);
-    setGradientId(id);
+    const colorVarChanged = prevColorVarForGradientRef.current !== colorVar;
+    prevColorVarForGradientRef.current = colorVar;
+
+    if (!colorVarChanged) {
+      setGradientId(current => {
+        if (gradients.some(g => g.id === current)) return current;
+        return defaultGradientIdForVariable(colorVar, variables, gradients);
+      });
+      return;
+    }
+
+    setGradientId(defaultGradientIdForVariable(colorVar, variables, gradients));
   }, [colorVar, variables, gradients, setGradientId, showDifference, compareData]);
 
   const [internalShowSettings, setInternalShowSettings] = useState(false);
