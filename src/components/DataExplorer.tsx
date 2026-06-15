@@ -1175,10 +1175,15 @@ export function DataExplorer({
     colorVar,
     overlayVar,
     overlayVarDef,
+    colorVarDef,
+    cMin,
+    cMax,
+    cUnit,
     gradientId,
     aggregation,
     gradients,
     filter,
+    temperatureFilterField,
     unitSystem,
     heatmapTextColor,
     theme,
@@ -1192,6 +1197,7 @@ export function DataExplorer({
     barChartFillMode,
     overlayValueFormatter,
     upload8760Mode,
+    legendDomainOverride,
   ]);
 
   // Calculate local stats for filtered data

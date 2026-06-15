@@ -112,8 +112,8 @@ export function Upload8760App() {
   );
 
   useEffect(() => {
-    setLegendDomain({ min: legendPreset.min, max: legendPreset.max });
-  }, [legendPreset.min, legendPreset.max, gradientId, colorVarDef?.id, activeVariable?.id]);
+    setLegendDomain({ min: legendPreset.presetMin, max: legendPreset.presetMax });
+  }, [gradientId, colorVarDef?.id, activeVariable?.id, legendPreset.presetMin, legendPreset.presetMax]);
 
   useEffect(() => {
     if (!parsed || !activeVariable) return;

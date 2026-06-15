@@ -74,6 +74,9 @@ function SliderShell({ children, dark }: { children: ReactNode; dark: boolean })
   );
 }
 
+const filterTextInputClass =
+  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+
 interface Upload8760GlobalFiltersProps {
   filter: GlobalFilterState;
   onChange: (filter: GlobalFilterState) => void;
@@ -104,6 +107,10 @@ export function Upload8760GlobalFilters({
 }: Upload8760GlobalFiltersProps) {
   const dark = theme === 'dark';
   const labelClass = dark ? 'text-gray-400' : 'text-gray-500';
+  const inputClass = dark
+    ? `min-w-0 w-full rounded-lg border border-gray-600 bg-gray-900/80 px-2 py-1.5 font-mono text-[11px] text-gray-100 outline-none focus:ring-2 focus:ring-gray-500/40 ${filterTextInputClass}`
+    : `min-w-0 w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 font-mono text-[11px] text-gray-900 outline-none focus:ring-2 focus:ring-gray-400/40 ${filterTextInputClass}`;
+
   const minV = Math.min(valueExtent.min, valueExtent.max);
   const maxV = Math.max(valueExtent.min, valueExtent.max);
   const span = Math.max(maxV - minV, 1e-6);
@@ -124,14 +131,14 @@ export function Upload8760GlobalFilters({
       : `${MONTHS[filter.startMonth - 1]}–${MONTHS[filter.endMonth - 1]} wrap`;
 
   return (
-    <div className="flex min-w-0 flex-col gap-2.5">
+    <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2.5">
       <div className="min-w-0 space-y-1">
         <div className="flex min-w-0 items-center justify-between gap-1">
           <span className={`flex shrink-0 items-center gap-1 text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
             <Calendar className="h-3 w-3 shrink-0" />
             Months
           </span>
-          <span className={`min-w-0 truncate rounded-full border px-1.5 py-px font-mono text-[8px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+          <span className={`min-w-0 truncate rounded-full border px-1 py-px font-mono text-[7px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
             {monthSummary}
           </span>
         </div>
@@ -149,7 +156,7 @@ export function Upload8760GlobalFilters({
             railStyle={sliderRail(dark)}
           />
         </SliderShell>
-        <div className="grid grid-cols-5 gap-0.5">
+        <div className="grid grid-cols-3 gap-0.5">
           {MONTH_PRESETS.map(p => (
             <button
               key={p.label}
@@ -172,8 +179,8 @@ export function Upload8760GlobalFilters({
             <Clock className="h-3 w-3 shrink-0" />
             Hours
           </span>
-          <span className={`min-w-0 truncate rounded-full border px-1.5 py-px font-mono text-[8px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
-            {filter.startHour.toString().padStart(2, '0')}:00–{filter.endHour.toString().padStart(2, '0')}:59
+          <span className={`min-w-0 truncate rounded-full border px-1 py-px font-mono text-[7px] ${dark ? 'border-gray-600 bg-gray-900/50 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+            {filter.startHour.toString().padStart(2, '0')}–{filter.endHour.toString().padStart(2, '0')}
           </span>
         </div>
         <SliderShell dark={dark}>
@@ -190,7 +197,7 @@ export function Upload8760GlobalFilters({
             railStyle={sliderRail(dark)}
           />
         </SliderShell>
-        <div className="grid grid-cols-5 gap-0.5">
+        <div className="grid grid-cols-3 gap-0.5">
           {HOUR_PRESETS.map(p => (
             <button
               key={p.label}
@@ -207,7 +214,7 @@ export function Upload8760GlobalFilters({
         </div>
       </div>
 
-      <div className={`min-w-0 space-y-1 border-t pt-2 ${dark ? 'border-gray-700' : 'border-gray-100'}`}>
+      <div className={`col-span-2 min-w-0 space-y-1.5 border-t pt-2 ${dark ? 'border-gray-700' : 'border-gray-100'}`}>
         <div className="flex min-w-0 items-center justify-between gap-1">
           <span className={`truncate text-[9px] font-semibold ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
             {valueLabel} range
@@ -227,6 +234,11 @@ export function Upload8760GlobalFilters({
             Reset
           </button>
         </div>
+        <p className={`text-[8px] leading-snug ${labelClass}`}>
+          {filter.temperatureMode === 'off'
+            ? `Full (${minV.toFixed(1)}–${maxV.toFixed(1)}${valueUnit ? ` ${valueUnit}` : ''})`
+            : `Isolating ${lo.toFixed(1)}–${hi.toFixed(1)}${valueUnit ? ` ${valueUnit}` : ''}`}
+        </p>
         <SliderShell dark={dark}>
           <Slider
             range
@@ -250,15 +262,15 @@ export function Upload8760GlobalFilters({
             railStyle={sliderRail(dark)}
           />
         </SliderShell>
-        <div className="grid min-w-0 grid-cols-2 gap-2">
-          <label className="flex min-w-0 flex-col gap-0.5">
+        <div className="grid min-w-0 grid-cols-2 gap-3">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className={`text-[8px] font-medium ${labelClass}`}>Low</span>
             <input
-              type="number"
-              step={step}
+              type="text"
+              inputMode="decimal"
               value={Math.round(lo * 1000) / 1000}
               onChange={e => {
-                const parsed = Number(e.target.value);
+                const parsed = Number(e.target.value.trim().replace(/,/g, ''));
                 if (!Number.isFinite(parsed)) return;
                 const nextLo = clamp(Math.min(parsed, hi));
                 onChange({
@@ -268,17 +280,17 @@ export function Upload8760GlobalFilters({
                   temperatureMode: syncMode(nextLo, hi),
                 });
               }}
-              className={`min-w-0 w-full rounded-lg border px-2 py-0.5 font-mono text-[10px] outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
+              className={inputClass}
             />
           </label>
-          <label className="flex min-w-0 flex-col gap-0.5">
+          <label className="flex min-w-0 flex-col gap-1">
             <span className={`text-[8px] font-medium ${labelClass}`}>High</span>
             <input
-              type="number"
-              step={step}
+              type="text"
+              inputMode="decimal"
               value={Math.round(hi * 1000) / 1000}
               onChange={e => {
-                const parsed = Number(e.target.value);
+                const parsed = Number(e.target.value.trim().replace(/,/g, ''));
                 if (!Number.isFinite(parsed)) return;
                 const nextHi = clamp(Math.max(parsed, lo));
                 onChange({
@@ -288,15 +300,10 @@ export function Upload8760GlobalFilters({
                   temperatureMode: syncMode(lo, nextHi),
                 });
               }}
-              className={`min-w-0 w-full rounded-lg border px-2 py-0.5 font-mono text-[10px] outline-none ${dark ? 'border-gray-600 bg-gray-900/80 text-gray-100' : 'border-gray-200 bg-white'}`}
+              className={inputClass}
             />
           </label>
         </div>
-        <p className={`truncate text-[8px] leading-snug ${labelClass}`}>
-          {filter.temperatureMode === 'off'
-            ? `Full (${minV.toFixed(1)}–${maxV.toFixed(1)}${valueUnit ? ` ${valueUnit}` : ''})`
-            : `${lo.toFixed(1)}–${hi.toFixed(1)}${valueUnit ? ` ${valueUnit}` : ''}`}
-        </p>
       </div>
     </div>
   );

@@ -18,7 +18,7 @@ interface LegendDomainFieldsProps {
 
 function parseDomainField(raw: string): number | null {
   const trimmed = raw.trim().replace(/,/g, '');
-  if (trimmed === '' || trimmed === '-' || trimmed === '.') return null;
+  if (trimmed === '' || trimmed === '-' || trimmed === '.' || trimmed === '-.') return null;
   const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
 }
@@ -46,28 +46,16 @@ export function LegendDomainFields({
     setMaxText(String(domain.max));
   }, [domain.min, domain.max]);
 
-  const commitMin = (text: string) => {
+  const pushMin = (text: string) => {
     const parsed = parseDomainField(text);
-    if (parsed == null) {
-      setMinText(String(domain.min));
-      return;
-    }
-    const next = normalizeLegendDomain(parsed, domain.max);
-    onChange(next);
-    setMinText(String(next.min));
-    setMaxText(String(next.max));
+    if (parsed == null) return;
+    onChange(normalizeLegendDomain(parsed, domain.max));
   };
 
-  const commitMax = (text: string) => {
+  const pushMax = (text: string) => {
     const parsed = parseDomainField(text);
-    if (parsed == null) {
-      setMaxText(String(domain.max));
-      return;
-    }
-    const next = normalizeLegendDomain(domain.min, parsed);
-    onChange(next);
-    setMinText(String(next.min));
-    setMaxText(String(next.max));
+    if (parsed == null) return;
+    onChange(normalizeLegendDomain(domain.min, parsed));
   };
 
   return (
@@ -109,12 +97,13 @@ export function LegendDomainFields({
             autoComplete="off"
             spellCheck={false}
             value={minText}
-            onChange={e => setMinText(e.target.value)}
-            onBlur={() => commitMin(minText)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.currentTarget.blur();
-              }
+            onChange={e => {
+              setMinText(e.target.value);
+              pushMin(e.target.value);
+            }}
+            onBlur={() => {
+              const parsed = parseDomainField(minText);
+              if (parsed == null) setMinText(String(domain.min));
             }}
             className={inputClass}
             aria-label="Color scale minimum"
@@ -128,12 +117,13 @@ export function LegendDomainFields({
             autoComplete="off"
             spellCheck={false}
             value={maxText}
-            onChange={e => setMaxText(e.target.value)}
-            onBlur={() => commitMax(maxText)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.currentTarget.blur();
-              }
+            onChange={e => {
+              setMaxText(e.target.value);
+              pushMax(e.target.value);
+            }}
+            onBlur={() => {
+              const parsed = parseDomainField(maxText);
+              if (parsed == null) setMaxText(String(domain.max));
             }}
             className={inputClass}
             aria-label="Color scale maximum"
