@@ -128,6 +128,8 @@ interface DataExplorerProps {
   suppressSettingsButton?: boolean;
   /** Custom formatter for month/week heatmap cell overlay text. */
   overlayValueFormatter?: (value: number) => string;
+  /** EPW / upload column for heatmap cell text (defaults to color variable). */
+  overlayVar?: string;
   /** Simplified header for standalone 8760 upload card. */
   upload8760Mode?: boolean;
   /** Optional legend / heatmap domain override (display units). */
@@ -155,6 +157,7 @@ export function DataExplorer({
   pairSuppressFooterLegend,
   suppressSettingsButton,
   overlayValueFormatter,
+  overlayVar,
   upload8760Mode,
   legendDomainOverride,
   temperatureFilterField = 'dryBulbTemperature',
@@ -324,6 +327,12 @@ export function DataExplorer({
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
 
+  const overlayVarEffective = overlayVar ?? colorVar;
+  const overlayVarDef = useMemo(
+    () => variables.find(v => v.id === overlayVarEffective) ?? colorVarDef,
+    [variables, overlayVarEffective, colorVarDef]
+  );
+
   const explorerLegendFootnote = useMemo(() => {
     const usesDaily = explorerUsesDailyAvgBarExtents(colorVar, colorVarDef.category);
     if (showDifference && compareData) {
@@ -398,6 +407,14 @@ export function DataExplorer({
         heatmapCellStatistic
       );
 
+    const aggOverlaySeries = (rows: EPWDataRow[]) =>
+      aggregateCellStatistic(
+        rows.map(r => r[overlayVarEffective] as number).filter(x => typeof x === 'number' && !Number.isNaN(x)),
+        heatmapCellStatistic
+      );
+
+    const overlayUnit = convertUnit(overlayVarDef.unit);
+
     const heatmapFill = (v: number) =>
       Number.isFinite(v) ? colorScale(v) : theme === 'dark' ? 'rgba(55,65,81,0.4)' : 'rgba(203,213,225,0.7)';
 
@@ -423,17 +440,26 @@ export function DataExplorer({
             val = convertValue(aggVarSeries(selectedRows), colorVarDef.unit);
           }
 
+          const overlayVal =
+            selectedRows.length === 0
+              ? NaN
+              : convertValue(aggOverlaySeries(selectedRows), overlayVarDef.unit);
+
           const midM = (selectedRows[Math.floor(selectedRows.length / 2)] ?? values[0])!;
           const valLine = Number.isFinite(val) ? val.toFixed(1) : '—';
+          const overlayLine = Number.isFinite(overlayVal) ? overlayVal.toFixed(1) : '—';
           heatmapData.push({
             x0: startDay,
             x1: endDay,
             y: hour,
             month: month,
             value: val,
+            overlayValue: overlayVal,
             label: `${monthNames[month - 1]}`,
             tooltip: Number.isFinite(val)
-              ? `${monthNames[month - 1]} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${valLine} ${cUnit}`
+              ? overlayVar !== colorVar && Number.isFinite(overlayVal)
+                ? `${monthNames[month - 1]}\n${colorVarDef.name}: ${valLine} ${cUnit}\n${overlayVarDef.name}: ${overlayLine} ${overlayUnit}`
+                : `${monthNames[month - 1]} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${valLine} ${cUnit}`
               : `${monthNames[month - 1]}\nNo hours in dry-bulb band for this month/hour`,
 
             sunYear: values[0].year,
@@ -468,6 +494,11 @@ export function DataExplorer({
             val = convertValue(aggVarSeries(selectedRows), colorVarDef.unit);
           }
 
+          const overlayVal =
+            selectedRows.length === 0
+              ? NaN
+              : convertValue(aggOverlaySeries(selectedRows), overlayVarDef.unit);
+
           const mid = (selectedRows[Math.floor(selectedRows.length / 2)] ?? values[0])!;
           heatmapData.push({
             x0: startDay,
@@ -475,9 +506,12 @@ export function DataExplorer({
             y: hour,
             month: month,
             value: val,
+            overlayValue: overlayVal,
             label: `W${week + 1}`,
             tooltip: Number.isFinite(val)
-              ? `Week ${week + 1} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`
+              ? overlayVar !== colorVar && Number.isFinite(overlayVal)
+                ? `Week ${week + 1}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}\n${overlayVarDef.name}: ${overlayVal.toFixed(1)} ${overlayUnit}`
+                : `Week ${week + 1} ${showDifference ? 'Diff' : 'Avg'}\n${colorVarDef.name}: ${val.toFixed(1)} ${cUnit}`
               : `Week ${week + 1}\nNo hours in dry-bulb band for this week/hour`,
             sunYear: mid.year,
             sunMonth: mid.month,
@@ -508,6 +542,12 @@ export function DataExplorer({
             colorVarDef.unit
           );
         }
+        const overlayVal = pass
+          ? convertValue(
+              aggregateCellStatistic([d[overlayVarEffective] as number], heatmapCellStatistic),
+              overlayVarDef.unit
+            )
+          : NaN;
         const valLine = Number.isFinite(val) ? val.toFixed(1) : '—';
         return {
           x0: d.dayOfYear,
@@ -515,6 +555,7 @@ export function DataExplorer({
           y: d.hour,
           month: d.month,
           value: val,
+          overlayValue: overlayVal,
           label: d.date.toLocaleDateString(),
           tooltip: Number.isFinite(val)
             ? `${d.date.toLocaleString()}\n${colorVarDef.name} ${showDifference ? 'Diff' : ''}: ${valLine} ${cUnit}`
@@ -611,11 +652,12 @@ export function DataExplorer({
           const isHourMatch = d.y >= filter.startHour && d.y <= filter.endHour;
           return (isMonthMatch && isHourMatch) ? 1 : 0.2;
         })
-        .text(d =>
-          Number.isFinite(d.value) && explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width > overlayMinWidth
-            ? formatOverlay(d.value)
-            : ""
-        );
+        .text(d => {
+          const textVal = Number.isFinite(d.overlayValue) ? d.overlayValue : d.value;
+          return Number.isFinite(textVal) && explorerHeatmapCellXPx(innerWidth, cellGapPx, d.x0, d.x1).width > overlayMinWidth
+            ? formatOverlay(textVal)
+            : '';
+        });
     }
 
     // Add bounding box for the selected region
@@ -1120,6 +1162,8 @@ export function DataExplorer({
     showDifference,
     variables,
     colorVar,
+    overlayVar,
+    overlayVarDef,
     gradientId,
     aggregation,
     gradients,

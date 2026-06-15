@@ -11,6 +11,8 @@ import { valueExtentFromRows } from './lib/dryBulbExtent';
 import { convertValue, effectiveVariableLegendBounds } from './lib/unitConversion';
 import {
   inferDefaultGradientId,
+  mergeOverlaySeries,
+  UPLOAD_OVERLAY_VALUE_ID,
   UPLOAD_VALUE_ID,
   type Parsed8760Upload,
 } from './lib/parse8760Upload';
@@ -36,6 +38,8 @@ export type LegendDomainOverride = { min: number | null; max: number | null };
 
 export function Upload8760App() {
   const [parsed, setParsed] = useState<Parsed8760Upload | null>(null);
+  const [overlayParsed, setOverlayParsed] = useState<Parsed8760Upload | null>(null);
+  const [overlaySource, setOverlaySource] = useState<'same' | 'separate'>('same');
   const [customGradients, setCustomGradients] = useState<GradientDef[]>([]);
   const [gradientId, setGradientId] = useState('temperature-comfort');
   const [cellFormat, setCellFormat] = useState<CellFormatOptions>(DEFAULT_CELL_FORMAT);
@@ -54,6 +58,26 @@ export function Upload8760App() {
   const exportAreaRef = useRef<HTMLDivElement>(null);
 
   const allGradients = useMemo(() => [...GRADIENTS, ...customGradients], [customGradients]);
+
+  const chartData = useMemo(() => {
+    if (!parsed) return null;
+    if (overlaySource === 'separate' && overlayParsed) {
+      try {
+        return mergeOverlaySeries(parsed, overlayParsed);
+      } catch (error) {
+        console.error('Failed to merge overlay data:', error);
+        return parsed;
+      }
+    }
+    return parsed;
+  }, [parsed, overlayParsed, overlaySource]);
+
+  const overlayVar = useMemo(() => {
+    if (overlaySource !== 'separate' || !overlayParsed || !chartData) return undefined;
+    return chartData.variables.some(v => v.id === UPLOAD_OVERLAY_VALUE_ID)
+      ? UPLOAD_OVERLAY_VALUE_ID
+      : undefined;
+  }, [overlaySource, overlayParsed, chartData]);
 
   const activeVariable = useMemo(() => {
     if (!parsed) return undefined;
@@ -103,6 +127,8 @@ export function Upload8760App() {
 
   const handleParsed = useCallback((data: Parsed8760Upload) => {
     setParsed(data);
+    setOverlayParsed(null);
+    setOverlaySource('same');
     const v =
       data.parseMode === 'epw'
         ? data.variables.find(x => x.id === 'dryBulbTemperature') ?? data.variables[0]
@@ -110,6 +136,12 @@ export function Upload8760App() {
     if (v) {
       setGradientId(inferDefaultGradientId(v.name, v.unit, v.min, v.max));
     }
+  }, []);
+
+  const handleClear = useCallback(() => {
+    setParsed(null);
+    setOverlayParsed(null);
+    setOverlaySource('same');
   }, []);
 
   const overlayValueFormatter = useMemo(
@@ -272,11 +304,11 @@ export function Upload8760App() {
             id="chart-export-area"
             className={`flex h-full min-h-[46vh] w-full flex-col overflow-visible md:min-h-0 rounded-xl border shadow-hard-lg ${cardShell}`}
           >
-            {parsed ? (
+            {chartData ? (
               <DataExplorer
-                metadata={parsed.metadata}
-                data={parsed.data}
-                variables={parsed.variables}
+                metadata={chartData.metadata}
+                data={chartData.data}
+                variables={chartData.variables}
                 defaultVariableId={defaultVariableId}
                 gradients={explorerGradients}
                 filter={globalFilter}
@@ -289,6 +321,7 @@ export function Upload8760App() {
                 explorerShared={explorerSharedLive}
                 suppressSettingsButton
                 overlayValueFormatter={overlayValueFormatter}
+                overlayVar={overlayVar}
                 upload8760Mode
                 exportMode={exportActive}
                 legendDomainOverride={legendDomainOverride}
@@ -304,7 +337,12 @@ export function Upload8760App() {
               theme={theme}
               parsed={parsed}
               onParsed={handleParsed}
-              onClear={() => setParsed(null)}
+              onClear={handleClear}
+              overlayParsed={overlayParsed}
+              onOverlayParsed={setOverlayParsed}
+              overlaySource={overlaySource}
+              onOverlaySourceChange={setOverlaySource}
+              onClearOverlay={() => setOverlayParsed(null)}
               gradients={allGradients}
               gradientId={gradientId}
               onGradientIdChange={setGradientId}

@@ -2,6 +2,8 @@ import { parseEPW, type EPWDataRow, type EPWMetadata, type EPWVariable, type Par
 import { UNIT_C } from './unitConversion';
 
 export const UPLOAD_VALUE_ID = 'uploadedValue';
+/** Second uploaded 8760 series merged onto the calendar for heatmap cell label text. */
+export const UPLOAD_OVERLAY_VALUE_ID = 'uploadedOverlayValue';
 
 export interface Parsed8760Upload extends ParsedEPW {
   /** How the file was interpreted (for UI feedback). */
@@ -180,13 +182,13 @@ function buildUploadMetadata(label: string): EPWMetadata {
   };
 }
 
-function buildUploadVariable(values: number[], label: string): EPWVariable {
+function buildUploadVariable(values: number[], label: string, id = UPLOAD_VALUE_ID): EPWVariable {
   const finite = values.filter(Number.isFinite);
   const min = finite.length ? Math.min(...finite) : 0;
   const max = finite.length ? Math.max(...finite) : 100;
   const pad = (max - min) * 0.05 || 1;
   return {
-    id: UPLOAD_VALUE_ID,
+    id,
     name: label,
     unit: '',
     min,
@@ -194,6 +196,51 @@ function buildUploadVariable(values: number[], label: string): EPWVariable {
     category: 'Uploaded',
     fixedMin: min - pad,
     fixedMax: max + pad,
+  };
+}
+
+/** Hourly values from a parsed upload (values-only column or EPW variable column). */
+export function hourlyValuesFromParsed(parsed: Parsed8760Upload, fieldId = UPLOAD_VALUE_ID): (number | null)[] {
+  return parsed.data.map(row => {
+    const v = row[fieldId] as number | null | undefined;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  });
+}
+
+/** Attach a second 8760 series for heatmap cell label text (hour index must align). */
+export function mergeOverlaySeries(base: Parsed8760Upload, overlaySource: Parsed8760Upload): Parsed8760Upload {
+  if (overlaySource.data.length !== base.data.length) {
+    throw new Parse8760Error(
+      `Overlay data has ${overlaySource.data.length} rows; expected ${base.data.length} to match the color data.`
+    );
+  }
+
+  const overlayField =
+    overlaySource.variables.find(v => v.id === UPLOAD_VALUE_ID)?.id ??
+    overlaySource.variables[0]?.id ??
+    UPLOAD_VALUE_ID;
+  const values = hourlyValuesFromParsed(overlaySource, overlayField);
+  const numericValues = values.filter((v): v is number => v !== null);
+  const label =
+    overlaySource.valueColumnLabel ??
+    overlaySource.variables.find(v => v.id === overlayField)?.name ??
+    'Cell labels';
+
+  const data = base.data.map((row, i) => ({
+    ...row,
+    [UPLOAD_OVERLAY_VALUE_ID]: values[i] ?? null,
+  }));
+
+  const overlayVariable = buildUploadVariable(numericValues, label, UPLOAD_OVERLAY_VALUE_ID);
+  const variables = [
+    ...base.variables.filter(v => v.id !== UPLOAD_OVERLAY_VALUE_ID),
+    overlayVariable,
+  ];
+
+  return {
+    ...base,
+    data,
+    variables,
   };
 }
 

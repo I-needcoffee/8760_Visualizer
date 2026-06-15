@@ -32,6 +32,11 @@ interface Upload8760SidebarProps {
   parsed: Parsed8760Upload | null;
   onParsed: (data: Parsed8760Upload) => void;
   onClear: () => void;
+  overlayParsed: Parsed8760Upload | null;
+  onOverlayParsed: (data: Parsed8760Upload) => void;
+  overlaySource: 'same' | 'separate';
+  onOverlaySourceChange: (source: 'same' | 'separate') => void;
+  onClearOverlay: () => void;
   gradients: GradientDef[];
   gradientId: string;
   onGradientIdChange: (id: string) => void;
@@ -107,6 +112,11 @@ export function Upload8760Sidebar({
   parsed,
   onParsed,
   onClear,
+  overlayParsed,
+  onOverlayParsed,
+  overlaySource,
+  onOverlaySourceChange,
+  onClearOverlay,
   gradients,
   gradientId,
   onGradientIdChange,
@@ -126,6 +136,10 @@ export function Upload8760Sidebar({
   const [pasteText, setPasteText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [overlayBusy, setOverlayBusy] = useState(false);
+  const [overlayError, setOverlayError] = useState<string | null>(null);
+  const overlayFileRef = useRef<HTMLInputElement>(null);
+  const [overlayPasteText, setOverlayPasteText] = useState('');
   const [showCustomGradient, setShowCustomGradient] = useState(false);
   const [newGradientName, setNewGradientName] = useState('Custom gradient');
   const [newGradientColors, setNewGradientColors] = useState(['#30123B', '#4686FB', '#FDE725']);
@@ -193,6 +207,63 @@ export function Upload8760Sidebar({
     }
   };
 
+  const applyOverlayParsed = useCallback(
+    (result: Parsed8760Upload) => {
+      setOverlayError(null);
+      onOverlayParsed(result);
+      onOverlaySourceChange('separate');
+    },
+    [onOverlayParsed, onOverlaySourceChange]
+  );
+
+  const handleOverlayParseError = (err: unknown) => {
+    if (err instanceof Parse8760Error) {
+      setOverlayError(err.message);
+    } else if (err instanceof Error) {
+      setOverlayError(err.message);
+    } else {
+      setOverlayError('Could not parse the label data.');
+    }
+  };
+
+  const handleOverlayPasteSubmit = () => {
+    try {
+      applyOverlayParsed(parse8760Upload(overlayPasteText));
+    } catch (err) {
+      handleOverlayParseError(err);
+    }
+  };
+
+  const handleOverlayFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setOverlayBusy(true);
+    setOverlayError(null);
+    try {
+      applyOverlayParsed(await parse8760UploadFile(file));
+    } catch (err) {
+      handleOverlayParseError(err);
+    } finally {
+      setOverlayBusy(false);
+    }
+  };
+
+  const handleOverlayPasteFromClipboard = async () => {
+    setOverlayError(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setOverlayError('Clipboard empty — copy label values first.');
+        return;
+      }
+      setOverlayPasteText(text);
+      applyOverlayParsed(parse8760Upload(text));
+    } catch {
+      setOverlayError('Paste into the label box below (Ctrl+V).');
+    }
+  };
+
   const visiblePresets = UPLOAD_GRADIENT_PRESETS.filter(p => gradients.some(g => g.id === p.id));
 
   const createCustomGradient = () => {
@@ -226,8 +297,8 @@ export function Upload8760Sidebar({
       }`}
     >
       <Section
-        title="Data input"
-        hint="8760 hourly values — CSV, Excel, EPW, or paste."
+        title="Color data"
+        hint="8760 hourly values for heatmap color and bars."
         dark={dark}
         className={dark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
         action={
@@ -483,7 +554,101 @@ export function Upload8760Sidebar({
         </Section>
       )}
 
-      <Section title="Cell labels" hint={`Preview ${cellFormatPreview(cellFormat)}`} dark={dark}>
+      <Section
+        title="Cell labels"
+        hint={
+          overlaySource === 'separate' && overlayParsed
+            ? `Labels: ${overlayParsed.valueColumnLabel ?? 'custom series'}`
+            : `Preview ${cellFormatPreview(cellFormat)}`
+        }
+        dark={dark}
+      >
+        <div className="shrink-0">
+          <span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
+            Label data
+          </span>
+          <div className={`grid grid-cols-2 gap-1 ${pillTrack}`}>
+            <button
+              type="button"
+              disabled={!parsed}
+              onClick={() => {
+                onOverlaySourceChange('same');
+                onClearOverlay();
+                setOverlayPasteText('');
+                setOverlayError(null);
+              }}
+              className={`py-1.5 text-[10px] font-semibold ${pillSegClass(dark, overlaySource === 'same')}`}
+            >
+              Same as color
+            </button>
+            <button
+              type="button"
+              disabled={!parsed}
+              onClick={() => onOverlaySourceChange('separate')}
+              className={`py-1.5 text-[10px] font-semibold ${pillSegClass(dark, overlaySource === 'separate')}`}
+            >
+              Separate
+            </button>
+          </div>
+        </div>
+
+        {parsed && overlaySource === 'separate' && (
+          <div className="shrink-0 space-y-1.5">
+            <input
+              ref={overlayFileRef}
+              type="file"
+              accept=".csv,.txt,.tsv,.xlsx,.xls"
+              className="hidden"
+              onChange={handleOverlayFileChange}
+            />
+            <div className={`grid shrink-0 grid-cols-2 gap-1 ${pillTrack}`}>
+              <button
+                type="button"
+                disabled={overlayBusy}
+                onClick={() => overlayFileRef.current?.click()}
+                className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
+              >
+                <FileUp className="h-3 w-3 shrink-0" />
+                {overlayBusy ? '…' : 'File'}
+              </button>
+              <button
+                type="button"
+                onClick={handleOverlayPasteFromClipboard}
+                className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
+              >
+                <ClipboardPaste className="h-3 w-3 shrink-0" />
+                Paste
+              </button>
+            </div>
+            <textarea
+              value={overlayPasteText}
+              onChange={e => setOverlayPasteText(e.target.value)}
+              placeholder="Paste label values (8760 hours)…"
+              className={`max-h-[2.5rem] min-h-[1.75rem] shrink-0 resize-none rounded-lg border px-2 py-1 font-mono text-[9px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
+            />
+            <button
+              type="button"
+              onClick={handleOverlayPasteSubmit}
+              disabled={!overlayPasteText.trim()}
+              className={`shrink-0 rounded-full py-1 text-[9px] font-bold text-white disabled:opacity-40 ${
+                dark ? 'bg-sky-600 hover:bg-sky-500' : 'bg-gray-800 hover:bg-gray-900'
+              }`}
+            >
+              Parse labels
+            </button>
+            {overlayError && (
+              <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2 py-0.5 text-[8px] leading-snug text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                {overlayError}
+              </p>
+            )}
+            {overlayParsed && !overlayError && (
+              <p className={`shrink-0 truncate text-[8px] ${dark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                {overlayParsed.data.length} hours · {overlayParsed.valueColumnLabel ?? 'labels'}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="shrink-0">
           <span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
             Decimals
