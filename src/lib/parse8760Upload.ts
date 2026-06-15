@@ -186,7 +186,6 @@ function buildUploadVariable(values: number[], label: string, id = UPLOAD_VALUE_
   const finite = values.filter(Number.isFinite);
   const min = finite.length ? Math.min(...finite) : 0;
   const max = finite.length ? Math.max(...finite) : 100;
-  const pad = (max - min) * 0.05 || 1;
   return {
     id,
     name: label,
@@ -194,8 +193,6 @@ function buildUploadVariable(values: number[], label: string, id = UPLOAD_VALUE_
     min,
     max,
     category: 'Uploaded',
-    fixedMin: min - pad,
-    fixedMax: max + pad,
   };
 }
 

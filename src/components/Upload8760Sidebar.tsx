@@ -2,6 +2,8 @@ import { useCallback, useRef, useState, type ChangeEvent, type ReactNode } from 
 import { ClipboardPaste, FileUp, Plus, X } from 'lucide-react';
 import type { GradientDef } from './InteractiveLegend';
 import { Upload8760GlobalFilters } from './Upload8760GlobalFilters';
+import { LegendDomainFields } from './LegendDomainFields';
+import type { LegendDomain } from '../lib/upload8760LegendDefaults';
 import {
   cellFormatPreview,
   type CellFormatOptions,
@@ -46,10 +48,12 @@ interface Upload8760SidebarProps {
   globalFilter: GlobalFilterState;
   onGlobalFilterChange: (filter: GlobalFilterState) => void;
   filterValueFieldId: string;
-  legendDomainOverride: { min: number | null; max: number | null };
-  onLegendDomainOverrideChange: (override: { min: number | null; max: number | null }) => void;
-  defaultLegendMin: number | null;
-  defaultLegendMax: number | null;
+  legendDomain: LegendDomain;
+  onLegendDomainChange: (domain: LegendDomain) => void;
+  onLegendDomainReset: () => void;
+  legendPresetMin: number;
+  legendPresetMax: number;
+  legendDomainIsCustom: boolean;
   legendUnit?: string;
 }
 
@@ -126,10 +130,12 @@ export function Upload8760Sidebar({
   globalFilter,
   onGlobalFilterChange,
   filterValueFieldId,
-  legendDomainOverride,
-  onLegendDomainOverrideChange,
-  defaultLegendMin,
-  defaultLegendMax,
+  legendDomain,
+  onLegendDomainChange,
+  onLegendDomainReset,
+  legendPresetMin,
+  legendPresetMax,
+  legendDomainIsCustom,
   legendUnit,
 }: Upload8760SidebarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -287,9 +293,6 @@ export function Upload8760Sidebar({
     ? valueExtentFromRows(parsed.data, filterValueFieldId, { min: 0, max: 100 })
     : { min: 0, max: 100 };
 
-  const domainOverrideActive =
-    legendDomainOverride.min != null || legendDomainOverride.max != null;
-
   return (
     <aside
       className={`flex h-full min-h-0 w-full min-w-0 flex-col gap-0 overflow-hidden rounded-xl border p-1.5 shadow-hard-lg sm:p-2 ${
@@ -297,8 +300,8 @@ export function Upload8760Sidebar({
       }`}
     >
       <Section
-        title="Color data"
-        hint="8760 hourly values for heatmap color and bars."
+        title="Data input"
+        hint="Color drives the chart; labels can use a separate 8760 series."
         dark={dark}
         className={dark ? 'border-b border-gray-700' : 'border-b border-gray-100'}
         action={
@@ -312,64 +315,160 @@ export function Upload8760Sidebar({
                   : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              Clear
+              Clear all
             </button>
           ) : undefined
         }
       >
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,.txt,.tsv,.xlsx,.xls,.epw"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        <div className={`grid shrink-0 grid-cols-2 gap-1 ${pillTrack}`}>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-            className={`flex items-center justify-center gap-1 py-1.5 text-[10px] font-semibold ${pillSegClass(dark, false)}`}
-          >
-            <FileUp className="h-3 w-3 shrink-0" />
-            {busy ? '…' : 'Choose file'}
-          </button>
-          <button
-            type="button"
-            onClick={handlePasteFromClipboard}
-            className={`flex items-center justify-center gap-1 py-1.5 text-[10px] font-semibold ${pillSegClass(dark, false)}`}
-          >
-            <ClipboardPaste className="h-3 w-3 shrink-0" />
-            Paste
-          </button>
+        <div className="grid min-w-0 grid-cols-2 gap-3">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className={`text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
+              Color data
+            </span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,.txt,.tsv,.xlsx,.xls,.epw"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <div className={`grid shrink-0 grid-cols-2 gap-1 ${pillTrack}`}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => fileRef.current?.click()}
+                className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
+              >
+                <FileUp className="h-3 w-3 shrink-0" />
+                {busy ? '…' : 'File'}
+              </button>
+              <button
+                type="button"
+                onClick={handlePasteFromClipboard}
+                className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
+              >
+                <ClipboardPaste className="h-3 w-3 shrink-0" />
+                Paste
+              </button>
+            </div>
+            <textarea
+              value={pasteText}
+              onChange={e => setPasteText(e.target.value)}
+              placeholder="Paste color values…"
+              className={`max-h-[3rem] min-h-[2rem] shrink-0 resize-none rounded-lg border px-2 py-1 font-mono text-[9px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
+            />
+            <button
+              type="button"
+              onClick={handlePasteSubmit}
+              disabled={!pasteText.trim()}
+              className={`shrink-0 rounded-full py-1 text-[9px] font-bold text-white disabled:opacity-40 ${
+                dark ? 'bg-sky-600 hover:bg-sky-500' : 'bg-gray-800 hover:bg-gray-900'
+              }`}
+            >
+              Parse color
+            </button>
+            {error && (
+              <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-1.5 py-0.5 text-[8px] leading-snug text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                {error}
+              </p>
+            )}
+            {parsed && !error && (
+              <p className={`shrink-0 truncate text-[8px] ${dark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                {parsed.data.length}h · {parsed.valueColumnLabel ?? 'values'}
+                {parsed.parseMode === 'epw' ? ' · EPW' : ''}
+              </p>
+            )}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-1.5 border-l pl-3 dark:border-gray-700">
+            <span className={`text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
+              Label data
+            </span>
+            <div className={`grid grid-cols-2 gap-1 ${pillTrack}`}>
+              <button
+                type="button"
+                disabled={!parsed}
+                onClick={() => {
+                  onOverlaySourceChange('same');
+                  onClearOverlay();
+                  setOverlayPasteText('');
+                  setOverlayError(null);
+                }}
+                className={`py-1 text-[9px] font-semibold ${pillSegClass(dark, overlaySource === 'same')}`}
+              >
+                Same
+              </button>
+              <button
+                type="button"
+                disabled={!parsed}
+                onClick={() => onOverlaySourceChange('separate')}
+                className={`py-1 text-[9px] font-semibold ${pillSegClass(dark, overlaySource === 'separate')}`}
+              >
+                Separate
+              </button>
+            </div>
+            {parsed && overlaySource === 'separate' ? (
+              <>
+                <input
+                  ref={overlayFileRef}
+                  type="file"
+                  accept=".csv,.txt,.tsv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={handleOverlayFileChange}
+                />
+                <div className={`grid shrink-0 grid-cols-2 gap-1 ${pillTrack}`}>
+                  <button
+                    type="button"
+                    disabled={overlayBusy}
+                    onClick={() => overlayFileRef.current?.click()}
+                    className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
+                  >
+                    <FileUp className="h-3 w-3 shrink-0" />
+                    {overlayBusy ? '…' : 'File'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOverlayPasteFromClipboard}
+                    className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
+                  >
+                    <ClipboardPaste className="h-3 w-3 shrink-0" />
+                    Paste
+                  </button>
+                </div>
+                <textarea
+                  value={overlayPasteText}
+                  onChange={e => setOverlayPasteText(e.target.value)}
+                  placeholder="Paste label values…"
+                  className={`max-h-[3rem] min-h-[2rem] shrink-0 resize-none rounded-lg border px-2 py-1 font-mono text-[9px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
+                />
+                <button
+                  type="button"
+                  onClick={handleOverlayPasteSubmit}
+                  disabled={!overlayPasteText.trim()}
+                  className={`shrink-0 rounded-full py-1 text-[9px] font-bold text-white disabled:opacity-40 ${
+                    dark ? 'bg-sky-600 hover:bg-sky-500' : 'bg-gray-800 hover:bg-gray-900'
+                  }`}
+                >
+                  Parse labels
+                </button>
+                {overlayError && (
+                  <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-1.5 py-0.5 text-[8px] leading-snug text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                    {overlayError}
+                  </p>
+                )}
+                {overlayParsed && !overlayError && (
+                  <p className={`shrink-0 truncate text-[8px] ${dark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                    {overlayParsed.data.length}h · {overlayParsed.valueColumnLabel ?? 'labels'}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className={`text-[8px] leading-snug ${labelClass}`}>
+                {parsed ? 'Uses color values for cell text.' : 'Load color data first.'}
+              </p>
+            )}
+          </div>
         </div>
-        <textarea
-          value={pasteText}
-          onChange={e => setPasteText(e.target.value)}
-          placeholder="Or paste values here…"
-          className={`max-h-[3.5rem] min-h-[2.25rem] shrink-0 resize-none rounded-xl border px-2.5 py-1.5 font-mono text-[10px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
-        />
-        <button
-          type="button"
-          onClick={handlePasteSubmit}
-          disabled={!pasteText.trim()}
-          className={`shrink-0 rounded-full py-1.5 text-[10px] font-bold text-white disabled:opacity-40 ${
-            dark ? 'bg-sky-600 hover:bg-sky-500' : 'bg-gray-800 hover:bg-gray-900'
-          }`}
-        >
-          Parse data
-        </button>
-        {error && (
-          <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[9px] leading-snug text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-            {error}
-          </p>
-        )}
-        {parsed && !error && (
-          <p className={`shrink-0 truncate text-[9px] ${dark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-            {parsed.data.length} hours · {parsed.valueColumnLabel ?? 'values'}
-            {parsed.parseMode === 'epw' ? ' · EPW' : ''}
-          </p>
-        )}
       </Section>
 
       <Section
@@ -472,66 +571,16 @@ export function Upload8760Sidebar({
             </button>
           </div>
         )}
-        <div className={`min-w-0 shrink-0 space-y-1.5 rounded-lg border p-2 ${dark ? 'border-gray-600 bg-gray-900/30' : 'border-gray-200 bg-gray-50'}`}>
-          <div className="flex items-center justify-between gap-1">
-            <span className={`text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
-              Scale min / max
-            </span>
-            {domainOverrideActive && (
-              <button
-                type="button"
-                onClick={() => onLegendDomainOverrideChange({ min: null, max: null })}
-                className={`text-[8px] font-semibold underline-offset-2 hover:underline ${labelClass}`}
-              >
-                Reset
-              </button>
-            )}
-          </div>
-          {(defaultLegendMin != null || defaultLegendMax != null) && (
-            <p className={`text-[8px] leading-snug ${labelClass}`}>
-              Data range{' '}
-              {defaultLegendMin != null ? defaultLegendMin.toFixed(2) : '—'}–
-              {defaultLegendMax != null ? defaultLegendMax.toFixed(2) : '—'}
-              {legendUnit ? ` ${legendUnit}` : ''}
-            </p>
-          )}
-          <div className="grid min-w-0 grid-cols-2 gap-2">
-            <label className="flex flex-col gap-0.5">
-              <span className={`text-[8px] font-medium ${labelClass}`}>Min</span>
-              <input
-                type="number"
-                step="any"
-                placeholder={defaultLegendMin != null ? String(defaultLegendMin) : 'Min'}
-                value={legendDomainOverride.min ?? ''}
-                onChange={e => {
-                  const raw = e.target.value.trim();
-                  onLegendDomainOverrideChange({
-                    ...legendDomainOverride,
-                    min: raw === '' ? null : Number(raw),
-                  });
-                }}
-                className={`w-full rounded-lg border px-1.5 py-0.5 font-mono text-[10px] outline-none ${inputClass}`}
-              />
-            </label>
-            <label className="flex flex-col gap-0.5">
-              <span className={`text-[8px] font-medium ${labelClass}`}>Max</span>
-              <input
-                type="number"
-                step="any"
-                placeholder={defaultLegendMax != null ? String(defaultLegendMax) : 'Max'}
-                value={legendDomainOverride.max ?? ''}
-                onChange={e => {
-                  const raw = e.target.value.trim();
-                  onLegendDomainOverrideChange({
-                    ...legendDomainOverride,
-                    max: raw === '' ? null : Number(raw),
-                  });
-                }}
-                className={`w-full rounded-lg border px-1.5 py-0.5 font-mono text-[10px] outline-none ${inputClass}`}
-              />
-            </label>
-          </div>
-        </div>
+        <LegendDomainFields
+          domain={legendDomain}
+          presetMin={legendPresetMin}
+          presetMax={legendPresetMax}
+          unit={legendUnit}
+          dark={dark}
+          onChange={onLegendDomainChange}
+          onReset={onLegendDomainReset}
+          isCustom={legendDomainIsCustom}
+        />
       </Section>
 
       {parsed && (
@@ -554,101 +603,7 @@ export function Upload8760Sidebar({
         </Section>
       )}
 
-      <Section
-        title="Cell labels"
-        hint={
-          overlaySource === 'separate' && overlayParsed
-            ? `Labels: ${overlayParsed.valueColumnLabel ?? 'custom series'}`
-            : `Preview ${cellFormatPreview(cellFormat)}`
-        }
-        dark={dark}
-      >
-        <div className="shrink-0">
-          <span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
-            Label data
-          </span>
-          <div className={`grid grid-cols-2 gap-1 ${pillTrack}`}>
-            <button
-              type="button"
-              disabled={!parsed}
-              onClick={() => {
-                onOverlaySourceChange('same');
-                onClearOverlay();
-                setOverlayPasteText('');
-                setOverlayError(null);
-              }}
-              className={`py-1.5 text-[10px] font-semibold ${pillSegClass(dark, overlaySource === 'same')}`}
-            >
-              Same as color
-            </button>
-            <button
-              type="button"
-              disabled={!parsed}
-              onClick={() => onOverlaySourceChange('separate')}
-              className={`py-1.5 text-[10px] font-semibold ${pillSegClass(dark, overlaySource === 'separate')}`}
-            >
-              Separate
-            </button>
-          </div>
-        </div>
-
-        {parsed && overlaySource === 'separate' && (
-          <div className="shrink-0 space-y-1.5">
-            <input
-              ref={overlayFileRef}
-              type="file"
-              accept=".csv,.txt,.tsv,.xlsx,.xls"
-              className="hidden"
-              onChange={handleOverlayFileChange}
-            />
-            <div className={`grid shrink-0 grid-cols-2 gap-1 ${pillTrack}`}>
-              <button
-                type="button"
-                disabled={overlayBusy}
-                onClick={() => overlayFileRef.current?.click()}
-                className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
-              >
-                <FileUp className="h-3 w-3 shrink-0" />
-                {overlayBusy ? '…' : 'File'}
-              </button>
-              <button
-                type="button"
-                onClick={handleOverlayPasteFromClipboard}
-                className={`flex items-center justify-center gap-1 py-1 text-[9px] font-semibold ${pillSegClass(dark, false)}`}
-              >
-                <ClipboardPaste className="h-3 w-3 shrink-0" />
-                Paste
-              </button>
-            </div>
-            <textarea
-              value={overlayPasteText}
-              onChange={e => setOverlayPasteText(e.target.value)}
-              placeholder="Paste label values (8760 hours)…"
-              className={`max-h-[2.5rem] min-h-[1.75rem] shrink-0 resize-none rounded-lg border px-2 py-1 font-mono text-[9px] outline-none focus:ring-2 focus:ring-gray-400/60 ${inputClass}`}
-            />
-            <button
-              type="button"
-              onClick={handleOverlayPasteSubmit}
-              disabled={!overlayPasteText.trim()}
-              className={`shrink-0 rounded-full py-1 text-[9px] font-bold text-white disabled:opacity-40 ${
-                dark ? 'bg-sky-600 hover:bg-sky-500' : 'bg-gray-800 hover:bg-gray-900'
-              }`}
-            >
-              Parse labels
-            </button>
-            {overlayError && (
-              <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2 py-0.5 text-[8px] leading-snug text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-                {overlayError}
-              </p>
-            )}
-            {overlayParsed && !overlayError && (
-              <p className={`shrink-0 truncate text-[8px] ${dark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                {overlayParsed.data.length} hours · {overlayParsed.valueColumnLabel ?? 'labels'}
-              </p>
-            )}
-          </div>
-        )}
-
+      <Section title="Cell labels" hint={`Preview ${cellFormatPreview(cellFormat)}`} dark={dark}>
         <div className="shrink-0">
           <span className={`mb-1 block text-[9px] font-semibold uppercase tracking-wide ${labelClass}`}>
             Decimals

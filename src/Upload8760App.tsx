@@ -8,7 +8,6 @@ import { CARTO_LIGHT_ALL_WATER_HEX, GRADIENTS } from './lib/constants';
 import { DEFAULT_GLOBAL_FILTER, type GlobalFilterState, type HeatmapCellStatistic } from './lib/globalFilter';
 import type { GradientDef } from './components/InteractiveLegend';
 import { valueExtentFromRows } from './lib/dryBulbExtent';
-import { convertValue, effectiveVariableLegendBounds } from './lib/unitConversion';
 import {
   inferDefaultGradientId,
   mergeOverlaySeries,
@@ -27,6 +26,10 @@ import {
   type ExportFormat,
   type ExportFrameSize,
 } from './lib/exportCapture';
+import {
+  resolveUpload8760LegendDomain,
+  type LegendDomain,
+} from './lib/upload8760LegendDefaults';
 
 export type UnitSystem = 'metric' | 'imperial';
 
@@ -34,7 +37,7 @@ export type UnitSystem = 'metric' | 'imperial';
 const WORKSPACE_GRID =
   'grid min-h-0 w-full flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-4 md:overflow-visible';
 
-export type LegendDomainOverride = { min: number | null; max: number | null };
+export type LegendDomainOverride = LegendDomain;
 
 export function Upload8760App() {
   const [parsed, setParsed] = useState<Parsed8760Upload | null>(null);
@@ -45,10 +48,7 @@ export function Upload8760App() {
   const [cellFormat, setCellFormat] = useState<CellFormatOptions>(DEFAULT_CELL_FORMAT);
   const [heatmapCellStatistic, setHeatmapCellStatistic] = useState<HeatmapCellStatistic>('mean');
   const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>(DEFAULT_GLOBAL_FILTER);
-  const [legendDomainOverride, setLegendDomainOverride] = useState<LegendDomainOverride>({
-    min: null,
-    max: null,
-  });
+  const [legendDomain, setLegendDomain] = useState<LegendDomain>({ min: 5, max: 35 });
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [heatmapTextColor] = useState('#374151');
   const [exportMode, setExportMode] = useState(false);
@@ -99,8 +99,21 @@ export function Upload8760App() {
 
   useEffect(() => {
     setColorVar(defaultVariableId);
-    setLegendDomainOverride({ min: null, max: null });
   }, [defaultVariableId]);
+
+  const colorVarDef = useMemo(
+    () => chartData?.variables.find(v => v.id === colorVar) ?? activeVariable,
+    [chartData?.variables, colorVar, activeVariable]
+  );
+
+  const legendPreset = useMemo(
+    () => resolveUpload8760LegendDomain(gradientId, colorVarDef ?? activeVariable, 'metric'),
+    [gradientId, colorVarDef, activeVariable]
+  );
+
+  useEffect(() => {
+    setLegendDomain({ min: legendPreset.min, max: legendPreset.max });
+  }, [legendPreset.min, legendPreset.max, gradientId, colorVarDef?.id, activeVariable?.id]);
 
   useEffect(() => {
     if (!parsed || !activeVariable) return;
@@ -115,15 +128,8 @@ export function Upload8760App() {
 
   const temperatureFilterField = activeVariable?.id ?? UPLOAD_VALUE_ID;
 
-  const defaultLegendBounds = useMemo(() => {
-    if (!activeVariable) return { min: null as number | null, max: null as number | null, unit: '' };
-    const bounds = effectiveVariableLegendBounds(activeVariable);
-    return {
-      min: convertValue(bounds.lo, activeVariable.unit, 'metric'),
-      max: convertValue(bounds.hi, activeVariable.unit, 'metric'),
-      unit: activeVariable.unit,
-    };
-  }, [activeVariable]);
+  const legendDomainIsCustom =
+    legendDomain.min !== legendPreset.presetMin || legendDomain.max !== legendPreset.presetMax;
 
   const handleParsed = useCallback((data: Parsed8760Upload) => {
     setParsed(data);
@@ -324,7 +330,7 @@ export function Upload8760App() {
                 overlayVar={overlayVar}
                 upload8760Mode
                 exportMode={exportActive}
-                legendDomainOverride={legendDomainOverride}
+                legendDomainOverride={legendDomain}
                 temperatureFilterField={temperatureFilterField}
               />
             ) : (
@@ -352,11 +358,15 @@ export function Upload8760App() {
               globalFilter={globalFilter}
               onGlobalFilterChange={setGlobalFilter}
               filterValueFieldId={temperatureFilterField}
-              legendDomainOverride={legendDomainOverride}
-              onLegendDomainOverrideChange={setLegendDomainOverride}
-              defaultLegendMin={defaultLegendBounds.min}
-              defaultLegendMax={defaultLegendBounds.max}
-              legendUnit={defaultLegendBounds.unit}
+              legendDomain={legendDomain}
+              onLegendDomainChange={setLegendDomain}
+              onLegendDomainReset={() =>
+                setLegendDomain({ min: legendPreset.presetMin, max: legendPreset.presetMax })
+              }
+              legendPresetMin={legendPreset.presetMin}
+              legendPresetMax={legendPreset.presetMax}
+              legendDomainIsCustom={legendDomainIsCustom}
+              legendUnit={legendPreset.unit}
             />
           )}
         </div>

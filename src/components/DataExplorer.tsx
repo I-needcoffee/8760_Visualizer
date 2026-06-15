@@ -6,6 +6,7 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import { EPWDataRow, EPWMetadata, EPWVariable } from '../lib/epwParser';
 import { sequentialHeatmapColorFn } from '../lib/heatmapColorAdjust';
+import type { LegendDomain } from '../lib/upload8760LegendDefaults';
 import {
   createExplorerChartValueGradient,
   explorerChartValueGradientId,
@@ -132,8 +133,8 @@ interface DataExplorerProps {
   overlayVar?: string;
   /** Simplified header for standalone 8760 upload card. */
   upload8760Mode?: boolean;
-  /** Optional legend / heatmap domain override (display units). */
-  legendDomainOverride?: { min: number | null; max: number | null };
+  /** Optional legend / heatmap domain override (display units). When set, replaces computed bounds. */
+  legendDomainOverride?: LegendDomain;
   /** EPW column id used for temperature isolation filter (default dry bulb). */
   temperatureFilterField?: string;
 }
@@ -303,6 +304,10 @@ export function DataExplorer({
       const half = bound > 0 ? bound : 1;
       min = -half;
       max = half;
+    } else if (upload8760Mode && legendDomainOverride) {
+      min = legendDomainOverride.min;
+      max = legendDomainOverride.max;
+      if (min >= max) max = min + 1;
     } else {
       if (legendDomainOverride?.min != null && Number.isFinite(legendDomainOverride.min)) {
         min = legendDomainOverride.min;
@@ -323,6 +328,7 @@ export function DataExplorer({
     aggregation,
     convertValue,
     legendDomainOverride,
+    upload8760Mode,
   ]);
 
   const colorVarLabel = `${colorVarDef.name} (${cUnit})`;
@@ -903,8 +909,13 @@ export function DataExplorer({
         return Math.max(maxP, maxC);
       }) || cMax;
 
-    // Optional: Give it a bit of bottom margin if min is above 0, or zero-bound if we prefer
-    if (yMin > 0 && colorVarDef.category !== "Temperature") yMin = 0;
+    if (upload8760Mode && !(showDifference && compareData)) {
+      yMin = cMin;
+      yMax = cMax;
+    } else {
+      // Optional: Give it a bit of bottom margin if min is above 0, or zero-bound if we prefer
+      if (yMin > 0 && colorVarDef.category !== "Temperature") yMin = 0;
+    }
 
     if (pairSuppressHeader && comparePane && explorerShared?.onBarYExtent) {
       explorerShared.onBarYExtent({ min: yMin, max: yMax, pane: comparePane });
@@ -1180,6 +1191,7 @@ export function DataExplorer({
     barGradientSvgId,
     barChartFillMode,
     overlayValueFormatter,
+    upload8760Mode,
   ]);
 
   // Calculate local stats for filtered data
